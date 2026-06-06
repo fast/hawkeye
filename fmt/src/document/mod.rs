@@ -17,6 +17,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::fs::File;
 use std::io::BufRead;
+use std::path::Path;
 use std::path::PathBuf;
 
 use exn::ErrorExt;
@@ -164,8 +165,14 @@ impl Document {
         }
     }
 
-    pub fn save(&mut self, filepath: Option<&PathBuf>) -> Result<(), Error> {
-        let filepath = filepath.unwrap_or(&self.filepath);
+    pub fn save(&mut self) -> Result<(), Error> {
+        let filepath = self.filepath.as_path();
+        fs::write(filepath, self.parser.file_content.content())
+            .or_raise(|| Error::new(format!("cannot save document {}", filepath.display())))
+    }
+
+    pub fn save_to(&mut self, filepath: impl AsRef<Path>) -> Result<(), Error> {
+        let filepath = filepath.as_ref();
         fs::write(filepath, self.parser.file_content.content())
             .or_raise(|| Error::new(format!("cannot save document {}", filepath.display())))
     }

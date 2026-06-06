@@ -171,9 +171,9 @@ impl Callback for FormatContext {
             let mut extension = doc.filepath.extension().unwrap_or_default().to_os_string();
             extension.push(".formatted");
             let copied = doc.filepath.with_extension(extension);
-            doc.save(Some(&copied))
+            doc.save_to(copied)
         } else {
-            doc.save(None)
+            doc.save()
         }
     }
 }
@@ -234,9 +234,9 @@ impl RemoveContext {
             let mut extension = doc.filepath.extension().unwrap_or_default().to_os_string();
             extension.push(".removed");
             let copied = doc.filepath.with_extension(extension);
-            doc.save(Some(&copied))
+            doc.save_to(copied)
         } else {
-            doc.save(None)
+            doc.save()
         }
     }
 }
