@@ -1,0 +1,17 @@
+baseDir = "."
+headerPath = "Apache-2.0.txt"
+
+includes = ["*.rs"]
+excludes = ["*.expected"]
+
+# `.rs` lists ONLY DOUBLESLASH. A header in the unlisted SLASHSTAR style cannot be migrated,
+# so under existingStrategy=replace it lands in the `foreign` bucket: format must report a
+# controlled failure and must NOT stack a second // header on top (#210).
+[[headers]]
+extensions = ["rs"]
+styles = ["DOUBLESLASH_STYLE"]
+existingStrategy = "replace"
+
+[properties]
+inceptionYear = 2023
+copyrightOwner = "The CopyrightOwner"

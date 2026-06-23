@@ -26,7 +26,7 @@ use exn::ResultExt;
 
 use crate::config::Config;
 use crate::document::factory::DocumentFactory;
-use crate::document::model::default_mapping;
+use crate::document::model::default_header_rules;
 use crate::document::Document;
 use crate::error::Error;
 use crate::git;
@@ -56,9 +56,10 @@ pub fn check_license_header<C: Callback>(
 ) -> Result<(), Error> {
     let config = {
         let name = run_config.display().to_string();
-        let config = fs::read_to_string(&run_config)
+        let raw = fs::read_to_string(&run_config)
             .or_raise(|| Error::new(format!("cannot load config: {name}")))?;
-        toml::from_str::<Config>(&config)
+        reject_legacy_config(&raw, &name)?;
+        toml::from_str::<Config>(&raw)
             .or_raise(|| Error::new(format!("cannot parse config file: {name}")))?
     };
 
@@ -89,19 +90,13 @@ pub fn check_license_header<C: Callback>(
         selection.select()?
     };
 
-    let mapping = {
-        let mut mapping = config.mapping.clone();
-        if config.use_default_mapping {
-            let default_mapping = default_mapping();
-            for m in default_mapping {
-                if let Some(o) = mapping.get(&m) {
-                    log::warn!("default mapping {m:?} is override by {o:?}");
-                    continue;
-                }
-                mapping.insert(m);
-            }
+    let header_rules = {
+        // User rules take precedence; defaults are appended so first-match wins downstream.
+        let mut rules = config.headers.clone();
+        if config.use_default_headers {
+            rules.extend(default_header_rules());
         }
-        mapping
+        rules
     };
 
     let definitions = {
@@ -109,7 +104,7 @@ pub fn check_license_header<C: Callback>(
         for (k, v) in default_headers() {
             match defs.entry(k) {
                 Entry::Occupied(mut ent) => {
-                    log::warn!("Default header {} is override", ent.key());
+                    log::warn!("Default header {} is overridden", ent.key());
                     ent.insert(v);
                 }
                 Entry::Vacant(ent) => {
@@ -123,7 +118,7 @@ pub fn check_license_header<C: Callback>(
             for (k, v) in additional_defs {
                 match defs.entry(k) {
                     Entry::Occupied(mut ent) => {
-                        log::warn!("Additional header {} is override", ent.key());
+                        log::warn!("Additional header {} is overridden", ent.key());
                         ent.insert(v);
                     }
                     Entry::Vacant(ent) => {
@@ -144,12 +139,12 @@ pub fn check_license_header<C: Callback>(
     let git_file_attrs = git::resolve_file_attrs(git_context)?;
 
     let document_factory = DocumentFactory::new(
-        mapping,
+        header_rules,
         definitions,
         config.properties,
         config.keywords,
         git_file_attrs,
-    );
+    )?;
 
     for file in selected_files {
         let document = match document_factory.create_document(&file)? {
@@ -169,6 +164,24 @@ pub fn check_license_header<C: Callback>(
         }
     }
 
+    Ok(())
+}
+
+/// HawkEye 7.0 replaced the `[mapping.STYLE]` / `useDefaultMapping` config with the
+/// `[[headers]]` rule list. Detect the removed keys and fail with a migration hint instead
+/// of the opaque `unknown field` error that `deny_unknown_fields` would otherwise produce.
+fn reject_legacy_config(raw: &str, name: &str) -> Result<(), Error> {
+    let Ok(toml::Value::Table(table)) = toml::from_str::<toml::Value>(raw) else {
+        return Ok(()); // let the typed parse below surface the real syntax error
+    };
+    if table.contains_key("mapping") || table.contains_key("useDefaultMapping") {
+        bail!(Error::new(format!(
+            "config {name} uses the 6.x `[mapping]` / `useDefaultMapping` format, removed in 7.0.\n\
+             Replace each `[mapping.STYLE] {{ extensions = [...], filenames = [...] }}` with:\n\
+             \n  [[headers]]\n  extensions = [...]\n  filenames = [...]\n  styles = [\"STYLE\"]\n  existingStrategy = \"replace\"\n\
+             \nand replace `useDefaultMapping` with `useDefaultHeaders`. See the README configuration section."
+        )));
+    }
     Ok(())
 }
 

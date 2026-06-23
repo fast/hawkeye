@@ -17,7 +17,8 @@ use std::collections::HashMap;
 use serde::Deserialize;
 use serde::Serialize;
 
-use crate::config::Mapping;
+use crate::config::ExistingStrategy;
+use crate::config::HeaderRule;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
@@ -28,28 +29,59 @@ pub struct DocumentType {
     pub filename: bool,
 }
 
-pub fn default_mapping() -> Vec<Mapping> {
+pub fn default_header_rules() -> Vec<HeaderRule> {
     let defaults = include_str!("defaults.toml");
     let mapping: HashMap<String, DocumentType> =
         toml::from_str(defaults).expect("default mapping must be valid");
 
+    // Order is nondeterministic and resolve is first-match-wins; defaults must stay
+    // collision-free (see test below).
     mapping
         .into_values()
-        .flat_map(|doctype| {
-            let mut ms = vec![];
+        // Drop doctypes matched by neither extension nor filename; they could never match.
+        .filter(|doctype| doctype.extension || doctype.filename)
+        .map(|doctype| {
+            let mut extensions = vec![];
+            let mut filenames = vec![];
             if doctype.extension {
-                ms.push(Mapping::Extension {
-                    pattern: doctype.pattern.clone(),
-                    header_type: doctype.header_type.clone(),
-                })
+                extensions.push(doctype.pattern.clone());
             }
             if doctype.filename {
-                ms.push(Mapping::Filename {
-                    pattern: doctype.pattern,
-                    header_type: doctype.header_type,
-                })
+                filenames.push(doctype.pattern.clone());
             }
-            ms
+            HeaderRule {
+                extensions,
+                filenames,
+                styles: vec![doctype.header_type],
+                existing_strategy: ExistingStrategy::Replace,
+            }
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Guards that no two default rules claim the same extension or filename. Resolution is
+    /// order-nondeterministic and first-match-wins, so a clash makes a file's style vary run to
+    /// run. Compared case-insensitively because `resolve` lowercases.
+    #[test]
+    fn default_rules_have_no_colliding_patterns() {
+        let mut ext_owner: HashMap<String, String> = HashMap::new();
+        let mut name_owner: HashMap<String, String> = HashMap::new();
+        for rule in default_header_rules() {
+            let style = rule.styles[0].clone();
+            for ext in rule.extensions {
+                if let Some(prev) = ext_owner.insert(ext.to_lowercase(), style.clone()) {
+                    panic!("default extension `{ext}` is claimed by both `{prev}` and `{style}`");
+                }
+            }
+            for name in rule.filenames {
+                if let Some(prev) = name_owner.insert(name.to_lowercase(), style.clone()) {
+                    panic!("default filename `{name}` is claimed by both `{prev}` and `{style}`");
+                }
+            }
+        }
+    }
 }

@@ -1,0 +1,17 @@
+baseDir = "."
+headerPath = "Apache-2.0.txt"
+
+includes = ["*.rs"]
+excludes = ["*.expected"]
+
+# Single-style rule. The source has no header but uses the word `copyright` as a whole word in
+# a string literal, so the keyword scan classifies it foreign. Under replace this is a
+# controlled failure (nonzero exit), and no header is inserted.
+[[headers]]
+extensions = ["rs"]
+styles = ["DOUBLESLASH_STYLE"]
+existingStrategy = "replace"
+
+[properties]
+inceptionYear = 2023
+copyrightOwner = "The CopyrightOwner"

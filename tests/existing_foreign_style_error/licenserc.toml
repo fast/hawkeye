@@ -1,0 +1,15 @@
+baseDir = "."
+headerPath = "Apache-2.0.txt"
+
+includes = ["*.rs"]
+excludes = ["*.expected"]
+
+# An existing header (any style) makes the run fail instead of being touched.
+[[headers]]
+extensions = ["rs"]
+styles = ["DOUBLESLASH_STYLE", "SLASHSTAR_STYLE"]
+existingStrategy = "error"
+
+[properties]
+inceptionYear = 2023
+copyrightOwner = "The CopyrightOwner"

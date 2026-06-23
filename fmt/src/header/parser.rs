@@ -303,6 +303,17 @@ impl FileContent {
         })
     }
 
+    /// Build a `FileContent` over an already line-normalized in-memory buffer. Used to
+    /// re-probe the current content with alternative header styles without touching disk.
+    pub fn from_content(content: String, filepath: String) -> Self {
+        Self {
+            pos: 0,
+            old_pos: 0,
+            content,
+            filepath,
+        }
+    }
+
     pub fn reset_to(&mut self, pos: usize) {
         self.old_pos = pos;
         self.pos = pos;
@@ -339,8 +350,8 @@ impl FileContent {
         Some(result)
     }
 
-    pub fn content(&self) -> String {
-        self.content.clone()
+    pub fn content(&self) -> &str {
+        &self.content
     }
 
     pub fn insert(&mut self, index: usize, s: &str) {

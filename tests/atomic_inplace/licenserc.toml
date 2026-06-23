@@ -1,0 +1,16 @@
+baseDir = "."
+headerPath = "Apache-2.0.txt"
+
+includes = ["*.rs"]
+excludes = ["*.expected"]
+
+# Exercises the in-place atomic save path (format WITHOUT --dry-run): the header is inserted
+# and the file rewritten via temp+rename, not the .formatted sibling the dry-run path writes.
+[[headers]]
+extensions = ["rs"]
+styles = ["DOUBLESLASH_STYLE"]
+existingStrategy = "replace"
+
+[properties]
+inceptionYear = 2023
+copyrightOwner = "The CopyrightOwner"

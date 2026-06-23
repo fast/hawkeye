@@ -13,9 +13,6 @@
 // limitations under the License.
 
 use std::collections::HashMap;
-use std::collections::HashSet;
-use std::hash::Hash;
-use std::hash::Hasher;
 use std::path::PathBuf;
 
 use serde::de::Error;
@@ -39,7 +36,7 @@ pub struct Config {
     #[serde(default = "default_true")]
     pub use_default_excludes: bool,
     #[serde(default = "default_true")]
-    pub use_default_mapping: bool,
+    pub use_default_headers: bool,
     #[serde(default = "default_keywords")]
     pub keywords: Vec<String>,
 
@@ -48,8 +45,7 @@ pub struct Config {
 
     #[serde(deserialize_with = "de_properties")]
     pub properties: HashMap<String, String>,
-    #[serde(deserialize_with = "de_mapping")]
-    pub mapping: HashSet<Mapping>,
+    pub headers: Vec<HeaderRule>,
 
     pub git: Git,
 
@@ -108,63 +104,36 @@ impl FeatureGate {
     }
 }
 
-#[derive(Debug, Clone)]
-pub enum Mapping {
-    Filename {
-        pattern: String,
-        header_type: String,
-    },
-    Extension {
-        pattern: String,
-        header_type: String,
-    },
+/// What `format` does when a file already has a header that is not an exact match for
+/// the rule's preferred style. An exact match is always left alone; a file with no
+/// header at all always gets the preferred style inserted.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ExistingStrategy {
+    /// Remove the existing header (in any listed style) and write the preferred one.
+    #[default]
+    Replace,
+    /// Leave the file untouched and report it.
+    Skip,
+    /// Fail the run.
+    Error,
 }
 
-impl PartialEq for Mapping {
-    fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Mapping::Filename { pattern: p1, .. }, Mapping::Filename { pattern: p2, .. }) => {
-                p1 == p2
-            }
-            (Mapping::Extension { pattern: p1, .. }, Mapping::Extension { pattern: p2, .. }) => {
-                p1 == p2
-            }
-            _ => false,
-        }
-    }
-}
-
-impl Eq for Mapping {}
-
-impl Hash for Mapping {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        state.write(match self {
-            Mapping::Filename { pattern, .. } => pattern.as_bytes(),
-            Mapping::Extension { pattern, .. } => pattern.as_bytes(),
-        });
-    }
-}
-
-impl Mapping {
-    pub fn header_type(&self, filename: &str) -> Option<String> {
-        let filename = filename.to_lowercase();
-        match self {
-            Mapping::Filename {
-                header_type,
-                pattern,
-            } => {
-                let pattern = pattern.to_lowercase();
-                (filename == pattern).then(|| header_type.clone())
-            }
-            Mapping::Extension {
-                header_type,
-                pattern,
-            } => {
-                let pattern = format!(".{pattern}").to_lowercase();
-                filename.ends_with(&pattern).then(|| header_type.clone())
-            }
-        }
-    }
+/// Per-language rule binding file patterns to comment style(s). Replaces `[mapping.STYLE]`.
+///
+/// `styles[0]` is the preferred style (what `format` writes). Any further styles are also
+/// recognized for removal, so a header written in one of them can be migrated to the
+/// preferred style instead of being duplicated.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct HeaderRule {
+    #[serde(default)]
+    pub extensions: Vec<String>,
+    #[serde(default)]
+    pub filenames: Vec<String>,
+    pub styles: Vec<String>,
+    #[serde(default)]
+    pub existing_strategy: ExistingStrategy,
 }
 
 fn default_cwd() -> PathBuf {
@@ -194,34 +163,4 @@ where
             Ok((k, v))
         })
         .collect()
-}
-
-fn de_mapping<'de, D>(de: D) -> Result<HashSet<Mapping>, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    #[derive(Debug, Default, Clone, Deserialize)]
-    #[serde(default)]
-    struct MappingModel {
-        extensions: Vec<String>,
-        filenames: Vec<String>,
-    }
-
-    let mappings = HashMap::<String, MappingModel>::deserialize(de)?;
-    let mut set = HashSet::new();
-    for (header_type, model) in mappings {
-        for pattern in model.extensions {
-            set.insert(Mapping::Extension {
-                pattern,
-                header_type: header_type.clone(),
-            });
-        }
-        for pattern in model.filenames {
-            set.insert(Mapping::Filename {
-                pattern,
-                header_type: header_type.clone(),
-            });
-        }
-    }
-    Ok(set)
 }

@@ -4,6 +4,48 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+### Breaking changes
+
+The license-header configuration model has changed. The style-keyed `[mapping.STYLE_NAME]` blocks and the `useDefaultMapping` option are removed; configure file handling with a per-language `[[headers]]` rule list instead:
+
+* Replace each `[mapping.STYLE] { extensions = ["x"], filenames = ["y"] }` with:
+  ```toml
+  [[headers]]
+  extensions = ["x"]
+  filenames = ["y"]
+  styles = ["STYLE"]
+  ```
+* Default language-to-style rules stay active; declare `[[headers]]` only to override or extend them. `useDefaultMapping` is renamed to `useDefaultHeaders`.
+
+`hawkeye format` no longer stacks a duplicate header when a file already has one written in a comment style different from the configured one. An existing header is detected by a style-agnostic scan for the configured `keywords`. Each `[[headers]]` rule chooses what happens to such a file via `existingStrategy`:
+
+* `"replace"` (default): remove the existing header and write the preferred style. When a rule lists more than one style, a header in any listed style is removed, so it migrates to the preferred (first) style instead of being duplicated. If the file looks licensed but the command cannot normalize it to the preferred style (the header is in an unlisted comment style, or only a stray keyword is present), the file is left unchanged and the run fails (see the breaking note below).
+* `"skip"`: leave the file untouched and report it; the run still succeeds (exit 0).
+* `"error"`: fail the run.
+
+Detection is a keyword scan, so it has a blind spot in the other direction too: a real notice that contains none of the configured `keywords` (an MIT/BSD notice with no `copyright` line, or the keyword-less tail of a header split by an inserted blank line) is not detected and is left below the rewritten header. Tune `keywords` if this or the stray-keyword case bites.
+
+The `keywords` scan is now case-insensitive as documented: configured keywords are lowercased before matching, so a custom `keywords = ["Copyright"]` now matches a `copyright` notice. In 6.x a capitalized custom keyword silently never matched. The default (`copyright`) is unaffected.
+
+`existingStrategy` governs `hawkeye format` only; `hawkeye check` and `hawkeye remove` ignore it.
+
+Under `existingStrategy = "replace"`, a license-looking header that cannot be normalized to the preferred style now fails the run with a non-zero exit code. In 6.x the file was left unchanged and the run still exited 0, silently passing an un-normalized file through CI. The file is still left untouched; only the exit code changed. `"skip"` is unaffected and still exits 0.
+
+`hawkeye check` now reports files that carry a non-matching existing header (a stale header in a recognized style, or a notice in a style the rule does not list) as a distinct `foreign` category, separate from files missing a header entirely. Because detection includes the same keyword scan, a file that has no header but contains a stray keyword near the top is reported as `foreign` rather than `missing`.
+
+The `--output` JSON uses one grammar across `check`, `format`, and `remove`: every result field that lists files is a list of file paths categorized by the field name (`unknown`, `missing`, `foreign`, `skipped`, `conflict`, `removed`). `format`'s `updated` is the same list shape but its entries are suffixed `path=added` or `path=replaced`. `remove`'s `removed` entries are now bare file paths (previously `path=removed`), so scripts that split on `=` must be updated. `format` and `remove` additionally carry a boolean `dry_run` field (not a path list).
+
+The `foreign` field means different things per command. `check.foreign` is any non-matching existing header (stale, listed-foreign-style, or unlisted), found by the structural parse or the keyword scan. `format.foreign` and `remove.foreign` are narrower: only what the command could not handle - an unlisted comment style, or a stray keyword (`format` could not normalize to the preferred style; `remove` could not locate a removable block). A stale or listed-foreign-style header is migrated/removed instead, so it never appears in their `foreign` field.
+
+`hawkeye format` and `hawkeye remove` now write files atomically (write a sibling temp file, fsync, then rename over the target) instead of editing in place. Consequences:
+
+* If a target file is a symlink, it is replaced by a regular file (the 6.x in-place write followed the link). The replacement carries the link target's permission bits.
+* Writing now hinges on the parent directory rather than the file. Creating the temp file and renaming it over the target need write permission on the directory, not on the file, so a read-only source file can now be rewritten (the rename replaces the directory entry), while a writable file in a read-only directory now fails the run instead of being rewritten.
+
+File permissions are preserved on a best-effort basis; ownership and ACLs are not.
+
+`hawkeye` now processes a file matched by a `.gitignore` rule when that file is tracked in the Git index (for example, force-added with `git add -f`); 6.x skipped every gitignore-matched file (the #209 fix - a force-added file should still get a header). On upgrade such a file is checked for the first time and can newly appear in `missing` or `foreign`, failing a previously-green run. List the newly-processed set with `git ls-files | git check-ignore --stdin --no-index` and add any you do not want checked to `excludes`.
+
 ## [6.5.1] 2026-02-14
 
 ### Bug fixes

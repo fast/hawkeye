@@ -19,6 +19,7 @@ import difflib
 import subprocess
 import os
 import shutil
+import tempfile
 import datetime
 
 def diff_files(file1, file2):
@@ -74,9 +75,87 @@ def drive(name, files, create_temp_copy=False):
                 if os.path.exists(case_dir / expected_file):
                     os.remove(case_dir / expected_file)
 
+def drive_no_change(name, files):
+    """Run format --dry-run and assert the files are left untouched (no .formatted written)."""
+    case_dir = basedir / name
+    subprocess.run([hawkeye, "format", "--fail-if-unknown", "--fail-if-updated=false", "--dry-run"], cwd=case_dir, check=True)
+    for file in files:
+        formatted = case_dir / f"{file}.formatted"
+        if formatted.exists():
+            print(f"{name}: expected no change for {file}, but {formatted} was produced")
+            formatted.unlink()
+            exit(1)
+
+
+def drive_expect_failure(name, args, expect_stderr=None):
+    """Run hawkeye with args and assert a non-zero exit (e.g. existingStrategy = error).
+    If expect_stderr is given, also assert that text appears on stderr."""
+    case_dir = basedir / name
+    result = subprocess.run([hawkeye, *args], cwd=case_dir, check=False, capture_output=expect_stderr is not None, text=True)
+    if result.returncode == 0:
+        print(f"{name}: expected non-zero exit from {args}, got 0")
+        exit(1)
+    if expect_stderr is not None and expect_stderr not in result.stderr:
+        print(f"{name}: expected stderr to contain {expect_stderr!r}, got:\n{result.stderr}")
+        exit(1)
+
+
+def drive_expect_failure_no_change(name, files):
+    """Run format --dry-run and assert BOTH a non-zero exit AND that no .formatted is written
+    (a controlled failure that must not stack a duplicate header). Covers the unlisted-style
+    foreign path and the stray-keyword path."""
+    case_dir = basedir / name
+    result = subprocess.run([hawkeye, "format", "--fail-if-unknown", "--dry-run"], cwd=case_dir, check=False)
+    failed = False
+    if result.returncode == 0:
+        print(f"{name}: expected non-zero exit from format, got 0")
+        failed = True
+    for file in files:
+        formatted = case_dir / f"{file}.formatted"
+        if formatted.exists():
+            print(f"{name}: expected no change for {file}, but {formatted} was produced (duplicate header?)")
+            formatted.unlink()
+            failed = True
+    if failed:
+        exit(1)
+
+
+def drive_in_place(name, files):
+    """Exercise the non-dry-run atomic save path: copy the fixture (source + config) into a
+    throwaway temp dir, run `format` WITHOUT --dry-run so the file is rewritten in place via
+    temp+rename, then diff the rewritten file against its .expected. Hermetic: never dirties
+    the repo tree."""
+    case_dir = basedir / name
+    with tempfile.TemporaryDirectory(prefix=f"hawkeye-it-{name}-") as tmp:
+        tmp = Path(tmp)
+        shutil.copy2(case_dir / "licenserc.toml", tmp / "licenserc.toml")
+        for file in files:
+            shutil.copy2(case_dir / file, tmp / file)
+        subprocess.run([hawkeye, "format", "--fail-if-unknown", "--fail-if-updated=false"], cwd=tmp, check=True)
+        for file in files:
+            diff_files(case_dir / f"{file}.expected", tmp / file)
+
+
 drive("attrs_and_props", ["main.rs"])
 drive("load_header_path", ["main.rs"])
 drive("bom_issue", ["headless_bom.cs"])
 drive("regression_blank_line", ["main.rs"])
 drive("regression_no_blank_lines", ["repro.py"])
 drive("disk_file_created_year", ["main.rs"], True)
+drive("existing_foreign_style_replace", ["main.rs"])
+drive("existing_foreign_style_replace_mixed", ["main.rs"])
+drive_no_change("existing_foreign_style_skip", ["main.rs"])
+drive_expect_failure("existing_foreign_style_error", ["format", "--dry-run"])
+# A header in an unlisted comment style cannot be normalized: controlled failure, no duplicate.
+drive_expect_failure_no_change("existing_foreign_style_unlisted", ["main.rs"])
+# Form-1 residual dup (#210): a listed-style block ABOVE an unlisted-style notice. Stripping the
+# listed block leaves the unlisted notice; format must re-detect it and fail, not stack on top.
+drive_expect_failure_no_change("existing_foreign_style_replace_mixed_unlisted", ["main.rs"])
+# A stray whole-word keyword in code looks licensed: controlled failure, no header inserted.
+drive_expect_failure_no_change("keyword_in_code", ["main.rs"])
+# Word-boundary fix: `copyrightHolder` is not a notice, so the header is inserted normally.
+drive("keyword_identifier_no_header", ["main.rs"])
+# 6.x [mapping]/useDefaultMapping config is rejected with a migration hint.
+drive_expect_failure("legacy_mapping_config", ["format", "--dry-run"], expect_stderr="useDefaultHeaders")
+# Non-dry-run in-place atomic write path.
+drive_in_place("atomic_inplace", ["main.rs"])

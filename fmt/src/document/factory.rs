@@ -13,25 +13,35 @@
 // limitations under the License.
 
 use std::collections::HashMap;
-use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
 use std::path::PathBuf;
 use std::time::SystemTime;
 
+use exn::bail;
 use exn::OptionExt;
 use exn::Result;
 
-use crate::config::Mapping;
+use crate::config::ExistingStrategy;
+use crate::config::HeaderRule;
 use crate::document::Attributes;
 use crate::document::Document;
 use crate::error::Error;
 use crate::git::GitFileAttrs;
 use crate::header::model::HeaderDef;
 
+/// A [`HeaderRule`] resolved to concrete [`HeaderDef`]s; `defs[0]` is preferred,
+/// the rest are recognized for removal only.
+struct ResolvedRule {
+    extensions: Vec<String>, // lowercased, leading dot, e.g. ".rs"
+    filenames: Vec<String>,  // lowercased
+    defs: Vec<HeaderDef>,
+    existing_strategy: ExistingStrategy,
+}
+
 pub struct DocumentFactory {
-    mapping: HashSet<Mapping>,
-    definitions: HashMap<String, HeaderDef>,
+    rules: Vec<ResolvedRule>,
+    unknown_def: HeaderDef,
     properties: HashMap<String, String>,
 
     keywords: Vec<String>,
@@ -39,20 +49,73 @@ pub struct DocumentFactory {
 }
 
 impl DocumentFactory {
+    /// Resolve rule style names up front so per-file lookup is cheap and typos fail at startup.
     pub fn new(
-        mapping: HashSet<Mapping>,
+        header_rules: Vec<HeaderRule>,
         definitions: HashMap<String, HeaderDef>,
         properties: HashMap<String, String>,
         keywords: Vec<String>,
         git_file_attrs: HashMap<PathBuf, GitFileAttrs>,
-    ) -> Self {
-        Self {
-            mapping,
-            definitions,
-            properties,
-            keywords,
-            git_file_attrs,
+    ) -> Result<Self, Error> {
+        let unknown_def = definitions
+            .get("unknown")
+            .cloned()
+            .ok_or_raise(|| Error::new("missing built-in 'unknown' header definition"))?;
+
+        let mut rules = Vec::with_capacity(header_rules.len());
+        for rule in header_rules {
+            if rule.styles.is_empty() {
+                bail!(Error::new(format!(
+                    "header rule for extensions={:?} filenames={:?} must list at least one style",
+                    rule.extensions, rule.filenames
+                )));
+            }
+            let mut defs = Vec::with_capacity(rule.styles.len());
+            for style in &rule.styles {
+                let def = definitions.get(&style.to_lowercase()).ok_or_raise(|| {
+                    Error::new(format!("header rule references unknown style: {style}"))
+                })?;
+                defs.push(def.clone());
+            }
+            rules.push(ResolvedRule {
+                extensions: rule
+                    .extensions
+                    .iter()
+                    .map(|e| format!(".{}", e.to_lowercase()))
+                    .collect(),
+                filenames: rule.filenames.iter().map(|f| f.to_lowercase()).collect(),
+                defs,
+                existing_strategy: rule.existing_strategy,
+            });
         }
+
+        Ok(Self {
+            rules,
+            unknown_def,
+            properties,
+            // lowercase once for case-insensitive matching against the lowercased haystack
+            keywords: keywords.into_iter().map(|k| k.to_lowercase()).collect(),
+            git_file_attrs,
+        })
+    }
+
+    /// Resolve a file name to its styles (preferred first) and strategy. Filename rules
+    /// win over extension rules; first match wins per tier; falls back to `unknown`.
+    fn resolve(&self, lower_file_name: &str) -> (&[HeaderDef], ExistingStrategy) {
+        for rule in &self.rules {
+            if rule.filenames.iter().any(|f| f == lower_file_name) {
+                return (&rule.defs, rule.existing_strategy);
+            }
+        }
+        for rule in &self.rules {
+            if rule.extensions.iter().any(|e| lower_file_name.ends_with(e)) {
+                return (&rule.defs, rule.existing_strategy);
+            }
+        }
+        (
+            std::slice::from_ref(&self.unknown_def),
+            ExistingStrategy::default(),
+        )
     }
 
     pub fn create_document(&self, filepath: &Path) -> Result<Option<Document>, Error> {
@@ -60,19 +123,13 @@ impl DocumentFactory {
             .file_name()
             .map(|n| n.to_string_lossy().to_lowercase())
             .unwrap_or_default();
-        let header_type = self
-            .mapping
-            .iter()
-            .find_map(|m| m.header_type(&lower_file_name))
-            .unwrap_or_else(|| "unknown".to_string())
-            .to_lowercase();
-        let header_def = self.definitions.get(&header_type).ok_or_raise(|| {
-            Error::new(format!(
-                "cannot create document: {}, header type {} not found",
-                filepath.display(),
-                header_type
-            ))
-        })?;
+        let (defs, existing_strategy) = self.resolve(&lower_file_name);
+        // `resolve` always returns a non-empty slice (empty `styles` rejected in `new`).
+        let (preferred, rest) = defs
+            .split_first()
+            .expect("resolve guarantees at least one style");
+        let header_def = preferred.clone();
+        let removal_candidates = rest.to_vec();
 
         let props = self.properties.clone();
 
@@ -102,8 +159,10 @@ impl DocumentFactory {
 
         Document::new(
             filepath.to_path_buf(),
-            header_def.clone(),
-            &self.keywords,
+            header_def,
+            removal_candidates,
+            self.keywords.clone(),
+            existing_strategy,
             props,
             attrs,
         )
@@ -121,4 +180,48 @@ fn git_time_to_year(t: gix::date::Time) -> Option<i16> {
         .expect("always valid unix time")
         .to_zoned(offset.to_time_zone());
     Some(zoned.year())
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::header::model::default_headers;
+
+    use super::*;
+
+    fn rule(styles: &[&str]) -> HeaderRule {
+        HeaderRule {
+            extensions: vec!["rs".to_string()],
+            filenames: vec![],
+            styles: styles.iter().map(|s| s.to_string()).collect(),
+            existing_strategy: ExistingStrategy::Replace,
+        }
+    }
+
+    fn factory(rules: Vec<HeaderRule>) -> Result<DocumentFactory, Error> {
+        DocumentFactory::new(
+            rules,
+            default_headers(),
+            HashMap::new(),
+            vec!["copyright".to_string()],
+            HashMap::new(),
+        )
+    }
+
+    /// A rule with no styles can never insert a header; reject it at startup, not per file.
+    #[test]
+    fn empty_styles_is_rejected() {
+        assert!(factory(vec![rule(&[])]).is_err());
+    }
+
+    /// A style name absent from the definitions is almost certainly a typo; fail fast.
+    #[test]
+    fn unknown_style_is_rejected() {
+        assert!(factory(vec![rule(&["NO_SUCH_STYLE"])]).is_err());
+    }
+
+    /// Happy path resolves: pins that the rejections above are not over-eager.
+    #[test]
+    fn valid_rule_is_accepted() {
+        assert!(factory(vec![rule(&["DOUBLESLASH_STYLE", "SLASHSTAR_STYLE"])]).is_ok());
+    }
 }

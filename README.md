@@ -42,7 +42,7 @@ To check license headers in GitHub Actions, add a step in your GitHub workflow:
 
 ```yaml
 - name: Check License Header
-  uses: korandoru/hawkeye@v6
+  uses: korandoru/hawkeye@v7
 ```
 
 ### Docker
@@ -77,7 +77,7 @@ cargo install hawkeye
 Instead of `cargo install`, you can install `hawkeye` as a prebuilt binary by:
 
 ```shell
-export VERSION=v6.0.0
+export VERSION=v7.0.0
 curl --proto '=https' --tlsv1.2 -LsSf https://github.com/korandoru/hawkeye/releases/download/$VERSION/hawkeye-installer.sh | sh
 ```
 
@@ -100,6 +100,12 @@ docker build . -t hawkeye
 ## Configurations
 
 ### Config file
+
+> [!IMPORTANT]
+> HawkEye 7.0 replaced the `[mapping.STYLE]` blocks and `useDefaultMapping` with a
+> per-language `[[headers]]` rule list (see `headers` below). Replace each
+> `[mapping.FOO] { extensions = [...] }` with a `[[headers]]` rule carrying
+> `styles = ["FOO"]`, and rename `useDefaultMapping` to `useDefaultHeaders`.
 
 ```toml
 # Base directory for the whole execution.
@@ -145,25 +151,42 @@ excludes = ["..."]
 # default: ["copyright"]
 keywords = ["copyright", "..."]
 
-# Whether you use the default mapping. Check DocumentType.defaultMapping() for the completed list.
+# Whether to use the built-in language-to-style rules. Check DocumentType defaults for the completed list.
 # default: true
-useDefaultMapping = true
+useDefaultHeaders = true
 
 # Paths to additional header style files. The model of user-defined header style can be found below.
 # default: empty
 additionalHeaders = ["..."]
 
-# Mapping rules (repeated).
+# Header rules (repeated). Each rule binds file patterns to one or more comment styles and
+# decides what to do when a file already has a header.
 #
-# The key of a mapping rule is a header style type (case-insensitive).
+# A style name references a built-in HeaderType or one defined in `additionalHeaders`
+# (case-insensitive). styles[0] is the preferred style that `format` writes; any further
+# styles are also recognized for removal, so a header already written in one of them is
+# migrated to the preferred style instead of being duplicated.
 #
-# Available header style types consist of those defined at `HeaderType` and user-defined ones in `additionalHeaders`.
-# The name of header style type is case-insensitive.
+# User rules take precedence over the built-in defaults (matched first; exact filename
+# before extension).
+[[headers]]
+extensions = ["..."]     # e.g. "cc"
+filenames = ["..."]      # e.g. "Dockerfile.native"
+styles = ["STYLE_NAME"]  # preferred first
+
+# What to do when a file already has a header that is not an exact match for the preferred
+# style (an existing header is detected by a style-agnostic scan for `keywords`). This applies
+# to `format` only; `check` and `remove` ignore it.
+#   "replace" - remove the existing header (any listed style) and write the preferred one (default)
+#   "skip"    - leave the file untouched and report it
+#   "error"   - fail the run
 #
-# If useDefaultMapping is true, the mapping rules defined here can override the default one.
-[mapping.STYLE_NAME]
-filenames = ["..."]  # e.g. "Dockerfile.native"
-extensions = ["..."] # e.g. "cc"
+# Because detection is a keyword scan, a stray occurrence of a keyword (default "copyright") near
+# the top of an otherwise unheadered file looks like an existing header: "skip" then silently
+# leaves it without a header, and "error" fails the run. The reverse also holds: a real notice
+# that contains none of the `keywords` is not detected, so "replace" adds a second header on top
+# of it. Tune `keywords` if either case bites.
+existingStrategy = "replace"
 
 # Properties to fulfill the template.
 # For a defined key-value pair, you can use {{props["key"]}} in the header template, which will be
@@ -177,7 +200,9 @@ inceptionYear = 2023
 
 # Options to configure Git features.
 [git]
-# If enabled, do not process files that are ignored by Git; possible value: ['auto', 'enable', 'disable']
+# If enabled, do not process files that are ignored by Git AND untracked; a file matched by a
+# .gitignore rule but tracked in the index (e.g. force-added with `git add -f`) is still processed.
+# possible value: ['auto', 'enable', 'disable']
 # 'auto' means this feature tries to be enabled with:
 #   * gix - if `basedir` is in a Git repository.
 #   * ignore crate's gitignore rules - if `basedir` is not in a Git repository.

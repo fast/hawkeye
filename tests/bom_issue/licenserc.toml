@@ -5,5 +5,6 @@ excludes = ["*.toml", "*.expected"]
 
 additionalHeaders = ["style.toml"]
 
-[mapping.CS_TEST_STYLE]
+[[headers]]
 extensions = ["cs"]
+styles = ["CS_TEST_STYLE"]

@@ -1,0 +1,18 @@
+baseDir = "."
+headerPath = "Apache-2.0.txt"
+
+includes = ["*.rs"]
+excludes = ["*.expected"]
+
+# `.rs` lists DOUBLESLASH (preferred) + SLASHSTAR (removable). The SLASHSTAR block at the top
+# is stripped on replace, but the hash-comment notice below is in an UNLISTED style and
+# survives. format must NOT insert a // header on top of the survivor (the #210 residual-dup
+# edge); it reports a controlled failure (foreign) and writes nothing.
+[[headers]]
+extensions = ["rs"]
+styles = ["DOUBLESLASH_STYLE", "SLASHSTAR_STYLE"]
+existingStrategy = "replace"
+
+[properties]
+inceptionYear = 2023
+copyrightOwner = "The CopyrightOwner"

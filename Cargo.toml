@@ -17,7 +17,7 @@ members = ["cli", "fmt"]
 resolver = "2"
 
 [workspace.package]
-version = "6.5.1"
+version = "7.0.0"
 edition = "2021"
 authors = ["tison <wander4096@gmail.com>"]
 readme = "README.md"
@@ -26,7 +26,7 @@ repository = "https://github.com/korandoru/hawkeye/"
 rust-version = "1.90.0"
 
 [workspace.dependencies]
-hawkeye-fmt = { version = "=6.5.1", path = "fmt" }
+hawkeye-fmt = { version = "=7.0.0", path = "fmt" }
 
 build-data = { version = "0.3.0" }
 clap = { version = "4.5.23", features = ["derive"] }

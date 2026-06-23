@@ -274,7 +274,7 @@ fn select_files_with_git(
 }
 
 pub const INCLUDES: [&str; 1] = ["**"];
-pub const EXCLUDES: [&str; 140] = [
+pub const EXCLUDES: [&str; 141] = [
     // Miscellaneous typical temporary files
     "**/*~",
     "**/#*#",
@@ -283,6 +283,8 @@ pub const EXCLUDES: [&str; 140] = [
     "**/._*",
     "**/.repository/**",
     "**/*.lck",
+    // HawkEye's own atomic-write temp files, leaked on SIGKILL/power loss; skip on re-walk.
+    "**/.*.hawkeye-*.tmp",
     // CVS
     "**/CVS",
     "**/CVS/**",

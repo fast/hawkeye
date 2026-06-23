@@ -19,6 +19,7 @@ use std::path::PathBuf;
 use clap::Args;
 use clap::Parser;
 use exn::Result;
+use hawkeye_fmt::config::ExistingStrategy;
 use hawkeye_fmt::document::Document;
 use hawkeye_fmt::error::Error;
 use hawkeye_fmt::header::matcher::HeaderMatcher;
@@ -79,7 +80,7 @@ pub struct CommandCheck {
     shared: SharedOptions,
     #[arg(
         long,
-        help = "whether to exit with non-zero code if missing headers",
+        help = "whether to exit with non-zero code if headers are missing or non-matching (foreign)",
         action = clap::ArgAction::Set,
         default_value_t = true
     )]
@@ -90,6 +91,7 @@ pub struct CommandCheck {
 struct CheckContext {
     unknown: Vec<String>,
     missing: Vec<String>,
+    foreign: Vec<String>,
 }
 
 impl Callback for CheckContext {
@@ -102,7 +104,15 @@ impl Callback for CheckContext {
     }
 
     fn on_not_matched(&mut self, _: &HeaderMatcher, document: Document) -> Result<(), Error> {
-        self.missing.push(document.filepath.display().to_string());
+        let path = document.filepath.display().to_string();
+        // A file that already carries a non-matching header (a stale one in a recognized
+        // style, or a notice in a style this rule does not list) is reported distinctly from
+        // a file that has no header at all.
+        if document.has_existing_header() {
+            self.foreign.push(path);
+        } else {
+            self.missing.push(path);
+        }
         Ok(())
     }
 }
@@ -113,12 +123,20 @@ impl CommandCheck {
         let mut context = CheckContext {
             unknown: vec![],
             missing: vec![],
+            foreign: vec![],
         };
-        check_license_header(config, &mut context).unwrap();
+        run_processor(config, &mut context);
 
         let mut failed = check_unknown_files(&context.unknown, self.shared.fail_if_unknown);
         if !context.missing.is_empty() {
             log::error!("Found header missing in files: {:?}", context.missing);
+            failed |= self.fail_if_missing;
+        }
+        if !context.foreign.is_empty() {
+            log::error!(
+                "Found files with a non-matching existing header (different style or outdated content): {:?}",
+                context.foreign
+            );
             failed |= self.fail_if_missing;
         }
         if let Some(f) = self.shared.output_file {
@@ -144,6 +162,9 @@ struct FormatContext {
     dry_run: bool,
     unknown: Vec<String>,
     updated: Vec<String>,
+    skipped: Vec<String>,
+    foreign: Vec<String>,
+    conflict: Vec<String>,
 }
 
 impl Callback for FormatContext {
@@ -156,16 +177,54 @@ impl Callback for FormatContext {
     }
 
     fn on_not_matched(&mut self, header: &HeaderMatcher, mut doc: Document) -> Result<(), Error> {
-        if doc.header_detected() {
-            doc.remove_header();
-            doc.update_header(header)?;
-            self.updated
-                .push(format!("{}=replaced", doc.filepath.display()));
-        } else {
-            doc.update_header(header)?;
-            self.updated
-                .push(format!("{}=added", doc.filepath.display()));
-        }
+        let path = doc.filepath.display().to_string();
+
+        // `kind` is set only when the file is actually rewritten (added/replaced); skip and
+        // error outcomes leave it untouched. `error` must not return Err: `run_processor`
+        // aggregates conflicts and exits(1), like the missing/updated paths.
+        let strategy = doc.existing_strategy();
+        let kind = match strategy {
+            ExistingStrategy::Replace => {
+                // Strip ALL recognized header blocks (preferred style + every listed foreign
+                // style, in either stacking order), then insert exactly one preferred header.
+                // Re-check `looks_licensed` AFTER stripping: a notice in an UNLISTED style is not
+                // recognized, so it survives the strip; inserting on top of it would re-stack the
+                // #210 duplicate over a survivor. If anything still looks licensed (a surviving
+                // unlisted notice, or a stray keyword), leave the file for a human - a controlled
+                // failure beats a silent duplicate.
+                let removed = doc.remove_existing_headers();
+                if doc.looks_licensed() {
+                    log::warn!(
+                        "{path}: looks licensed (unlisted comment style or a stray keyword); left unchanged"
+                    );
+                    self.foreign.push(path);
+                    return Ok(());
+                }
+                doc.update_header(header)?;
+                if removed {
+                    "replaced"
+                } else {
+                    "added"
+                }
+            }
+            // Skip and Error differ only in the bucket: Error -> conflict (exits 1 in
+            // CommandFormat::run), Skip -> skipped (warn only).
+            ExistingStrategy::Skip | ExistingStrategy::Error => {
+                if doc.has_existing_header() {
+                    let bucket = if strategy == ExistingStrategy::Error {
+                        &mut self.conflict
+                    } else {
+                        &mut self.skipped
+                    };
+                    bucket.push(path);
+                    return Ok(());
+                }
+                doc.update_header(header)?;
+                "added"
+            }
+        };
+
+        self.updated.push(format!("{path}={kind}"));
 
         if self.dry_run {
             let mut extension = doc.filepath.extension().unwrap_or_default().to_os_string();
@@ -185,8 +244,11 @@ impl CommandFormat {
             dry_run: self.shared_edit.dry_run,
             unknown: vec![],
             updated: vec![],
+            skipped: vec![],
+            foreign: vec![],
+            conflict: vec![],
         };
-        check_license_header(config, &mut context).unwrap();
+        run_processor(config, &mut context);
 
         let mut failed = check_unknown_files(&context.unknown, self.shared.fail_if_unknown);
         if !context.updated.is_empty() {
@@ -196,6 +258,30 @@ impl CommandFormat {
                 context.updated
             );
             failed |= self.shared_edit.fail_if_updated;
+        }
+        if !context.skipped.is_empty() {
+            log::warn!(
+                "Skipped files with an existing header: {:?}",
+                context.skipped
+            );
+        }
+        if !context.foreign.is_empty() {
+            // existingStrategy=replace found a license-looking header it could not normalize to
+            // the preferred style (an unlisted comment style, or a stray keyword). Leaving it
+            // would silently exit 0 with the file un-normalized, so this is a controlled failure.
+            // Unlike `skipped` (the user's explicit opt-out), `foreign` is not a chosen outcome.
+            log::warn!(
+                "Files that look licensed (unlisted comment style or a stray keyword); left unchanged: {:?}",
+                context.foreign
+            );
+            failed = true;
+        }
+        if !context.conflict.is_empty() {
+            log::error!(
+                "Existing headers conflict with existingStrategy=error: {:?}",
+                context.conflict
+            );
+            failed = true;
         }
         if let Some(f) = self.shared.output_file {
             write_to_file(&f, &context);
@@ -220,16 +306,31 @@ struct RemoveContext {
     dry_run: bool,
     unknown: Vec<String>,
     removed: Vec<String>,
+    foreign: Vec<String>,
 }
 
 impl RemoveContext {
     fn remove(&mut self, doc: &mut Document) -> Result<(), Error> {
-        if !doc.header_detected() {
+        let path = doc.filepath.display().to_string();
+        // Remove a header in the preferred style, or failing that any other listed style.
+        let removed = if doc.header_detected() {
+            doc.remove_header();
+            true
+        } else {
+            doc.remove_foreign_header()
+        };
+
+        if !removed {
+            if doc.looks_licensed() {
+                log::warn!(
+                    "{path}: looks licensed (unlisted comment style or a stray keyword); not removed"
+                );
+                self.foreign.push(path);
+            }
             return Ok(());
         }
-        doc.remove_header();
-        self.removed
-            .push(format!("{}=removed", doc.filepath.display()));
+
+        self.removed.push(path);
         if self.dry_run {
             let mut extension = doc.filepath.extension().unwrap_or_default().to_os_string();
             extension.push(".removed");
@@ -262,8 +363,9 @@ impl CommandRemove {
             dry_run: self.shared_edit.dry_run,
             unknown: vec![],
             removed: vec![],
+            foreign: vec![],
         };
-        check_license_header(config, &mut context).unwrap();
+        run_processor(config, &mut context);
 
         let mut failed = check_unknown_files(&context.unknown, self.shared.fail_if_unknown);
         if !context.removed.is_empty() {
@@ -274,6 +376,12 @@ impl CommandRemove {
             );
             failed |= self.shared_edit.fail_if_updated;
         }
+        if !context.foreign.is_empty() {
+            log::warn!(
+                "Files that look licensed (unlisted comment style or a stray keyword); not removed: {:?}",
+                context.foreign
+            );
+        }
         if let Some(f) = self.shared.output_file {
             write_to_file(&f, &context);
         }
@@ -281,6 +389,16 @@ impl CommandRemove {
             std::process::exit(1);
         }
         log::info!("No file has been removed header.");
+    }
+}
+
+/// Run the processor, surfacing a config/IO error as a clean stderr message + `exit(1)`
+/// rather than an `unwrap` panic that buries it (e.g. the 6.x migration hint) under a
+/// backtrace. Matches the missing/conflict paths, which also log and `exit(1)`.
+fn run_processor<C: Callback>(config: PathBuf, callback: &mut C) {
+    if let Err(err) = check_license_header(config, callback) {
+        log::error!("{err:?}");
+        std::process::exit(1);
     }
 }
 

@@ -1,0 +1,16 @@
+baseDir = "."
+headerPath = "Apache-2.0.txt"
+
+includes = ["*.rs"]
+excludes = ["*.expected"]
+
+# 6.x-era config: [mapping.STYLE] + useDefaultMapping were removed in 7.0. The run must reject
+# this with a migration hint instead of an opaque parse error.
+useDefaultMapping = true
+
+[mapping.DOUBLESLASH_STYLE]
+extensions = ["rs"]
+
+[properties]
+inceptionYear = 2023
+copyrightOwner = "The CopyrightOwner"
