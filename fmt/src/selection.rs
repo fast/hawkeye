@@ -18,6 +18,7 @@ use std::path::PathBuf;
 use exn::ensure;
 use exn::Result;
 use exn::ResultExt;
+use ignore::overrides::Override;
 use ignore::overrides::OverrideBuilder;
 use walkdir::WalkDir;
 
@@ -64,12 +65,31 @@ impl Selection {
         }
     }
 
+    /// Select all the files under the base directory.
     pub fn select(self) -> Result<Vec<PathBuf>, Error> {
+        self.do_select(None)
+    }
+
+    /// Select only the given files and directories, which are resolved against the base directory.
+    ///
+    /// This is meant for large repositories, where walking the whole base directory (and its Git
+    /// history) is way more expensive than processing the files one is interested in.
+    ///
+    /// Directories are walked as [`Selection::select`] does. Files are selected as long as they
+    /// match `includes` and `excludes`; listing a file explicitly overrides the Git ignore rules,
+    /// like `git add --force` does. Paths that do not exist, or that are outside the base
+    /// directory, are skipped with a warning.
+    pub fn select_paths(self, paths: &[PathBuf]) -> Result<Vec<PathBuf>, Error> {
+        self.do_select(Some(paths))
+    }
+
+    fn do_select(self, paths: Option<&[PathBuf]>) -> Result<Vec<PathBuf>, Error> {
         log::debug!(
-            "selecting files with baseDir: {}, included: {:?}, excluded: {:?}",
+            "selecting files with baseDir: {}, included: {:?}, excluded: {:?}, paths: {:?}",
             self.basedir.display(),
             self.includes,
             self.excludes,
+            paths,
         );
 
         let (excludes, reverse_excludes) = {
@@ -95,30 +115,178 @@ impl Selection {
             ))
         );
 
-        let ignore = self.git_context.config.ignore.is_auto();
-        let result = match self.git_context.repo {
-            None => select_files_with_ignore(
-                &self.basedir,
-                &includes,
-                &excludes,
-                &reverse_excludes,
-                ignore,
-            )?,
-            Some(repo) => {
-                select_files_with_git(&self.basedir, &includes, &excludes, &reverse_excludes, repo)?
-            }
+        let matcher = build_matcher(&self.basedir, &includes, &excludes, &reverse_excludes)?;
+        let (dirs, files) = match paths {
+            None => (vec![self.basedir.clone()], vec![]),
+            Some(paths) => resolve_paths(&self.basedir, paths)?,
         };
+
+        let ignore = self.git_context.config.ignore.is_auto();
+        let mut result = vec![];
+        match self.git_context.repo {
+            None => {
+                for dir in &dirs {
+                    result.extend(select_files_with_ignore(dir, &matcher, ignore)?);
+                }
+                for file in &files {
+                    // the ignore crate matches paths relative to the base directory
+                    if is_selected_file(&matcher, &file.rela_path) {
+                        result.push(file.path.clone());
+                    }
+                }
+            }
+            Some(repo) => {
+                for dir in &dirs {
+                    result.extend(select_files_with_git(dir, &matcher, &repo)?);
+                }
+                if !files.is_empty() {
+                    let workdir = repo.workdir().expect("workdir cannot be absent");
+                    let workdir = canonicalize(workdir)?;
+                    for file in &files {
+                        // the git helper matches paths relative to the workdir
+                        let rela_path = match file.path.strip_prefix(&workdir) {
+                            Ok(rela_path) => rela_path,
+                            Err(_) => {
+                                log::warn!(
+                                    "skip file outside of the git repository: {}",
+                                    file.path.display()
+                                );
+                                continue;
+                            }
+                        };
+                        if is_selected_file(&matcher, rela_path) {
+                            result.push(file.path.clone());
+                        }
+                    }
+                }
+            }
+        }
+
+        if paths.is_some() {
+            // a file can be selected both on its own and as part of a selected directory
+            result.sort();
+            result.dedup();
+        }
 
         log::debug!("selected files: {:?} (count: {})", result, result.len());
         Ok(result)
     }
 }
 
-fn select_files_with_ignore(
-    basedir: &PathBuf,
+/// A file that has been explicitly passed for processing.
+struct FileToSelect {
+    /// Path relative to the base directory, that is, what includes and excludes are anchored to.
+    rela_path: PathBuf,
+    /// Absolute path, as the directory walkers report the files they select.
+    path: PathBuf,
+}
+
+/// Resolve the given paths against the base directory, and split them into directories to walk and
+/// files to select. Paths that cannot be resolved, or that escape the base directory, are dropped.
+fn resolve_paths(
+    basedir: &Path,
+    paths: &[PathBuf],
+) -> Result<(Vec<PathBuf>, Vec<FileToSelect>), Error> {
+    let absolute_basedir = canonicalize(basedir)?;
+
+    let mut dirs = vec![];
+    let mut files = vec![];
+    for path in paths {
+        let path = if path.is_absolute() {
+            path.clone()
+        } else {
+            basedir.join(path)
+        };
+
+        let absolute_path = match path.canonicalize() {
+            Ok(absolute_path) => absolute_path,
+            Err(err) => {
+                log::warn!(err:?; "skip path that cannot be resolved: {}", path.display());
+                continue;
+            }
+        };
+
+        let rela_path = match absolute_path.strip_prefix(&absolute_basedir) {
+            Ok(rela_path) => rela_path.to_path_buf(),
+            Err(_) => {
+                log::warn!(
+                    "skip path outside of baseDir {}: {}",
+                    basedir.display(),
+                    path.display()
+                );
+                continue;
+            }
+        };
+
+        if absolute_path.is_dir() {
+            // walk directories with the absolute path, as the git helper does
+            dirs.push(absolute_path);
+        } else if absolute_path.is_file() {
+            files.push(FileToSelect {
+                rela_path,
+                path: absolute_path,
+            });
+        } else {
+            log::warn!(
+                "skip path that is neither a file nor a directory: {}",
+                path.display()
+            );
+        }
+    }
+
+    Ok((dirs, files))
+}
+
+/// Whether an explicitly passed file matches the configured includes and excludes.
+fn is_selected_file(matcher: &Override, rela_path: &Path) -> bool {
+    for dir in rela_path.ancestors().skip(1) {
+        if dir.as_os_str().is_empty() {
+            continue;
+        }
+        if matcher.matched(dir, true).is_ignore() {
+            log::debug!(rela_path:?, dir:?; "skip glob ignored file under ignored directory");
+            return false;
+        }
+    }
+
+    if !matcher.matched(rela_path, false).is_whitelist() {
+        log::debug!(rela_path:?; "skip glob ignored file");
+        return false;
+    }
+
+    true
+}
+
+fn build_matcher(
+    basedir: &Path,
     includes: &[String],
     excludes: &[String],
     reverse_excludes: &[String],
+) -> Result<Override, Error> {
+    let make_error = || Error::new("failed to build the include and exclude matcher");
+
+    let mut builder = OverrideBuilder::new(basedir);
+    for pat in includes.iter() {
+        builder.add(pat).or_raise(make_error)?;
+    }
+    for pat in excludes.iter() {
+        let pat = format!("!{pat}");
+        builder.add(pat.as_str()).or_raise(make_error)?;
+    }
+    for pat in reverse_excludes.iter() {
+        builder.add(pat).or_raise(make_error)?;
+    }
+    builder.build().or_raise(make_error)
+}
+
+fn canonicalize(path: &Path) -> Result<PathBuf, Error> {
+    path.canonicalize()
+        .or_raise(|| Error::new(format!("cannot resolve absolute path: {}", path.display())))
+}
+
+fn select_files_with_ignore(
+    root: &Path,
+    matcher: &Override,
     turn_on_git_ignore: bool,
 ) -> Result<Vec<PathBuf>, Error> {
     let make_error = || Error::new("failed to select files with ignore crate");
@@ -126,7 +294,7 @@ fn select_files_with_ignore(
     log::debug!(turn_on_git_ignore; "Selecting files with ignore crate");
     let mut result = vec![];
 
-    let walker = ignore::WalkBuilder::new(basedir)
+    let walker = ignore::WalkBuilder::new(root)
         .ignore(false) // do not use .ignore file
         .hidden(false) // check hidden files
         .follow_links(true) // proper path name
@@ -134,20 +302,7 @@ fn select_files_with_ignore(
         .git_exclude(turn_on_git_ignore)
         .git_global(turn_on_git_ignore)
         .git_ignore(turn_on_git_ignore)
-        .overrides({
-            let mut builder = OverrideBuilder::new(basedir);
-            for pat in includes.iter() {
-                builder.add(pat).or_raise(make_error)?;
-            }
-            for pat in excludes.iter() {
-                let pat = format!("!{pat}");
-                builder.add(pat.as_str()).or_raise(make_error)?;
-            }
-            for pat in reverse_excludes.iter() {
-                builder.add(pat).or_raise(make_error)?;
-            }
-            builder.build().or_raise(make_error)?
-        })
+        .overrides(matcher.clone())
         .build();
 
     for mat in walker {
@@ -161,49 +316,18 @@ fn select_files_with_ignore(
 }
 
 fn select_files_with_git(
-    basedir: &Path,
-    includes: &[String],
-    excludes: &[String],
-    reverse_excludes: &[String],
-    repo: gix::Repository,
+    root: &Path,
+    matcher: &Override,
+    repo: &gix::Repository,
 ) -> Result<Vec<PathBuf>, Error> {
     log::debug!("selecting files with git helper");
     let mut result = vec![];
 
-    let matcher = {
-        let make_error = || Error::new("failed to select files with ignore crate");
-
-        let mut builder = OverrideBuilder::new(basedir);
-        for pat in includes.iter() {
-            builder.add(pat).or_raise(make_error)?;
-        }
-        for pat in excludes.iter() {
-            let pat = format!("!{pat}");
-            builder.add(pat.as_str()).or_raise(make_error)?;
-        }
-        for pat in reverse_excludes.iter() {
-            builder.add(pat).or_raise(make_error)?;
-        }
-        builder.build().or_raise(make_error)?
-    };
-
-    let basedir = basedir.canonicalize().or_raise(|| {
-        Error::new(format!(
-            "cannot resolve absolute path: {}",
-            basedir.display()
-        ))
-    })?;
-    let mut it = WalkDir::new(basedir.clone())
-        .follow_links(false)
-        .into_iter();
+    let root = canonicalize(root)?;
+    let mut it = WalkDir::new(root).follow_links(false).into_iter();
 
     let workdir = repo.workdir().expect("workdir cannot be absent");
-    let workdir = workdir.canonicalize().or_raise(|| {
-        Error::new(format!(
-            "cannot resolve absolute path: {}",
-            workdir.display()
-        ))
-    })?;
+    let workdir = canonicalize(workdir)?;
     let worktree = repo.worktree().expect("worktree cannot be absent");
     let mut excludes = worktree
         .excludes(None)

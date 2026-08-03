@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+### Notable changes
+
+* `check`, `format`, and `remove` accept the files and directories to process as arguments, or with `--files-from <FILE>` (`-` to read them from stdin). This skips walking the whole `baseDir`, as well as the parts of the Git history that are irrelevant to those files, which is significantly faster on large repositories. Files passed explicitly are processed even if Git ignores them, and a file that was deleted and added again reports the most recent addition as `attrs.git_file_created_year`.
+* Resolving `git.attrs` is much faster: the history is traversed with an object cache, each commit is diffed against its own parent instead of against the previously visited commit, and the traversal is spread over the available cores. On a repository of 23.5k commits and 5k files, that took the traversal from 57s to 1.2s.
+
+### Bug fixes
+
+* `attrs.git_file_created_year` and `attrs.git_file_modified_year` are no longer misattributed in repositories with merge commits. The history traversal used to diff commits that are not related to each other, which reported the date of an unrelated commit for the files in between; on a repository of 23.5k commits, 2% of the files rendered a wrong year. Merge commits are now skipped, as `git log` does by default, so changes are attributed to the commit that made them.
+
 ## [6.5.1] 2026-02-14
 
 ### Bug fixes

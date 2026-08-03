@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::io::Read;
 use std::io::Write;
 use std::path::Path;
 use std::path::PathBuf;
@@ -23,6 +24,7 @@ use hawkeye_fmt::document::Document;
 use hawkeye_fmt::error::Error;
 use hawkeye_fmt::header::matcher::HeaderMatcher;
 use hawkeye_fmt::processor::check_license_header;
+use hawkeye_fmt::processor::check_license_header_of_paths;
 use hawkeye_fmt::processor::Callback;
 use serde::Serialize;
 
@@ -48,6 +50,62 @@ struct SharedOptions {
     output_file: Option<PathBuf>,
     #[arg(long, help = "fail if process unknown files", default_value_t = false)]
     fail_if_unknown: bool,
+    #[arg(
+        value_name = "PATH",
+        help = "Process only these files and directories, instead of the whole baseDir"
+    )]
+    paths: Vec<PathBuf>,
+    #[arg(
+        long,
+        value_name = "FILE",
+        help = "Read the paths to process from FILE, one per line ('-' for stdin)"
+    )]
+    files_from: Option<PathBuf>,
+}
+
+impl SharedOptions {
+    /// The paths to process, or `None` to process the whole `baseDir`.
+    fn selected_paths(&self) -> Option<Vec<PathBuf>> {
+        if self.paths.is_empty() && self.files_from.is_none() {
+            return None;
+        }
+
+        let mut paths = self.paths.clone();
+        if let Some(file) = self.files_from.as_ref() {
+            paths.extend(read_paths_from(file));
+        }
+        Some(paths)
+    }
+
+    fn process<C: Callback>(&self, config: PathBuf, context: &mut C) {
+        let result = match self.selected_paths() {
+            None => check_license_header(config, context),
+            Some(paths) => check_license_header_of_paths(config, &paths, context),
+        };
+        result.unwrap();
+    }
+}
+
+fn read_paths_from(file: &Path) -> Vec<PathBuf> {
+    fn do_read_paths_from(file: &Path) -> std::io::Result<String> {
+        if file == Path::new("-") {
+            let mut content = String::new();
+            std::io::stdin().read_to_string(&mut content)?;
+            return Ok(content);
+        }
+        std::fs::read_to_string(file)
+    }
+
+    let content = do_read_paths_from(file)
+        .unwrap_or_else(|err| panic!("failed to read paths from file {}: {}", file.display(), err));
+
+    // tolerate the NUL separated output of git commands, like `git diff -z --name-only`
+    content
+        .split(['\n', '\0'])
+        .map(|line| line.trim_end_matches('\r'))
+        .filter(|line| !line.is_empty())
+        .map(PathBuf::from)
+        .collect()
 }
 
 #[derive(Args)]
@@ -108,13 +166,13 @@ impl Callback for CheckContext {
 }
 
 impl CommandCheck {
-    fn run(self) {
-        let config = self.shared.config.unwrap_or_else(default_config);
+    fn run(mut self) {
+        let config = self.shared.config.take().unwrap_or_else(default_config);
         let mut context = CheckContext {
             unknown: vec![],
             missing: vec![],
         };
-        check_license_header(config, &mut context).unwrap();
+        self.shared.process(config, &mut context);
 
         let mut failed = check_unknown_files(&context.unknown, self.shared.fail_if_unknown);
         if !context.missing.is_empty() {
@@ -179,14 +237,14 @@ impl Callback for FormatContext {
 }
 
 impl CommandFormat {
-    fn run(self) {
-        let config = self.shared.config.unwrap_or_else(default_config);
+    fn run(mut self) {
+        let config = self.shared.config.take().unwrap_or_else(default_config);
         let mut context = FormatContext {
             dry_run: self.shared_edit.dry_run,
             unknown: vec![],
             updated: vec![],
         };
-        check_license_header(config, &mut context).unwrap();
+        self.shared.process(config, &mut context);
 
         let mut failed = check_unknown_files(&context.unknown, self.shared.fail_if_unknown);
         if !context.updated.is_empty() {
@@ -256,14 +314,14 @@ impl Callback for RemoveContext {
 }
 
 impl CommandRemove {
-    fn run(self) {
-        let config = self.shared.config.unwrap_or_else(default_config);
+    fn run(mut self) {
+        let config = self.shared.config.take().unwrap_or_else(default_config);
         let mut context = RemoveContext {
             dry_run: self.shared_edit.dry_run,
             unknown: vec![],
             removed: vec![],
         };
-        check_license_header(config, &mut context).unwrap();
+        self.shared.process(config, &mut context);
 
         let mut failed = check_unknown_files(&context.unknown, self.shared.fail_if_unknown);
         if !context.removed.is_empty() {

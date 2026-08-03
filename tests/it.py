@@ -37,7 +37,7 @@ rootdir = basedir.parent
 subprocess.run(["cargo", "build", "--bin", "hawkeye"], cwd=rootdir, check=True)
 hawkeye = rootdir / "target" / "debug" / "hawkeye"
 
-def drive(name, files, create_temp_copy=False):
+def drive(name, files, create_temp_copy=False, extra_args=None, untouched=None):
     temp_paths = []
     expected_files = []
     case_dir = basedir / name
@@ -60,10 +60,15 @@ def drive(name, files, create_temp_copy=False):
         else:
             temp_paths = files
             expected_files = [f"{file}.expected" for file in files]
-        subprocess.run([hawkeye, "format", "--fail-if-unknown", "--fail-if-updated=false", "--dry-run"], cwd=case_dir, check=True)
+        command = [hawkeye, "format", "--fail-if-unknown", "--fail-if-updated=false", "--dry-run"]
+        subprocess.run(command + (extra_args or []), cwd=case_dir, check=True)
 
         for file in temp_paths:
             diff_files(case_dir / f"{file}.expected", case_dir / f"{file}.formatted")
+        for file in untouched or []:
+            if os.path.exists(case_dir / f"{file}.formatted"):
+                print(f"{file} should not have been processed")
+                exit(1)
     finally:
         # Remove all temp files at the end
         if create_temp_copy:
@@ -80,3 +85,5 @@ drive("bom_issue", ["headless_bom.cs"])
 drive("regression_blank_line", ["main.rs"])
 drive("regression_no_blank_lines", ["repro.py"])
 drive("disk_file_created_year", ["main.rs"], True)
+drive("select_paths", ["selected.rs"], extra_args=["selected.rs"], untouched=["not_selected.rs"])
+drive("select_paths", ["selected.rs"], extra_args=["--files-from", "files.txt"], untouched=["not_selected.rs"])

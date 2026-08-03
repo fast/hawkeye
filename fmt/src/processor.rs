@@ -50,8 +50,31 @@ pub trait Callback {
     fn on_not_matched(&mut self, header: &HeaderMatcher, document: Document) -> Result<(), Error>;
 }
 
+/// Check the license headers of all the files selected by the config.
 pub fn check_license_header<C: Callback>(
     run_config: PathBuf,
+    callback: &mut C,
+) -> Result<(), Error> {
+    do_check_license_header(run_config, None, callback)
+}
+
+/// Check the license headers of the given files and directories only.
+///
+/// Paths are resolved against the `baseDir` of the config, and they are still subject to its
+/// includes and excludes. This skips walking the whole `baseDir`, as well as the parts of the Git
+/// history that are irrelevant to these paths, which is significantly faster on large
+/// repositories. An empty `paths` selects no file at all.
+pub fn check_license_header_of_paths<C: Callback>(
+    run_config: PathBuf,
+    paths: &[PathBuf],
+    callback: &mut C,
+) -> Result<(), Error> {
+    do_check_license_header(run_config, Some(paths), callback)
+}
+
+fn do_check_license_header<C: Callback>(
+    run_config: PathBuf,
+    paths: Option<&[PathBuf]>,
     callback: &mut C,
 ) -> Result<(), Error> {
     let config = {
@@ -86,8 +109,16 @@ pub fn check_license_header<C: Callback>(
             config.use_default_excludes,
             git_context.clone(),
         );
-        selection.select()?
+        match paths {
+            None => selection.select()?,
+            Some(paths) => selection.select_paths(paths)?,
+        }
     };
+
+    if paths.is_some() && selected_files.is_empty() {
+        log::info!("no file is selected to process");
+        return Ok(());
+    }
 
     let mapping = {
         let mut mapping = config.mapping.clone();
@@ -141,7 +172,13 @@ pub fn check_license_header<C: Callback>(
         HeaderMatcher::new(header_source.content)
     };
 
-    let git_file_attrs = git::resolve_file_attrs(git_context)?;
+    let git_file_attrs = match paths {
+        None => git::resolve_file_attrs(git_context)?,
+        Some(_) => {
+            let interests = selected_files.iter().cloned().collect();
+            git::resolve_file_attrs_of(git_context, Some(&interests))?
+        }
+    };
 
     let document_factory = DocumentFactory::new(
         mapping,

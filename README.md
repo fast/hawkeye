@@ -19,6 +19,36 @@ hawkeye remove
 
 You can use `-h` or `--help` to list out all config options.
 
+### Processing a subset of files
+
+By default, every command walks the whole `baseDir`. On large repositories, both that walk and the
+Git history traversal it may trigger can take a while, so all the commands accept the files and
+directories to process instead:
+
+```bash
+# check the given files only
+hawkeye check src/main.rs src/lib.rs
+
+# check the given directory only
+hawkeye check src
+
+# read the paths from a file, or from stdin with '-'
+git diff --name-only origin/main | hawkeye check --files-from -
+```
+
+The paths are resolved against the `baseDir` and are still subject to the configured `includes` and
+`excludes`, so passing a file that the config skips processes nothing. Unlike a full run, passing a
+file explicitly processes it even if Git ignores it, the same way `git add --force` does. Paths that
+do not exist, which is what a diff of deleted files gives you, are skipped with a warning.
+
+Note that `attrs.git_file_created_year` still requires traversing the history down to the commit
+that added a file, so the speedup is the largest either when `git.attrs` is disabled, or when the
+files have been added recently.
+
+Whole-repository runs traverse the history on all the available cores, so `git.attrs` costs roughly
+what `git log` costs. Setting `git.attrs = 'disable'` remains the cheapest option if your header
+template does not use any of the `attrs.git_*` values.
+
 ### GitHub Actions
 
 The HawkEye GitHub Action enables users to run license header check by HawkEye with a config file.
