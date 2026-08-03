@@ -36,10 +36,11 @@ hawkeye check src
 git diff --name-only origin/main | hawkeye check --files-from -
 ```
 
-The paths are resolved against the `baseDir` and are still subject to the configured `includes` and
-`excludes`, so passing a file that the config skips processes nothing. Unlike a full run, passing a
-file explicitly processes it even if Git ignores it, the same way `git add --force` does. Paths that
-do not exist, which is what a diff of deleted files gives you, are skipped with a warning.
+The paths are resolved against the current directory, like any other path on the command line, and
+they are still subject to the configured `includes` and `excludes`, so passing a file that the
+config skips processes nothing. Paths outside of the `baseDir` are skipped, as are paths that do not
+exist, which is what a diff of deleted files gives you. Unlike a full run, passing a file explicitly
+processes it even if Git ignores it, the same way `git add --force` does.
 
 Note that `attrs.git_file_created_year` still requires traversing the history down to the commit
 that added a file, so the speedup is the largest either when `git.attrs` is disabled, or when the

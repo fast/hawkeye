@@ -70,7 +70,8 @@ impl Selection {
         self.do_select(None)
     }
 
-    /// Select only the given files and directories, which are resolved against the base directory.
+    /// Select only the given files and directories, which are resolved against the current
+    /// directory.
     ///
     /// This is meant for large repositories, where walking the whole base directory (and its Git
     /// history) is way more expensive than processing the files one is interested in.
@@ -192,12 +193,8 @@ fn resolve_paths(
     let mut dirs = vec![];
     let mut files = vec![];
     for path in paths {
-        let path = if path.is_absolute() {
-            path.clone()
-        } else {
-            basedir.join(path)
-        };
-
+        // resolved like any other path on the command line, that is, relative to the current
+        // directory, which is what the likes of `git diff --name-only` and pre-commit hand over
         let absolute_path = match path.canonicalize() {
             Ok(absolute_path) => absolute_path,
             Err(err) => {

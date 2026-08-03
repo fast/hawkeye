@@ -60,10 +60,10 @@ pub fn check_license_header<C: Callback>(
 
 /// Check the license headers of the given files and directories only.
 ///
-/// Paths are resolved against the `baseDir` of the config, and they are still subject to its
-/// includes and excludes. This skips walking the whole `baseDir`, as well as the parts of the Git
-/// history that are irrelevant to these paths, which is significantly faster on large
-/// repositories. An empty `paths` selects no file at all.
+/// Paths are resolved against the current directory, and they are still subject to the includes
+/// and excludes of the config; those outside of its `baseDir` are skipped. This skips walking the
+/// whole `baseDir`, as well as the parts of the Git history that are irrelevant to these paths,
+/// which is significantly faster on large repositories. An empty `paths` selects no file at all.
 pub fn check_license_header_of_paths<C: Callback>(
     run_config: PathBuf,
     paths: &[PathBuf],

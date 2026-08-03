@@ -8,6 +8,7 @@ All notable changes to this project will be documented in this file.
 
 * `check`, `format`, and `remove` accept the files and directories to process as arguments, or with `--files-from <FILE>` (`-` to read them from stdin). This skips walking the whole `baseDir`, as well as the parts of the Git history that are irrelevant to those files, which is significantly faster on large repositories. Files passed explicitly are processed even if Git ignores them, and a file that was deleted and added again reports the most recent addition as `attrs.git_file_created_year`.
 * Resolving `git.attrs` is much faster: the history is traversed with an object cache, each commit is diffed against its own parent instead of against the previously visited commit, and the traversal is spread over the available cores. On a repository of 23.5k commits and 5k files, that took the traversal from 57s to 1.2s.
+* The `hawkeye-format` and `hawkeye-format-docker` pre-commit hooks now pass the staged files to `hawkeye`, so a commit only pays for the files it touches.
 
 ### Bug fixes
 

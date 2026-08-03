@@ -18,7 +18,7 @@
   entry: hawkeye format
   language: python
   args: []
-  pass_filenames: false
+  pass_filenames: true
   require_serial: true
   additional_dependencies: []
   minimum_pre_commit_version: "2.9.2"
@@ -28,7 +28,7 @@
   entry: hawkeye format
   language: docker
   args: []
-  pass_filenames: false
+  pass_filenames: true
   require_serial: true
   additional_dependencies: []
   minimum_pre_commit_version: "2.9.2"
