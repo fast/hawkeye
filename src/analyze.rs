@@ -72,7 +72,11 @@ impl<'config> Analyzer<'config> {
             return Ok(EditPlan::new(Status::Unsupported, None));
         };
 
-        let preamble = preamble(input);
+        let preamble = preamble(
+            input,
+            rule.read_styles().iter().any(|style| style == "hash"),
+            self.config.header().identifiers(),
+        );
         let insertion = preamble.end;
         let eol = detect_eol(input);
         let write_style = self.config.style(rule.write_style());
@@ -259,19 +263,24 @@ struct Preamble {
     needs_separator: bool,
 }
 
-fn preamble(input: &str) -> Preamble {
+fn preamble(input: &str, allow_hash_magic: bool, identifiers: &[String]) -> Preamble {
     let mut offset = if input.starts_with('\u{feff}') {
         '\u{feff}'.len_utf8()
     } else {
         0
     };
     let tail = &input[offset..];
-    let lower = tail.get(..5).unwrap_or(tail).to_ascii_lowercase();
     let is_shebang = tail.starts_with("#!") && !tail.starts_with("#![");
-    let is_xml = lower.starts_with("<?xml");
-    let is_php = lower.starts_with("<?php");
+    let is_xml = tail
+        .as_bytes()
+        .get(..5)
+        .is_some_and(|prefix| prefix.eq_ignore_ascii_case(b"<?xml"));
+    let is_php = tail
+        .as_bytes()
+        .get(..5)
+        .is_some_and(|prefix| prefix.eq_ignore_ascii_case(b"<?php"));
 
-    if is_shebang || is_xml || is_php {
+    if is_xml || is_php {
         if let Some(index) = tail.find('\n') {
             offset += index + 1;
             return Preamble {
@@ -286,10 +295,94 @@ fn preamble(input: &str) -> Preamble {
         };
     }
 
+    if is_shebang {
+        let Some(index) = tail.find('\n') else {
+            return Preamble {
+                end: input.len(),
+                needs_separator: true,
+            };
+        };
+        offset += index + 1;
+    }
+
+    if allow_hash_magic {
+        let (next, needs_separator) = consume_hash_magic(input, offset, is_shebang, identifiers);
+        offset = next;
+        if needs_separator {
+            return Preamble {
+                end: offset,
+                needs_separator: true,
+            };
+        }
+    }
+
     Preamble {
         end: offset,
         needs_separator: false,
     }
+}
+
+fn consume_hash_magic(
+    input: &str,
+    mut offset: usize,
+    after_shebang: bool,
+    identifiers: &[String],
+) -> (usize, bool) {
+    let mut consumed = false;
+    if let Some(first) = crate::style::next_line(input, offset) {
+        if is_hash_magic(first.text) {
+            offset = first.next;
+            consumed = true;
+        } else if !after_shebang
+            && (first.text.trim().is_empty() || first.text.trim_start().starts_with('#'))
+            && !contains_identifier(first.text, identifiers)
+            && let Some(second) = crate::style::next_line(input, first.next)
+            && is_hash_magic(second.text)
+        {
+            offset = second.next;
+            consumed = true;
+        }
+    }
+
+    while let Some(line) = crate::style::next_line(input, offset) {
+        if !is_hash_magic(line.text) {
+            break;
+        }
+        offset = line.next;
+        consumed = true;
+    }
+
+    (
+        offset,
+        consumed && offset == input.len() && !input.ends_with('\n'),
+    )
+}
+
+fn contains_identifier(line: &str, identifiers: &[String]) -> bool {
+    let line = line.to_lowercase();
+    identifiers
+        .iter()
+        .any(|identifier| line.contains(identifier))
+}
+
+fn is_hash_magic(line: &str) -> bool {
+    let Some(comment) = line.trim_start().strip_prefix('#') else {
+        return false;
+    };
+    let comment = comment.trim_start().to_ascii_lowercase();
+    ["coding", "encoding", "frozen_string_literal", "typed"]
+        .iter()
+        .any(|key| has_magic_assignment(&comment, key))
+}
+
+fn has_magic_assignment(comment: &str, key: &str) -> bool {
+    comment.match_indices(key).any(|(index, _)| {
+        let starts_word = index == 0
+            || (!comment.as_bytes()[index - 1].is_ascii_alphanumeric()
+                && comment.as_bytes()[index - 1] != b'_');
+        let assignment = comment[index + key.len()..].trim_start();
+        starts_word && (assignment.starts_with(':') || assignment.starts_with('='))
+    })
 }
 
 #[cfg(test)]
@@ -503,6 +596,53 @@ read_styles = ["slash_star"]
             output,
             "#!/usr/bin/env bash\n# Copyright 2026 FastLabs Developers\n\n"
         );
+    }
+
+    #[test]
+    fn hash_language_magic_comments_stay_before_the_header() {
+        let config = config("hash", &[], "**/*.py");
+        let input = concat!(
+            "#!/usr/bin/env python3\n",
+            "# -*- coding: utf-8 -*-\n",
+            "print('hello')\n"
+        );
+        let (status, output) = format(input, &config, "tools/release.py");
+
+        assert_eq!(status, Status::Missing);
+        assert_eq!(
+            output,
+            concat!(
+                "#!/usr/bin/env python3\n",
+                "# -*- coding: utf-8 -*-\n",
+                "# Copyright 2026 FastLabs Developers\n\n",
+                "print('hello')\n"
+            )
+        );
+        assert_eq!(
+            format(&output, &config, "tools/release.py").0,
+            Status::Clean
+        );
+
+        let input = "# generated entrypoint\n# coding=latin-1\nprint('hello')\n";
+        let (_, output) = format(input, &config, "tools/generated.py");
+        assert_eq!(
+            output,
+            concat!(
+                "# generated entrypoint\n",
+                "# coding=latin-1\n",
+                "# Copyright 2026 FastLabs Developers\n\n",
+                "print('hello')\n"
+            )
+        );
+
+        let input = concat!(
+            "# Copyright 2026 FastLabs Developers\n",
+            "# coding=utf-8\n",
+            "print('hello')\n"
+        );
+        let (status, output) = format(input, &config, "tools/licensed.py");
+        assert_eq!(status, Status::Conflict);
+        assert_eq!(output, input);
     }
 
     #[test]

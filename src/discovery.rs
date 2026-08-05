@@ -15,14 +15,13 @@
 use std::collections::BTreeSet;
 use std::path::PathBuf;
 
-use globset::GlobBuilder;
 use globset::GlobSet;
-use globset::GlobSetBuilder;
 use ignore::WalkBuilder;
 
 use crate::Error;
 use crate::FileSelection;
 use crate::Result;
+use crate::config::compile_globs;
 
 pub(crate) struct Discovery {
     root: PathBuf,
@@ -43,9 +42,9 @@ impl Discovery {
             include: if selection.include().is_empty() {
                 None
             } else {
-                Some(build_globs("files.include", selection.include())?)
+                Some(compile_globs("files.include", selection.include())?)
             },
-            exclude: build_globs("files.exclude", selection.exclude())?,
+            exclude: compile_globs("files.exclude", selection.exclude())?,
             omitted: omitted.into_iter().collect(),
             use_gitignore: selection.use_gitignore(),
         })
@@ -96,25 +95,6 @@ impl Discovery {
         paths.dedup();
         Ok(paths)
     }
-}
-
-fn build_globs(label: &str, patterns: &[String]) -> Result<GlobSet> {
-    let mut builder = GlobSetBuilder::new();
-    for pattern in patterns {
-        let glob = GlobBuilder::new(pattern)
-            .literal_separator(true)
-            .backslash_escape(false)
-            .build()
-            .map_err(|error| {
-                Error::InvalidConfig(format!(
-                    "{label} contains invalid pattern {pattern:?}: {error}"
-                ))
-            })?;
-        builder.add(glob);
-    }
-    builder
-        .build()
-        .map_err(|error| Error::InvalidConfig(format!("cannot compile {label} patterns: {error}")))
 }
 
 #[cfg(test)]

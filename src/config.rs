@@ -140,6 +140,8 @@ impl Config {
     pub fn resolve(self, config_dir: impl AsRef<Path>) -> Result<ResolvedConfig> {
         let config_dir = config_dir.as_ref();
         let header = resolve_header(self.raw.header, config_dir)?;
+        compile_globs("files.include", &self.raw.files.include)?;
+        compile_globs("files.exclude", &self.raw.files.exclude)?;
         let mut styles = builtin_styles();
 
         for (name, style) in self.raw.styles {
@@ -339,6 +341,25 @@ fn resolve_rule(index: usize, raw: RawRule, styles: &BTreeMap<String, Style>) ->
         write_style: raw.write_style,
         read_styles,
     })
+}
+
+pub(crate) fn compile_globs(label: &str, patterns: &[String]) -> Result<GlobSet> {
+    let mut builder = GlobSetBuilder::new();
+    for pattern in patterns {
+        let glob = GlobBuilder::new(pattern)
+            .literal_separator(true)
+            .backslash_escape(false)
+            .build()
+            .map_err(|error| {
+                Error::InvalidConfig(format!(
+                    "{label} contains invalid pattern {pattern:?}: {error}"
+                ))
+            })?;
+        builder.add(glob);
+    }
+    builder
+        .build()
+        .map_err(|error| Error::InvalidConfig(format!("cannot compile {label} patterns: {error}")))
 }
 
 fn validate_style_reference(
@@ -555,6 +576,16 @@ identifiers = ["Copyright"]
         assert!(matches!(
             Config::from_toml(input).unwrap().resolve("."),
             Err(Error::InvalidConfig(_))
+        ));
+    }
+
+    #[test]
+    fn file_patterns_are_validated_during_resolution() {
+        let input = format!("{CONFIG}\n[files]\ninclude = [\"[\"]\n");
+
+        assert!(matches!(
+            Config::from_toml(&input).unwrap().resolve("."),
+            Err(Error::InvalidConfig(message)) if message.contains("files.include")
         ));
     }
 }

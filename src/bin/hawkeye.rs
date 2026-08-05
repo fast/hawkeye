@@ -12,9 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//! The HawkEye command-line interface.
+
 use std::error::Error;
 use std::io;
 use std::io::Write;
+use std::path::Path;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
@@ -80,7 +83,8 @@ struct EditArgs {
 #[derive(Serialize)]
 struct CommandOutput<'report> {
     command: &'static str,
-    dry_run: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    dry_run: Option<bool>,
     changed: usize,
     report: &'report Report,
 }
@@ -97,31 +101,30 @@ fn main() -> ExitCode {
 }
 
 fn run(cli: Cli) -> Result<ExitCode, Box<dyn Error>> {
+    let diff = match &cli.command {
+        Command::Check { diff } => *diff,
+        Command::Format(args) | Command::Remove(args) => args.diff,
+    };
+    validate_output_options(cli.output_format, diff)?;
+
     let engine = Engine::load(&cli.config)?;
     match cli.command {
         Command::Check { diff } => {
-            validate_output_options(cli.output_format, diff)?;
-            let plan = engine.plan(if diff { Mode::Format } else { Mode::Check })?;
+            let plan = engine.plan(Mode::Format)?;
             finish_check(plan, cli.output_format, diff)
         }
-        Command::Format(args) => {
-            validate_output_options(cli.output_format, args.diff)?;
-            finish_edit(
-                engine.plan(Mode::Format)?,
-                "format",
-                cli.output_format,
-                args,
-            )
-        }
-        Command::Remove(args) => {
-            validate_output_options(cli.output_format, args.diff)?;
-            finish_edit(
-                engine.plan(Mode::Remove)?,
-                "remove",
-                cli.output_format,
-                args,
-            )
-        }
+        Command::Format(args) => finish_edit(
+            engine.plan(Mode::Format)?,
+            "format",
+            cli.output_format,
+            args,
+        ),
+        Command::Remove(args) => finish_edit(
+            engine.plan(Mode::Remove)?,
+            "remove",
+            cli.output_format,
+            args,
+        ),
     }
 }
 
@@ -139,7 +142,7 @@ fn finish_check(
         output_format,
         &CommandOutput {
             command: "check",
-            dry_run: false,
+            dry_run: None,
             changed,
             report: &report,
         },
@@ -167,7 +170,7 @@ fn finish_edit(
         output_format,
         &CommandOutput {
             command,
-            dry_run: args.dry_run,
+            dry_run: Some(args.dry_run),
             changed,
             report: &report,
         },
@@ -203,7 +206,11 @@ fn print_report(
                 output.changed,
                 output.report.count(Status::Conflict),
                 output.report.count(Status::Unsupported),
-                if output.dry_run { " (dry run)" } else { "" }
+                if output.dry_run == Some(true) {
+                    " (dry run)"
+                } else {
+                    ""
+                }
             )?;
         }
     }
@@ -220,7 +227,7 @@ fn print_diffs(plan: &Plan) -> Result<(), Box<dyn Error>> {
         let updated = file
             .updated()?
             .expect("planned edits always produce UTF-8 files");
-        let path = file.path().display().to_string();
+        let path = diff_path(file.path());
         let diff = TextDiff::from_lines(original, &updated)
             .unified_diff()
             .header(&format!("a/{path}"), &format!("b/{path}"))
@@ -228,6 +235,13 @@ fn print_diffs(plan: &Plan) -> Result<(), Box<dyn Error>> {
         writer.write_all(diff.as_bytes())?;
     }
     Ok(())
+}
+
+fn diff_path(path: &Path) -> String {
+    path.components()
+        .map(|component| component.as_os_str().to_string_lossy())
+        .collect::<Vec<_>>()
+        .join("/")
 }
 
 fn change_count(plan: &Plan) -> usize {

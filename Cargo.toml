@@ -18,6 +18,7 @@ include = [
     "CHANGELOG.md",
     "LICENSE",
     "README.md",
+    "deny.toml",
     "hawkeye.toml",
 ]
 
@@ -45,10 +46,9 @@ path = "src/lib.rs"
 name = "hawkeye"
 path = "src/bin/hawkeye.rs"
 required-features = ["cli"]
-test = false
-bench = false
 
 [lints.rust]
+missing_docs = "deny"
 unknown_lints = "deny"
 unsafe_code = "deny"
 unused_must_use = "deny"

@@ -67,6 +67,7 @@ impl StyleConfig {
     pub(crate) fn resolve(self, name: String) -> Result<Style> {
         let syntax = match self {
             Self::Line { prefix } => {
+                reject_line_breaks(&name, "line prefix", &prefix)?;
                 let marker = prefix.trim_end().to_owned();
                 if marker.is_empty() {
                     return Err(Error::InvalidConfig(format!(
@@ -76,7 +77,10 @@ impl StyleConfig {
                 Syntax::Line { prefix, marker }
             }
             Self::Block { start, prefix, end } => {
-                let start_marker = start.trim().to_owned();
+                reject_line_breaks(&name, "block start", &start)?;
+                reject_line_breaks(&name, "block prefix", &prefix)?;
+                reject_line_breaks(&name, "block end", &end)?;
+                let start_marker = start.trim_end().to_owned();
                 let end_marker = end.trim().to_owned();
                 if start_marker.is_empty() || end_marker.is_empty() {
                     return Err(Error::InvalidConfig(format!(
@@ -94,6 +98,15 @@ impl StyleConfig {
         };
         Ok(Style { name, syntax })
     }
+}
+
+fn reject_line_breaks(name: &str, field: &str, value: &str) -> Result<()> {
+    if value.contains('\r') || value.contains('\n') {
+        return Err(Error::InvalidConfig(format!(
+            "style {name:?} {field} must fit on one line"
+        )));
+    }
+    Ok(())
 }
 
 impl Style {
@@ -317,12 +330,12 @@ fn strip_block_body(raw: &str, prefix: &str) -> Vec<String> {
     lines
 }
 
-struct Line<'a> {
-    text: &'a str,
-    next: usize,
+pub(crate) struct Line<'a> {
+    pub(crate) text: &'a str,
+    pub(crate) next: usize,
 }
 
-fn next_line(input: &str, start: usize) -> Option<Line<'_>> {
+pub(crate) fn next_line(input: &str, start: usize) -> Option<Line<'_>> {
     if start >= input.len() {
         return None;
     }
@@ -354,4 +367,35 @@ fn consume_one_blank_line(input: &str, cursor: usize) -> usize {
 
 fn line_start(input: &str, offset: usize) -> usize {
     input[..offset].rfind('\n').map_or(0, |index| index + 1)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rendered_custom_block_with_an_indented_start_is_readable() {
+        let style = StyleConfig::Block {
+            start: "  /*".to_owned(),
+            prefix: "   * ".to_owned(),
+            end: "   */".to_owned(),
+        }
+        .resolve("indented_block".to_owned())
+        .unwrap();
+        let rendered = style.render("Copyright 2026 Example", "\n");
+        let candidate = style.extract(&rendered, 0).unwrap();
+
+        assert_eq!(candidate.range, 0..rendered.len());
+        assert_eq!(candidate.body, "Copyright 2026 Example");
+    }
+
+    #[test]
+    fn multiline_style_tokens_are_rejected() {
+        let result = StyleConfig::Line {
+            prefix: "//\n".to_owned(),
+        }
+        .resolve("broken".to_owned());
+
+        assert!(matches!(result, Err(Error::InvalidConfig(_))));
+    }
 }

@@ -47,7 +47,7 @@ Consecutive recognized headers in allowed styles form one proven range. Formatti
 - A conflict leaves the original bytes unchanged.
 - Formatting is idempotent.
 - Formatting a safely analyzable file produces exactly one recognized license header.
-- Analysis preserves unrelated bytes, line endings, byte-order marks, shebangs, XML declarations, and PHP opening preambles.
+- Analysis preserves unrelated bytes, line endings, byte-order marks, shebangs, hash-language encoding/magic comments, XML declarations, and PHP opening preambles.
 - A planned edit captures its expected input, and repository application rejects files changed after planning.
 - Discovery does not follow symlinks, and the write layer refuses to replace a symlink if one reaches it.
 - Replacements use a synchronized temporary file in the target directory, preserve permissions, and persist by atomic rename.
@@ -91,7 +91,7 @@ Reports retain native `PathBuf` values in the library. Serialization emits paths
 
 ## CLI contract
 
-The command surface is `check`, `format`, and `remove`. `check --diff` shows the safe changes that `format` would make. `format` and `remove` support `--dry-run` and `--diff`. Human output and JSON reports are both written to stdout; diagnostics are written to stderr. Unified diff and JSON output are mutually exclusive so stdout always has one parseable format.
+The command surface is `check`, `format`, and `remove`. `check` computes the same safe edit plan as `format` without applying it, and `check --diff` renders that plan. Report states always describe the pre-edit analysis. The reported `changed` count means planned safe edits for every command, including checks and dry runs; the JSON `dry_run` field exists only on edit commands. `format` and `remove` support `--dry-run` and `--diff`. Human output and JSON reports are both written to stdout; diagnostics are written to stderr. Unified diff and JSON output are mutually exclusive so stdout always has one parseable format.
 
 Exit codes are reserved as follows:
 

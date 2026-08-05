@@ -252,9 +252,15 @@ fn canonicalize(path: &Path, operation: &'static str) -> Result<PathBuf> {
 fn render_header(config: &ResolvedConfig, template: &str) -> Result<String> {
     let mut environment = Environment::new();
     environment.set_undefined_behavior(UndefinedBehavior::Strict);
-    environment
+    let rendered = environment
         .render_str(template, config.variables())
-        .map_err(Into::into)
+        .map_err(crate::Error::from)?;
+    if rendered.trim().is_empty() {
+        return Err(crate::Error::InvalidConfig(
+            "rendered header text cannot be empty".to_owned(),
+        ));
+    }
+    Ok(rendered)
 }
 
 #[cfg(test)]
@@ -427,6 +433,29 @@ identifiers = ["Copyright"]
         assert!(matches!(
             Engine::load(directory.path().join("hawkeye.toml")),
             Err(crate::Error::Template(_))
+        ));
+    }
+
+    #[test]
+    fn empty_rendered_header_fails_during_engine_loading() {
+        let directory = tempfile::tempdir().unwrap();
+        fs::write(
+            directory.path().join("hawkeye.toml"),
+            r#"
+[header]
+text = "{{ value }}"
+identifiers = ["Copyright"]
+
+[variables]
+value = ""
+"#,
+        )
+        .unwrap();
+
+        assert!(matches!(
+            Engine::load(directory.path().join("hawkeye.toml")),
+            Err(crate::Error::InvalidConfig(message))
+                if message == "rendered header text cannot be empty"
         ));
     }
 }

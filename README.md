@@ -13,6 +13,8 @@ Install the current checkout:
 cargo install --path .
 ```
 
+After an alpha is published, use `cargo binstall hawkeye` when release binaries are attached, or `cargo install hawkeye --locked` from crates.io.
+
 Create `hawkeye.toml` in the repository root:
 
 ```toml
@@ -115,7 +117,7 @@ hawkeye [--config PATH] [--output-format human|json] format [--dry-run] [--diff]
 hawkeye [--config PATH] [--output-format human|json] remove [--dry-run] [--diff]
 ```
 
-`--diff` writes unified diffs to stdout and cannot be combined with JSON output. Normal `format` and `remove` runs apply every safe edit, leave conflicts byte-for-byte unchanged, and return a finding exit code if conflicts remain.
+`--diff` writes unified diffs to stdout and cannot be combined with JSON output. Report states describe the pre-edit analysis, while `changed` is the number of safe planned edits, including for `check` and dry runs; JSON includes `dry_run` only for `format` and `remove`. Normal edit runs apply every safe edit, leave conflicts byte-for-byte unchanged, and return a finding exit code if conflicts remain.
 
 - `0`: the command completed and its policy was satisfied.
 - `1`: `check` found a violation, a dry run has pending changes, or a conflict remains.
@@ -154,6 +156,7 @@ cargo clippy --all-features --all-targets -- -D warnings
 cargo test --all-features
 cargo test --no-default-features
 cargo run -- check
+cargo deny check
 ```
 
 The v6 source remains preserved separately for reference; v7 is not implemented as an incremental migration of that codebase.

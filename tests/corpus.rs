@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//! Representative downstream source-shape regression tests.
+
 use hawkeye::Analyzer;
 use hawkeye::Config;
 use hawkeye::Mode;
