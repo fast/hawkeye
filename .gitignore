@@ -1,2 +1,4 @@
-/target
+/.idea/
+/target/
 *.bak
+.DS_Store

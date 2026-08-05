@@ -1,4 +1,4 @@
-# Copyright 2024 tison <wander4096@gmail.com>
+# Copyright 2026 FastLabs Developers
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,149 +13,51 @@
 # limitations under the License.
 
 name: CI
+
 on:
   pull_request:
-    branches: [ main ]
   push:
-    branches: [ main ]
+    branches:
+      - main
 
-# Concurrency strategy:
-#   github.workflow: distinguish this workflow from others
-#   github.event_name: distinguish `push` event from `pull_request` event
-#   github.event.number: set to the number of the pull request if `pull_request` event
-#   github.run_id: otherwise, it's a `push` event, only cancel if we rerun the workflow
-#
-# Reference:
-#   https://docs.github.com/en/actions/using-jobs/using-concurrency
-#   https://docs.github.com/en/actions/learn-github-actions/contexts#github-context
+permissions:
+  contents: read
+
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.number || github.run_id }}
+  group: ci-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  check:
-    name: Check
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-      - uses: Swatinem/rust-cache@v2
-      - uses: dtolnay/rust-toolchain@nightly
-      - name: Check Clippy
-        run: cargo clippy --tests --all-features --all-targets --workspace -- -D warnings
-      - name: Check format
-        run: cargo fmt --all --check
-
   test:
-    strategy:
-      matrix:
-        rust-version: ["1.90.0", "stable"]
-    name: Build and test
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-      - uses: Swatinem/rust-cache@v2
-      - name: Delete rust-toolchain.toml
-        run: rm rust-toolchain.toml
-      - run: cargo build --workspace --all-features --bins --tests --examples --benches
-      - name: Run tests
-        run: cargo test --workspace -- --nocapture
-      - name: Run benches
-        run: cargo bench --workspace -- --test
-
-  docker:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ ubuntu-24.04 ]
-    runs-on: ${{matrix.os}}
-    name: Docker sanity check on ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Build and load
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: Dockerfile
-          tags: hawkeye:ci
-          outputs: type=docker
-      - name: Save image
-        run: docker save hawkeye:ci -o /tmp/hawkeye-${{matrix.os}}.tar
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: hawkeye-${{matrix.os}}
-          path: /tmp/hawkeye-${{matrix.os}}.tar
-      - name: Sanity check
-        run: |
-          cp action.yml action.yml.bak
-          docker image inspect hawkeye:ci --format='{{.Size}}'
-          docker run --rm -v $(pwd):/github/workspace hawkeye:ci -V
-          docker run --rm -v $(pwd):/github/workspace hawkeye:ci check --fail-if-unknown
-
-  smoke:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-24.04, windows-2022, macos-14]
+    name: Test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    name: Smoke test on ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - uses: Swatinem/rust-cache@v2
-      - name: Dog feed license check
-        shell: bash
-        run: |
-          cargo run --bin hawkeye -- -V
-          cargo run --bin hawkeye -- check --fail-if-unknown
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - name: Run integration tests
-        shell: bash
-        run: ./tests/it.py
-
-  gha:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04, windows-2022, macos-14]
-    runs-on: ${{ matrix.os }}
-    name: Smoke test for GitHub Actions on ${{ matrix.os }}
+        os:
+          - ubuntu-latest
+          - macos-latest
+          - windows-latest
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Check and fail if unknown
-        uses: ./
-        with:
-          args: --fail-if-unknown
-      - name: Check default config works
-        uses: ./
+      - uses: actions/checkout@v5
+      - run: rustup toolchain install stable --profile minimal
+      - run: cargo test --all-features --locked
+      - run: cargo test --no-default-features --locked
 
-  required:
-    name: Required
-    runs-on: ubuntu-24.04
-    if: ${{ always() }}
-    needs:
-      - check
-      - docker
-      - gha
-      - smoke
-      - test
+  quality:
+    name: Quality and package
+    runs-on: ubuntu-latest
     steps:
-      - name: Guardian
-        run: |
-          if [[ ! ( \
-                 "${{ needs.check.result }}" == "success" \
-              && "${{ needs.docker.result }}" == "success" \
-              && "${{ needs.gha.result }}" == "success" \
-              && "${{ needs.smoke.result }}" == "success" \
-              && "${{ needs.test.result }}" == "success" \
-              ) ]]; then
-            echo "Required jobs haven't been completed successfully."
-            exit -1
-          fi
+      - uses: actions/checkout@v5
+      - run: rustup toolchain install stable --profile minimal --component clippy,rustfmt
+      - run: cargo fmt --all --check
+      - run: cargo clippy --all-features --all-targets --locked -- -D warnings
+      - run: cargo package --locked
+
+  msrv:
+    name: Rust 1.88
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - run: rustup toolchain install 1.88 --profile minimal
+      - run: cargo +1.88 check --all-features --locked

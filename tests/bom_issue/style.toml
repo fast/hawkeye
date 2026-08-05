@@ -1,9 +1,0 @@
-[CS_TEST_STYLE]
-firstLine = "// -------------------------------------------------------"
-endLine = "// -------------------------------------------------------\n"
-skipLinePattern = "^#!.*$"
-allowBlankLines = false
-multipleLines = false
-beforeEachLine = "// "
-firstLineDetectionPattern = "//\\s+\\-+"
-lastLineDetectionPattern = "//\\s+\\-+"

@@ -1,83 +1,65 @@
-# Copyright 2024 tison <wander4096@gmail.com>
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
-[workspace]
-members = ["cli", "fmt"]
-resolver = "2"
-
-[workspace.package]
-version = "6.5.1"
-edition = "2021"
-authors = ["tison <wander4096@gmail.com>"]
+[package]
+name = "hawkeye"
+version = "7.0.0-alpha.1"
+edition = "2024"
+rust-version = "1.88"
+authors = ["FastLabs Developers"]
+description = "A library and command-line tool for checking and rewriting license headers."
 readme = "README.md"
 license = "Apache-2.0"
-repository = "https://github.com/korandoru/hawkeye/"
-rust-version = "1.90.0"
-
-[workspace.dependencies]
-hawkeye-fmt = { version = "=6.5.1", path = "fmt" }
-
-build-data = { version = "0.3.0" }
-clap = { version = "4.5.23", features = ["derive"] }
-const_format = { version = "0.2.34" }
-exn = { version = "0.3.0" }
-log = { version = "0.4.22", features = ["kv_serde", "serde"] }
-shadow-rs = { version = "1.7.0", default-features = false }
-toml = { version = "1.0.1" }
-
-[workspace.metadata.release]
-sign-tag = true
-shared-version = true
-tag-name = "v{{version}}"
-pre-release-commit-message = "chore: release v{{version}}"
-
-# Config for 'cargo dist'
-[workspace.metadata.dist]
-# The preferred cargo-dist version to use in CI (Cargo.toml SemVer syntax)
-cargo-dist-version = "0.22.1"
-# CI backends to support
-ci = "github"
-# The installers to generate for each app
-installers = ["shell"]
-# Target platforms to build apps for (Rust target-triple syntax)
-targets = [
-  "aarch64-apple-darwin",
-  "aarch64-unknown-linux-gnu",
-  "aarch64-unknown-linux-musl",
-  "x86_64-apple-darwin",
-  "x86_64-unknown-linux-gnu",
-  "x86_64-unknown-linux-musl",
-  "x86_64-pc-windows-msvc",
+repository = "https://github.com/korandoru/hawkeye"
+documentation = "https://docs.rs/hawkeye"
+keywords = ["license", "header", "formatter", "cli"]
+categories = ["command-line-utilities", "development-tools"]
+include = [
+    "src/**",
+    "tests/**",
+    "docs/**",
+    "CHANGELOG.md",
+    "LICENSE",
+    "README.md",
+    "hawkeye.toml",
 ]
-# Which actions to run on pull requests
-pr-run-mode = "plan"
-# Whether to install an updater program
-install-updater = false
-# Path that installers should place binaries in
-install-path = "CARGO_HOME"
 
-[workspace.metadata.dist.github-custom-runners]
-x86_64-unknown-linux-gnu = "ubuntu-22.04"
-aarch64-unknown-linux-gnu = "ubuntu-22.04-arm"
-x86_64-unknown-linux-musl = "ubuntu-22.04"
-aarch64-unknown-linux-musl = "ubuntu-22.04-arm"
-aarch64-apple-darwin = "macos-14"
-x86_64-apple-darwin = "macos-14"
-x86_64-pc-windows-msvc = "windows-2022"
-global = "ubuntu-22.04"
+[features]
+default = ["cli"]
+cli = ["dep:clap", "dep:serde_json", "dep:similar"]
 
-# 'cargo dist' build with this profile
-[profile.dist]
-inherits = "release"
+[dependencies]
+clap = { version = "4.5", features = ["derive"], optional = true }
+globset = { version = "0.4.20", default-features = false }
+ignore = "0.4.33"
+minijinja = { version = "2.22", default-features = false, features = ["builtins", "serde"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = { version = "1.0", optional = true }
+similar = { version = "3.1", optional = true }
+tempfile = "3.27"
+thiserror = "2.0"
+toml = "1.1"
+
+[lib]
+name = "hawkeye"
+path = "src/lib.rs"
+
+[[bin]]
+name = "hawkeye"
+path = "src/bin/hawkeye.rs"
+required-features = ["cli"]
+test = false
+bench = false
+
+[lints.rust]
+unknown_lints = "deny"
+unsafe_code = "deny"
+unused_must_use = "deny"
+
+[lints.clippy]
+dbg_macro = "deny"
+todo = "deny"
+type_complexity = "allow"
+
+[profile.release]
 lto = "thin"
+
+[package.metadata.docs.rs]
+all-features = true

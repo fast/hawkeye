@@ -1,258 +1,163 @@
 # HawkEye
 
-Simple license header checker and formatter, in multiple distribution forms.
+HawkEye checks, rewrites, and removes source-file license headers. The `hawkeye` Cargo package contains both a reusable Rust library and a thin command-line executable.
 
-## Usage
+> [!WARNING]
+> Version 7 is an intentional rewrite with a new configuration and API. Compatibility with v6 is not a goal, and `7.0.0-alpha.1` should be treated as an unstable preview until it is published.
 
-You can use HawkEye in GitHub Actions or in your local machine. HawkEye provides three basic commands:
+## Try the rewrite
 
-```bash
-# check license headers
+Install the current checkout:
+
+```console
+cargo install --path .
+```
+
+Create `hawkeye.toml` in the repository root:
+
+```toml
+[header]
+text = """Copyright {{ year }} Example Developers
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License."""
+identifiers = ["Copyright", "Apache License, Version 2.0"]
+
+[variables]
+year = 2026
+
+[files]
+use_gitignore = true
+exclude = ["**/generated/**"]
+```
+
+Common languages use built-in rules, so the minimal configuration needs no language mapping. Run:
+
+```console
 hawkeye check
-
-# format license headers (auto-fix all files that failed the check)
+hawkeye format --dry-run --diff
 hawkeye format
-
-# remove license headers
-hawkeye remove
 ```
 
-You can use `-h` or `--help` to list out all config options.
+`check` never writes. `format` adds missing headers and replaces recognized stale or non-preferred headers. `remove` only deletes a header whose exact source range was structurally recognized.
 
-### GitHub Actions
+## Configuration
 
-The HawkEye GitHub Action enables users to run license header check by HawkEye with a config file.
+HawkEye rejects unknown fields. All names use `snake_case`, all relative paths resolve against the directory containing `hawkeye.toml`, and ordered rules use first-match precedence.
 
-First of all, add a `licenserc.toml` file in the root of your project. The simplest config for projects licensed under Apache License 2.0 is as below:
+### Header and variables
 
-> [!NOTE]
-> The full configurations can be found in [the configuration section](#configurations).
+`[header]` must set exactly one of `text` or `path`, plus one or more `identifiers`. A path points to unstyled header text and is never scanned as a source file. MiniJinja renders the header once per run from `[variables]`; missing variables are errors.
+
+Identifiers provide explicit evidence for recognizing stale text inside a structurally parsed comment. Use specific phrases that distinguish the configured license from ordinary source comments.
 
 ```toml
-headerPath = "Apache-2.0.txt"
+[header]
+path = "headers/Apache-2.0-ASF.txt"
+identifiers = ["Apache Software Foundation", "Apache License, Version 2.0"]
 
-[properties]
-inceptionYear = 2023
-copyrightOwner = "tison <wander4096@gmail.com>"
+[variables]
+year = 2026
+project = "example"
 ```
 
-You should change the copyright line according to your information.
+### File selection
 
-To check license headers in GitHub Actions, add a step in your GitHub workflow:
-
-```yaml
-- name: Check License Header
-  uses: korandoru/hawkeye@v6
-```
-
-### Docker
-
-Alpine image (~18MB):
-
-```shell
-docker run -it --rm -v $(pwd):/github/workspace ghcr.io/korandoru/hawkeye check
-```
-
-### Arch Linux
-
-> [!NOTE]
-> Reach out to the maintainer ([@orhun](https://github.com/orhun)) of the [package](https://archlinux.org/packages/extra/x86_64/hawkeye/) or report issues on [Arch Linux GitLab](https://gitlab.archlinux.org/archlinux/packaging/packages/hawkeye) in the case of packaging-related problems.
-
-`hawkeye` can be installed with [pacman](https://wiki.archlinux.org/title/Pacman):
-
-```shell
-pacman -S hawkeye
-```
-
-### Cargo Install
-
-The `hawkeye` executable can be installed by:
-
-```shell
-cargo install hawkeye
-```
-
-### Prebuilt Binary
-
-Instead of `cargo install`, you can install `hawkeye` as a prebuilt binary by:
-
-```shell
-export VERSION=v6.0.0
-curl --proto '=https' --tlsv1.2 -LsSf https://github.com/korandoru/hawkeye/releases/download/$VERSION/hawkeye-installer.sh | sh
-```
-
-It would retain more build info (output by `hawkeye -V`) than `cargo install`.
-
-## Build
-
-This steps requires Rust toolchain.
-
-```shell
-cargo build --workspace --all-features --bin --tests --examples --benches
-```
-
-Build Docker image:
-
-```shell
-docker build . -t hawkeye
-```
-
-## Configurations
-
-### Config file
+Discovery includes hidden and untracked files, skips `.git`, never follows symlinks, and honors Git ignore files by default. `include` narrows the candidate set and `exclude` removes paths from it.
 
 ```toml
-# Base directory for the whole execution.
-# All relative paths is based on this path.
-# default: current working directory
-baseDir = "."
-
-# Inline header template.
-# Either inlineHeader or headerPath should be configured, and inlineHeader is prioritized.
-inlineHeader = "..."
-
-# Path to the header template file.
-# Either inlineHeader or headerPath should be configured, and inlineHeader is prioritized.
-# This path is resolved by the ResourceFinder. Check ResourceFinder for the concrete strategy.
-# The header template file is skipped on any execution.
-headerPath = "path/to/header.txt"
-
-# On enabled, check the license header matches exactly with whitespace.
-# Otherwise, strip the header in one line and check.
-# default: true
-strictCheck = true
-
-# Whether you use the default excludes. Check Default.EXCLUDES for the completed list.
-# To suppress part of excludes in the list, declare exact the same pattern in `includes` list.
-# default: true
-useDefaultExcludes = true
-
-# The supported patterns of includes and excludes follow gitignore pattern format, plus that:
-# 1. `includes` does not support `!`
-# 2. backslash does not escape letter
-# 3. whitespaces and `#` are normal since we configure line by line
-# See also https://git-scm.com/docs/gitignore#_pattern_format
-
-# Patterns of path to be included on execution.
-# default: all the files under `baseDir`.
-includes = ["..."]
-
-# Patterns of path to be excluded on execution. A leading bang (!) indicates an invert exclude rule.
-# default: empty; if useDefaultExcludes is true, append default excludes.
-excludes = ["..."]
-
-# Keywords that should occur in the header, case-insensitive.
-# default: ["copyright"]
-keywords = ["copyright", "..."]
-
-# Whether you use the default mapping. Check DocumentType.defaultMapping() for the completed list.
-# default: true
-useDefaultMapping = true
-
-# Paths to additional header style files. The model of user-defined header style can be found below.
-# default: empty
-additionalHeaders = ["..."]
-
-# Mapping rules (repeated).
-#
-# The key of a mapping rule is a header style type (case-insensitive).
-#
-# Available header style types consist of those defined at `HeaderType` and user-defined ones in `additionalHeaders`.
-# The name of header style type is case-insensitive.
-#
-# If useDefaultMapping is true, the mapping rules defined here can override the default one.
-[mapping.STYLE_NAME]
-filenames = ["..."]  # e.g. "Dockerfile.native"
-extensions = ["..."] # e.g. "cc"
-
-# Properties to fulfill the template.
-# For a defined key-value pair, you can use {{props["key"]}} in the header template, which will be
-# substituted with the corresponding value.
-[properties]
-inceptionYear = 2023
-
-# There are also preset attributes that can be used in the header template (no need to surround them with `props[]`).:
-# * 'attrs.filename' is the current file name, like: pom.xml.
-# * 'attrs.disk_file_created_year'
-
-# Options to configure Git features.
-[git]
-# If enabled, do not process files that are ignored by Git; possible value: ['auto', 'enable', 'disable']
-# 'auto' means this feature tries to be enabled with:
-#   * gix - if `basedir` is in a Git repository.
-#   * ignore crate's gitignore rules - if `basedir` is not in a Git repository.
-# 'enable' means always enabled with gix; failed if it is impossible.
-# default: 'auto'
-ignore = 'auto'
-# If enabled, populate file attrs determinated by Git; possible value: ['auto', 'enable', 'disable']
-# Attributes contains:
-#   * 'attrs.git_file_created_year'
-#   * 'attrs.git_file_modified_year'
-# 'auto' means this feature tries to be enabled with:
-#   * gix - if `basedir` is in a Git repository.
-# 'enable' means always enabled with gix; failed if it is impossible.
-# default: 'disable'
-attrs = 'disable'
+[files]
+use_gitignore = true
+include = ["src/**", "tests/**"]
+exclude = ["**/fixtures/**", "**/generated/**"]
 ```
 
-### Header style file
+Paths that pass discovery but match no rule are reported as `unsupported`. This is informational and does not fail `check`.
+
+### Rules and styles
+
+Rules are evaluated in declaration order before built-in defaults. `write_style` is the canonical output style. `read_styles` lists additional styles that may be safely recognized and migrated; the write style is always readable automatically.
 
 ```toml
-# [REQUIRED] The name of this header.
-[my_header_style]
-
-# The first fixed line of this header. Default to none.
-firstLine = "..."
-
-# The last fixed line of this header. Default to none.
-endLine = "..."
-
-# The characters to prepend before each license header lines. Default to empty.
-beforeEachLine = "..."
-
-# The characters to append after each license header lines. Default to empty.
-afterEachLine = "..."
-
-# Only for multi-line comments: specify if blank lines are allowed.
-# Default to false because most of the time, a header has some characters on each line.
-allowBlankLines = false
-
-# Specify whether this is a multi-line comment style or not.
-#
-# A multi-line comment style is equivalent to what we have in Java, where a first line and line will delimit
-# a whole multi-line comment section.
-#
-# A style that is not multi-line is usually repeating in each line the characters before and after each line
-# to delimit a one-line comment.
-#
-# Defaulut to true.
-multipleLines = true
-
-# Only for non multi-line comments: specify if some spaces should be added after the header line and before
-# the `afterEachLine` characters so that all the lines are aligned.
-#
-# Default to false.
-padLines = false
-
-# A regex to define a first line in a file that should be skipped and kept untouched, like the XML declaration
-# at the top of XML documents.
-#
-# Default to none.
-skipLinePattern = "..."
-
-# [REQUIRED] The regex used to detect the start of a header section or line.
-firstLineDetectionPattern = "..."
-
-# [REQUIRED] The regex used to detect the end of a header section or line.
-lastLineDetectionPattern = "..."
+[[rules]]
+patterns = ["*.rs", "**/*.rs"]
+write_style = "slash"
+read_styles = ["slash_star"]
 ```
+
+Built-in styles are `slash` (`//`), `hash` (`#`), `dash` (`--`), `slash_star` (`/* ... */`), and `xml` (`<!-- ... -->`). The built-in language rules cover common Rust, Go, C/C++, JVM, JavaScript/TypeScript, Python, Ruby, shell, TOML, YAML, SQL, and XML-family files, plus conventional build filenames such as `Dockerfile`, `Makefile`, and `CMakeLists.txt`.
+
+Set `use_default_rules = false` to require only explicit rules. Custom line and block styles are supported:
+
+```toml
+use_default_rules = false
+
+[styles.semicolon]
+kind = "line"
+prefix = ";; "
+
+[styles.template_block]
+kind = "block"
+start = "{{!"
+prefix = "  "
+end = "}}"
+
+[[rules]]
+patterns = ["*.lisp", "**/*.lisp"]
+write_style = "semicolon"
+```
+
+## Commands and exit codes
+
+```text
+hawkeye [--config PATH] [--output-format human|json] check [--diff]
+hawkeye [--config PATH] [--output-format human|json] format [--dry-run] [--diff]
+hawkeye [--config PATH] [--output-format human|json] remove [--dry-run] [--diff]
+```
+
+`--diff` writes unified diffs to stdout and cannot be combined with JSON output. Normal `format` and `remove` runs apply every safe edit, leave conflicts byte-for-byte unchanged, and return a finding exit code if conflicts remain.
+
+- `0`: the command completed and its policy was satisfied.
+- `1`: `check` found a violation, a dry run has pending changes, or a conflict remains.
+- `2`: invocation, configuration, template, discovery, or I/O failure.
+
+## Library
+
+The pure analyzer can be embedded without enabling filesystem mutation or CLI policy:
+
+```rust
+use hawkeye::{Analyzer, Config, Mode};
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let raw = r#"
+[header]
+text = "Copyright 2026 Example Developers"
+identifiers = ["Copyright"]
+"#;
+    let config = Config::from_toml(raw)?.resolve(".")?;
+    let analyzer = Analyzer::new(&config, "Copyright 2026 Example Developers")?;
+    let source = "fn main() {}\n";
+    let plan = analyzer.plan("src/main.rs", source, Mode::Format)?;
+    let rewritten = plan.apply(source)?;
+    assert!(rewritten.starts_with("// Copyright 2026 Example Developers"));
+    Ok(())
+}
+```
+
+Use `Engine::load` when repository discovery, safe atomic replacement, and a deterministic `Report` are desired. The detailed state machine and safety contracts are recorded in [`docs/v7-design.md`](docs/v7-design.md).
+
+## Development
+
+```console
+cargo fmt --all --check
+cargo clippy --all-features --all-targets -- -D warnings
+cargo test --all-features
+cargo test --no-default-features
+cargo run -- check
+```
+
+The v6 source remains preserved separately for reference; v7 is not implemented as an incremental migration of that codebase.
 
 ## License
 
-[Apache License 2.0](LICENSE)
-
-## History
-
-This software is originally from [license-maven-plugin](https://github.com/mathieucarbou/license-maven-plugin), with an initial motivation to bring it beyond a Maven plugin. The core abstractions like `Document`, `Header`, and `HeaderParser` are originally copied from the license-maven-plugin sources under the terms of Apache License 2.0.
-
-Later, when I started focusing on the Docker image's size and integration with Git, I found that Rust is better than Java (GraalVM Native Image) for this purpose. So, I rewrote the core logic in Rust while keeping a slim image. (The old Java implementation is achieved at the [archive-native-image](https://github.com/korandoru/hawkeye/tree/archive-native-image) branch)
+Licensed under the [Apache License, Version 2.0](./LICENSE).

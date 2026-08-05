@@ -1,6 +1,0 @@
-# Copyright (c) 2022-2025, Example, All Rights Reserved.
-
-from __future__ import annotations
-
-if __name__ == "__main__":
-    print()
