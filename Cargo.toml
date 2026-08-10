@@ -36,7 +36,14 @@ name = "hawkeye"
 path = "src/main.rs"
 
 [dependencies]
+clap = { version = "4.6.6", features = ["derive"] }
+ignore = "0.4.33"
+jiff = { version = "0.2.35", default-features = false, features = ["std"] }
+minijinja = "2.23.0"
 serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+similar = "3.1.2"
+tempfile = "3.27.0"
 thiserror = "2.0.20"
 toml = "1.1.4"
 
@@ -53,7 +60,7 @@ homepage = "https://github.com/korandoru/hawkeye"
 license = "Apache-2.0"
 readme = "README.md"
 repository = "https://github.com/korandoru/hawkeye"
-rust-version = "1.85.0"
+rust-version = "1.88.0"
 
 [workspace.lints.rust]
 unknown_lints = "deny"

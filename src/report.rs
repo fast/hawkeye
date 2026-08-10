@@ -1,0 +1,146 @@
+// Copyright 2026 FastLabs Developers
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+use std::fmt;
+use std::path::Path;
+use std::path::PathBuf;
+
+use serde::Serialize;
+use serde::Serializer;
+
+/// A HawkEye operation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Mode {
+    /// Report non-compliant files without planning writes.
+    Check,
+    /// Insert or normalize headers.
+    Format,
+    /// Remove structurally recognized headers.
+    Remove,
+}
+
+/// The result of analyzing one selected file.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Status {
+    /// The file already contains the canonical header.
+    Clean,
+    /// No recognized header was found.
+    Missing,
+    /// A recognized header differs in content, style, or spacing.
+    Replaceable,
+    /// The file looks licensed but no safe edit range is known.
+    Conflict,
+    /// The file has no rule or is not supported UTF-8 text.
+    Unsupported,
+}
+
+impl Status {
+    /// Returns whether `check` treats this state as non-compliant.
+    pub fn is_violation(self) -> bool {
+        matches!(self, Self::Missing | Self::Replaceable | Self::Conflict)
+    }
+}
+
+impl fmt::Display for Status {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self {
+            Self::Clean => "clean",
+            Self::Missing => "missing",
+            Self::Replaceable => "replaceable",
+            Self::Conflict => "conflict",
+            Self::Unsupported => "unsupported",
+        })
+    }
+}
+
+/// The deterministic outcome for one path.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct FileOutcome {
+    #[serde(serialize_with = "serialize_path")]
+    path: PathBuf,
+    status: Status,
+    changed: bool,
+}
+
+impl FileOutcome {
+    pub(crate) fn new(path: PathBuf, status: Status, changed: bool) -> Self {
+        Self {
+            path,
+            status,
+            changed,
+        }
+    }
+
+    /// Returns the path relative to `files.root`.
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
+    /// Returns the analysis status.
+    pub fn status(&self) -> Status {
+        self.status
+    }
+
+    /// Returns whether the requested operation planned a modification.
+    pub fn changed(&self) -> bool {
+        self.changed
+    }
+}
+
+/// A path-sorted operation report.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+pub struct Report {
+    files: Vec<FileOutcome>,
+}
+
+impl Report {
+    pub(crate) fn new(mut files: Vec<FileOutcome>) -> Self {
+        files.sort_by(|left, right| left.path.cmp(&right.path));
+        Self { files }
+    }
+
+    /// Returns all selected file outcomes.
+    pub fn files(&self) -> &[FileOutcome] {
+        &self.files
+    }
+
+    /// Returns the number of planned or applied changes.
+    pub fn changed(&self) -> usize {
+        self.files.iter().filter(|file| file.changed).count()
+    }
+
+    /// Returns whether check found a policy violation.
+    pub fn has_violations(&self) -> bool {
+        self.files.iter().any(|file| file.status.is_violation())
+    }
+
+    /// Counts outcomes with a specific status.
+    pub fn count(&self, status: Status) -> usize {
+        self.files
+            .iter()
+            .filter(|file| file.status == status)
+            .count()
+    }
+}
+
+fn serialize_path<SerializerType>(
+    path: &Path,
+    serializer: SerializerType,
+) -> Result<SerializerType::Ok, SerializerType::Error>
+where
+    SerializerType: Serializer,
+{
+    serializer.serialize_str(&path.to_string_lossy().replace('\\', "/"))
+}

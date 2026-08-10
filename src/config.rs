@@ -378,10 +378,10 @@ impl Validator {
             self.non_blank("header.builtin", value, "built-in header key");
             self.no_nul("header.builtin", value);
         }
-        if let Some(value) = &header.path {
-            if value.as_os_str().is_empty() {
-                self.issue("header.path", "header path must not be empty");
-            }
+        if let Some(value) = &header.path
+            && value.as_os_str().is_empty()
+        {
+            self.issue("header.path", "header path must not be empty");
         }
         if let Some(value) = &header.text {
             self.non_blank("header.text", value, "inline header template");
@@ -423,6 +423,12 @@ impl Validator {
             let path = format!("{path}[{index}]");
             self.non_blank(&path, pattern, "pattern");
             self.no_nul(&path, pattern);
+            if pattern.starts_with('!') {
+                self.issue(
+                    path,
+                    "negation is not accepted because includes and excludes are separate lists",
+                );
+            }
         }
     }
 

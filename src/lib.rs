@@ -17,4 +17,27 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![deny(missing_docs)]
 
+mod analyze;
+mod attrs;
 pub mod config;
+mod discovery;
+mod edit;
+mod engine;
+mod error;
+mod report;
+mod resolved;
+mod style;
+mod template;
+mod writer;
+
+pub use attrs::FileAttrs;
+pub use engine::Engine;
+pub use engine::Plan;
+pub use engine::PlannedFile;
+pub use error::Error;
+pub use error::Result;
+pub use report::FileOutcome;
+pub use report::Mode;
+pub use report::Report;
+pub use report::Status;
+pub use resolved::ResolvedConfig;
