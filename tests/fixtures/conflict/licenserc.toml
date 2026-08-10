@@ -1,0 +1,7 @@
+[header]
+keywords = ["confidential", "siemens"]
+text = "Confidential © Siemens 2026"
+
+[files]
+excludes = ["licenserc.toml"]
+includes = ["**/*.rs"]
