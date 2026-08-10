@@ -65,6 +65,13 @@ fn stderr(output: &Output) -> String {
     String::from_utf8_lossy(&output.stderr).into_owned()
 }
 
+fn read_normalized(path: impl AsRef<Path>) -> String {
+    fs::read_to_string(path)
+        .expect("read UTF-8 fixture")
+        .replace("\r\n", "\n")
+        .replace('\r', "\n")
+}
+
 fn json(output: &Output) -> Value {
     serde_json::from_slice(&output.stdout)
         .unwrap_or_else(|error| panic!("invalid JSON output: {error}\n{}", stdout(output)))
@@ -118,28 +125,12 @@ fn format_check_remove_directory_corpus() {
         4
     );
     let canonical = "// Copyright 2026 Acme Labs\n// Sequence 1-2-3\n\n";
-    assert!(
-        fs::read_to_string(project.path().join("app.rs"))
-            .expect("read app.rs")
-            .starts_with(canonical)
-    );
-    assert!(
-        fs::read_to_string(project.path().join("legacy.rs"))
-            .expect("read legacy.rs")
-            .starts_with(canonical)
-    );
-    assert!(
-        fs::read_to_string(project.path().join("types.d.ts"))
-            .expect("read types.d.ts")
-            .starts_with(canonical)
-    );
-    assert!(
-        fs::read_to_string(project.path().join("Makefile"))
-            .expect("read Makefile")
-            .starts_with(canonical)
-    );
+    assert!(read_normalized(project.path().join("app.rs")).starts_with(canonical));
+    assert!(read_normalized(project.path().join("legacy.rs")).starts_with(canonical));
+    assert!(read_normalized(project.path().join("types.d.ts")).starts_with(canonical));
+    assert!(read_normalized(project.path().join("Makefile")).starts_with(canonical));
     assert_eq!(
-        fs::read_to_string(project.path().join("excluded/skip.rs")).expect("read excluded file"),
+        read_normalized(project.path().join("excluded/skip.rs")),
         "fn excluded() {}\n"
     );
 
@@ -156,7 +147,7 @@ fn format_check_remove_directory_corpus() {
     let removed = hawkeye(project.path(), ["remove", "--fail-if-updated=false"]);
     assert!(removed.status.success(), "{}", stderr(&removed));
     assert_eq!(
-        fs::read_to_string(project.path().join("app.rs")).expect("read removed app.rs"),
+        read_normalized(project.path().join("app.rs")),
         "fn main() {}\n"
     );
 
@@ -164,9 +155,7 @@ fn format_check_remove_directory_corpus() {
     let formatted = hawkeye(default_failure.path(), ["format"]);
     assert_eq!(formatted.status.code(), Some(1), "{}", stderr(&formatted));
     assert!(
-        fs::read_to_string(default_failure.path().join("app.rs"))
-            .expect("read formatted source")
-            .starts_with(canonical),
+        read_normalized(default_failure.path().join("app.rs")).starts_with(canonical),
         "format writes before applying the fail-if-updated policy"
     );
 }
@@ -184,11 +173,11 @@ fn preserves_preambles_bom_and_line_endings() {
     let formatted = hawkeye(project.path(), ["format", "--fail-if-updated=false"]);
     assert!(formatted.status.success(), "{}", stderr(&formatted));
 
-    let script = fs::read_to_string(project.path().join("script.py")).expect("read script.py");
+    let script = read_normalized(project.path().join("script.py"));
     assert!(script.starts_with(
         "#!/usr/bin/env python3\n# -*- coding: utf-8 -*-\n# Copyright 2026 Acme Labs\n\n"
     ));
-    let xml = fs::read_to_string(project.path().join("document.xml")).expect("read XML source");
+    let xml = read_normalized(project.path().join("document.xml"));
     assert!(xml.starts_with(
         "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!--\n    Copyright 2026 Acme Labs\n-->\n\n"
     ));
@@ -225,8 +214,7 @@ fn refuses_to_guess_an_unaccepted_header_style() {
         original
     );
     assert!(
-        fs::read_to_string(project.path().join("ordinary.rs"))
-            .expect("read safely formatted source")
+        read_normalized(project.path().join("ordinary.rs"))
             .starts_with("// Confidential © Siemens 2026\n\n// An ordinary leading comment.")
     );
 }

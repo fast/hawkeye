@@ -199,7 +199,8 @@ fn emit_human(plan: &Plan, report: &Report) -> io::Result<()> {
                 Status::Unsupported => "unsupported",
             }
         };
-        writeln!(stdout, "{label:>11}  {}", file.path().display())?;
+        let path = file.path().to_string_lossy().replace('\\', "/");
+        writeln!(stdout, "{label:>11}  {path}")?;
     }
     writeln!(
         stdout,
