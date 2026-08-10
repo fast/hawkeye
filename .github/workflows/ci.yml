@@ -1,4 +1,4 @@
-# Copyright 2024 tison <wander4096@gmail.com>
+# Copyright 2026 FastLabs Developers
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -36,124 +36,69 @@ jobs:
   check:
     name: Check
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
+      - name: Install nightly toolchain
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rustfmt,clippy
       - uses: Swatinem/rust-cache@v2
-      - uses: dtolnay/rust-toolchain@nightly
-      - name: Check Clippy
-        run: cargo clippy --tests --all-features --all-targets --workspace -- -D warnings
-      - name: Check format
-        run: cargo fmt --all --check
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: typos-cli,taplo-cli,hawkeye
+      - run: cargo x lint
+
+  msrv:
+    name: Resolve MSRV
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    outputs:
+      rust-versions: ${{ steps.metadata.outputs.rust-versions }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: metadata
+        run: |
+          msrv=$(yq '.workspace.package.rust-version' Cargo.toml)
+          echo "MSRV: $msrv"
+          echo "rust-versions=[\"${msrv}\", \"stable\"]" >> "$GITHUB_OUTPUT"
 
   test:
+    name: Run tests
+    needs: msrv
     strategy:
+      fail-fast: false
       matrix:
-        rust-version: ["1.90.0", "stable"]
-    name: Build and test
-    runs-on: ubuntu-24.04
+        os: [ ubuntu-24.04, macos-14, windows-2022 ]
+        rust-version: ${{ fromJson(needs.msrv.outputs.rust-versions) }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: Swatinem/rust-cache@v2
       - name: Delete rust-toolchain.toml
         run: rm rust-toolchain.toml
-      - run: cargo build --workspace --all-features --bins --tests --examples --benches
-      - name: Run tests
-        run: cargo test --workspace -- --nocapture
-      - name: Run benches
-        run: cargo bench --workspace -- --test
-
-  docker:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ ubuntu-24.04 ]
-    runs-on: ${{matrix.os}}
-    name: Docker sanity check on ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@v4
+      - name: Install toolchain
+        uses: dtolnay/rust-toolchain@master
         with:
-          fetch-depth: 0
-      - name: Build and load
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: Dockerfile
-          tags: hawkeye:ci
-          outputs: type=docker
-      - name: Save image
-        run: docker save hawkeye:ci -o /tmp/hawkeye-${{matrix.os}}.tar
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: hawkeye-${{matrix.os}}
-          path: /tmp/hawkeye-${{matrix.os}}.tar
-      - name: Sanity check
-        run: |
-          cp action.yml action.yml.bak
-          docker image inspect hawkeye:ci --format='{{.Size}}'
-          docker run --rm -v $(pwd):/github/workspace hawkeye:ci -V
-          docker run --rm -v $(pwd):/github/workspace hawkeye:ci check --fail-if-unknown
-
-  smoke:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-24.04, windows-2022, macos-14]
-    runs-on: ${{ matrix.os }}
-    name: Smoke test on ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - uses: Swatinem/rust-cache@v2
-      - name: Dog feed license check
+          toolchain: ${{ matrix.rust-version }}
+      - name: Run unit tests
+        run: cargo x test --no-capture
         shell: bash
-        run: |
-          cargo run --bin hawkeye -- -V
-          cargo run --bin hawkeye -- check --fail-if-unknown
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - name: Run integration tests
-        shell: bash
-        run: ./tests/it.py
-
-  gha:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-24.04, windows-2022, macos-14]
-    runs-on: ${{ matrix.os }}
-    name: Smoke test for GitHub Actions on ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Check and fail if unknown
-        uses: ./
-        with:
-          args: --fail-if-unknown
-      - name: Check default config works
-        uses: ./
 
   required:
     name: Required
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     if: ${{ always() }}
     needs:
       - check
-      - docker
-      - gha
-      - smoke
       - test
     steps:
       - name: Guardian
         run: |
           if [[ ! ( \
                  "${{ needs.check.result }}" == "success" \
-              && "${{ needs.docker.result }}" == "success" \
-              && "${{ needs.gha.result }}" == "success" \
-              && "${{ needs.smoke.result }}" == "success" \
               && "${{ needs.test.result }}" == "success" \
               ) ]]; then
             echo "Required jobs haven't been completed successfully."

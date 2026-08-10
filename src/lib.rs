@@ -1,4 +1,4 @@
-// Copyright 2024 tison <wander4096@gmail.com>
+// Copyright 2026 FastLabs Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,23 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#[derive(Debug)]
-pub struct Error {
-    message: String,
-}
+//! Library support for HawkEye.
 
-impl Error {
-    pub fn new(message: impl Into<String>) -> Self {
-        Self {
-            message: message.into(),
-        }
-    }
-}
-
-impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.message)
-    }
-}
-
-impl std::error::Error for Error {}
+#![cfg_attr(docsrs, feature(doc_cfg))]
+#![deny(missing_docs)]

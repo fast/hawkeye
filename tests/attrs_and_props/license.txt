@@ -1,6 +1,0 @@
-props["inceptionYear"]={{props["inceptionYear"]}}
-props["copyrightOwner"]={{props["copyrightOwner"]}}
-
-attrs.filename={{attrs.filename}}
-attrs.git_file_created_year={{attrs.git_file_created_year}}
-attrs.git_file_modified_year={{attrs.git_file_modified_year}}

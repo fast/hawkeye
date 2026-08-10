@@ -1,4 +1,4 @@
-// Copyright 2024 tison <wander4096@gmail.com>
+// Copyright 2026 FastLabs Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,15 +12,4 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub mod config;
-pub mod document;
-pub mod error;
-pub mod git;
-pub mod header;
-pub mod license;
-pub mod processor;
-pub mod selection;
-
-const fn default_true() -> bool {
-    true
-}
+fn main() {}

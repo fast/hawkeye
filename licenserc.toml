@@ -1,4 +1,4 @@
-# Copyright 2024 tison <wander4096@gmail.com>
+# Copyright 2026 FastLabs Developers
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,24 +14,8 @@
 
 headerPath = "Apache-2.0.txt"
 
-excludes = [
-  # Plain text files AS IS
-  "*.txt",
-
-  # Test files
-  "fmt/tests/content/**",
-  "tests/**",
-  "!tests/it.py",
-
-  # Generated files
-  ".github/workflows/release.yml",
-]
-
-[git]
-attrs = 'auto'
-ignore = 'auto'
+includes = ['**/*.rs', '**/*.yml', '**/*.yaml', '**/*.toml']
 
 [properties]
-inceptionYear = 2024
-copyrightOwner = "tison <wander4096@gmail.com>"
-projectName = "HawkEye"
+copyrightOwner = "FastLabs Developers"
+inceptionYear = 2026

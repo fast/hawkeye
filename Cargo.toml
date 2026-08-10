@@ -1,4 +1,4 @@
-# Copyright 2024 tison <wander4096@gmail.com>
+# Copyright 2026 FastLabs Developers
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,72 +12,58 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+[package]
+description = "A license header checker and formatter."
+name = "hawkeye"
+version = "7.0.0-alpha.1"
+
+edition.workspace = true
+homepage.workspace = true
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "hawkeye"
+path = "src/main.rs"
+
+[dependencies]
+
+[lints]
+workspace = true
+
 [workspace]
-members = ["cli", "fmt"]
-resolver = "2"
+members = ["xtask"]
+resolver = "3"
 
 [workspace.package]
-version = "6.5.1"
-edition = "2021"
-authors = ["tison <wander4096@gmail.com>"]
-readme = "README.md"
+edition = "2024"
+homepage = "https://github.com/korandoru/hawkeye"
 license = "Apache-2.0"
-repository = "https://github.com/korandoru/hawkeye/"
-rust-version = "1.90.0"
+readme = "README.md"
+repository = "https://github.com/korandoru/hawkeye"
+rust-version = "1.85.0"
 
-[workspace.dependencies]
-hawkeye-fmt = { version = "=6.5.1", path = "fmt" }
+[workspace.lints.rust]
+unknown_lints = "deny"
+unsafe_code = "deny"
+unused_must_use = "deny"
 
-build-data = { version = "0.3.0" }
-clap = { version = "4.5.23", features = ["derive"] }
-const_format = { version = "0.2.34" }
-exn = { version = "0.3.0" }
-log = { version = "0.4.22", features = ["kv_serde", "serde"] }
-shadow-rs = { version = "1.7.0", default-features = false }
-toml = { version = "1.0.1" }
+[workspace.lints.clippy]
+dbg_macro = "deny"
+too_many_arguments = "allow"
+type_complexity = "allow"
 
 [workspace.metadata.release]
-sign-tag = true
-shared-version = true
-tag-name = "v{{version}}"
 pre-release-commit-message = "chore: release v{{version}}"
-
-# Config for 'cargo dist'
-[workspace.metadata.dist]
-# The preferred cargo-dist version to use in CI (Cargo.toml SemVer syntax)
-cargo-dist-version = "0.22.1"
-# CI backends to support
-ci = "github"
-# The installers to generate for each app
-installers = ["shell"]
-# Target platforms to build apps for (Rust target-triple syntax)
-targets = [
-  "aarch64-apple-darwin",
-  "aarch64-unknown-linux-gnu",
-  "aarch64-unknown-linux-musl",
-  "x86_64-apple-darwin",
-  "x86_64-unknown-linux-gnu",
-  "x86_64-unknown-linux-musl",
-  "x86_64-pc-windows-msvc",
-]
-# Which actions to run on pull requests
-pr-run-mode = "plan"
-# Whether to install an updater program
-install-updater = false
-# Path that installers should place binaries in
-install-path = "CARGO_HOME"
-
-[workspace.metadata.dist.github-custom-runners]
-x86_64-unknown-linux-gnu = "ubuntu-22.04"
-aarch64-unknown-linux-gnu = "ubuntu-22.04-arm"
-x86_64-unknown-linux-musl = "ubuntu-22.04"
-aarch64-unknown-linux-musl = "ubuntu-22.04-arm"
-aarch64-apple-darwin = "macos-14"
-x86_64-apple-darwin = "macos-14"
-x86_64-pc-windows-msvc = "windows-2022"
-global = "ubuntu-22.04"
-
-# 'cargo dist' build with this profile
-[profile.dist]
-inherits = "release"
-lto = "thin"
+shared-version = true
+sign-tag = true
+tag-name = "v{{version}}"
