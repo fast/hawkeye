@@ -18,7 +18,7 @@
 
 HawkEye is a license header checker and formatter.
 
-HawkEye v7 is being rebuilt from first principles. The current tree contains only the project setup; functionality will be reintroduced incrementally after its behavior and public contracts have been reviewed against v6.
+HawkEye v7 is being rebuilt from first principles. The current implementation defines the versioned configuration contract and its validation boundary; file discovery, header analysis, editing, and the CLI will be reintroduced incrementally after their behavior and public contracts have been reviewed against v6.
 
 ## Development
 
