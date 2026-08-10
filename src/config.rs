@@ -12,15 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! HawkEye's versioned configuration model.
+//! The strict `licenserc.toml` model.
 //!
-//! Parsing is deliberately split from semantic validation. Serde rejects
-//! malformed TOML and unknown fields, then HawkEye collects all semantic
-//! issues it can find before constructing [`Config`]. Filesystem-dependent
-//! work, such as resolving relative paths and loading header templates, belongs
-//! to a later resolution phase.
+//! [`Config`] contains every value represented directly by TOML. A later
+//! resolution step turns it into a filesystem-ready `ResolvedConfig`; there is
+//! intentionally no separately named raw configuration layer.
 
-use std::borrow::Borrow;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::fmt;
@@ -31,40 +28,39 @@ use std::str::FromStr;
 use serde::Deserialize;
 use thiserror::Error;
 
-/// The configuration schema understood by this release.
-pub const SCHEMA_VERSION: u32 = 1;
+/// The configuration filename used by the command-line tool.
+pub const DEFAULT_CONFIG_FILE: &str = "licenserc.toml";
 
-/// A parsed and semantically valid HawkEye configuration.
-#[derive(Debug, Clone, PartialEq)]
+/// A parsed and locally validated `licenserc.toml` document.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Config {
-    schema_version: u32,
     header: HeaderConfig,
+    #[serde(default)]
     files: FilesConfig,
-    variables: BTreeMap<String, toml::Value>,
+    #[serde(default)]
+    props: BTreeMap<String, toml::Value>,
+    #[serde(default)]
     git: GitConfig,
-    rules: Vec<Rule>,
-    styles: BTreeMap<StyleName, Style>,
+    #[serde(default)]
+    styles: BTreeMap<String, StyleConfig>,
+    #[serde(default)]
+    rules: Vec<RuleConfig>,
 }
 
 impl Config {
-    /// Parses TOML and validates the resulting configuration.
+    /// Parses strict snake-case TOML and validates local invariants.
     pub fn from_toml(source: &str) -> Result<Self, ConfigError> {
-        let raw = toml::from_str::<RawConfig>(source)?;
-        let issues = validate(&raw);
-
+        let config = toml::from_str::<Self>(source)?;
+        let issues = validate(&config);
         if issues.is_empty() {
-            Ok(raw.into())
+            Ok(config)
         } else {
             Err(ConfigError::Validation(ValidationErrors { issues }))
         }
     }
 
-    /// Returns the schema version declared by the configuration.
-    pub fn schema_version(&self) -> u32 {
-        self.schema_version
-    }
-
-    /// Returns the header template and matching anchors.
+    /// Returns the configured header source and recognition keywords.
     pub fn header(&self) -> &HeaderConfig {
         &self.header
     }
@@ -74,24 +70,24 @@ impl Config {
         &self.files
     }
 
-    /// Returns static, typed template variables in deterministic key order.
-    pub fn variables(&self) -> &BTreeMap<String, toml::Value> {
-        &self.variables
+    /// Returns user values passed to MiniJinja as the `props` object.
+    pub fn props(&self) -> &BTreeMap<String, toml::Value> {
+        &self.props
     }
 
     /// Returns Git integration settings.
-    pub fn git(&self) -> &GitConfig {
-        &self.git
+    pub fn git(&self) -> GitConfig {
+        self.git
+    }
+
+    /// Returns custom style definitions.
+    pub fn styles(&self) -> &BTreeMap<String, StyleConfig> {
+        &self.styles
     }
 
     /// Returns user rules in declaration order.
-    pub fn rules(&self) -> &[Rule] {
+    pub fn rules(&self) -> &[RuleConfig] {
         &self.rules
-    }
-
-    /// Returns custom style definitions in deterministic name order.
-    pub fn styles(&self) -> &BTreeMap<StyleName, Style> {
-        &self.styles
     }
 }
 
@@ -103,26 +99,203 @@ impl FromStr for Config {
     }
 }
 
-/// An error produced while reading the in-memory configuration document.
+/// The header template source and the words used to recognize an old header.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct HeaderConfig {
+    builtin: Option<String>,
+    path: Option<PathBuf>,
+    text: Option<String>,
+    #[serde(default = "default_keywords")]
+    keywords: Vec<String>,
+}
+
+impl HeaderConfig {
+    /// Returns the built-in resource key, if selected.
+    pub fn builtin(&self) -> Option<&str> {
+        self.builtin.as_deref()
+    }
+
+    /// Returns the configured template path, if selected.
+    pub fn path(&self) -> Option<&Path> {
+        self.path.as_deref()
+    }
+
+    /// Returns the inline template, if selected.
+    pub fn text(&self) -> Option<&str> {
+        self.text.as_deref()
+    }
+
+    /// Returns words that must all occur in a structurally recognized header.
+    pub fn keywords(&self) -> &[String] {
+        &self.keywords
+    }
+}
+
+/// File discovery settings.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct FilesConfig {
+    root: PathBuf,
+    includes: Vec<String>,
+    excludes: Vec<String>,
+}
+
+impl Default for FilesConfig {
+    fn default() -> Self {
+        Self {
+            root: PathBuf::from("."),
+            includes: Vec::new(),
+            excludes: Vec::new(),
+        }
+    }
+}
+
+impl FilesConfig {
+    /// Returns the root scanned by HawkEye, relative to `licenserc.toml`.
+    pub fn root(&self) -> &Path {
+        &self.root
+    }
+
+    /// Returns Git-ignore-style inclusion patterns; an empty list selects all files.
+    pub fn includes(&self) -> &[String] {
+        &self.includes
+    }
+
+    /// Returns Git-ignore-style exclusion patterns.
+    pub fn excludes(&self) -> &[String] {
+        &self.excludes
+    }
+}
+
+/// Whether a Git-backed capability is disabled, opportunistic, or required.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FeatureMode {
+    /// Never use the capability.
+    Disable,
+    /// Use the capability when a Git repository is available.
+    #[default]
+    Auto,
+    /// Require the capability and fail when it cannot be initialized.
+    Enable,
+}
+
+/// Git integration settings.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct GitConfig {
+    ignore: FeatureMode,
+    file_attrs: FeatureMode,
+}
+
+impl Default for GitConfig {
+    fn default() -> Self {
+        Self {
+            ignore: FeatureMode::Auto,
+            file_attrs: FeatureMode::Disable,
+        }
+    }
+}
+
+impl GitConfig {
+    /// Returns how Git ignore files participate in discovery.
+    pub fn ignore(self) -> FeatureMode {
+        self.ignore
+    }
+
+    /// Returns how per-file Git attributes are populated for templates.
+    pub fn file_attrs(self) -> FeatureMode {
+        self.file_attrs
+    }
+}
+
+/// A filename/extension rule and its accepted/output comment styles.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RuleConfig {
+    #[serde(default)]
+    extensions: Vec<String>,
+    #[serde(default)]
+    filenames: Vec<String>,
+    style_out: String,
+    #[serde(default)]
+    styles_in: Vec<String>,
+}
+
+impl RuleConfig {
+    /// Returns suffixes matched after the final filename separator, without a leading dot.
+    pub fn extensions(&self) -> &[String] {
+        &self.extensions
+    }
+
+    /// Returns complete filenames matched case-insensitively.
+    pub fn filenames(&self) -> &[String] {
+        &self.filenames
+    }
+
+    /// Returns the canonical style used for output.
+    pub fn style_out(&self) -> &str {
+        &self.style_out
+    }
+
+    /// Returns additional styles accepted as structurally safe input.
+    pub fn styles_in(&self) -> &[String] {
+        &self.styles_in
+    }
+}
+
+/// A syntax-only custom comment style.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "snake_case", tag = "kind")]
+pub enum StyleConfig {
+    /// Every logical header line is wrapped independently.
+    Line {
+        /// Text written before every logical line.
+        #[serde(default)]
+        prefix: String,
+        /// Text written after every logical line.
+        #[serde(default)]
+        suffix: String,
+        /// Right-pad logical lines so all suffixes align.
+        #[serde(default)]
+        pad_lines: bool,
+    },
+    /// One opening and closing delimiter encloses all logical lines.
+    Block {
+        /// Opening delimiter written on its own line.
+        start: String,
+        /// Text written before every enclosed logical line.
+        #[serde(default)]
+        prefix: String,
+        /// Text written after every enclosed logical line.
+        #[serde(default)]
+        suffix: String,
+        /// Closing delimiter written on its own line.
+        end: String,
+    },
+}
+
+/// An error produced while parsing `licenserc.toml`.
 #[derive(Debug, Error)]
 pub enum ConfigError {
-    /// The TOML shape is malformed or contains an unknown field.
-    #[error("failed to parse HawkEye configuration: {0}")]
+    /// The TOML is malformed or does not match the closed schema.
+    #[error("cannot parse licenserc.toml: {0}")]
     Parse(#[from] toml::de::Error),
 
-    /// The TOML shape is valid but its values violate configuration invariants.
+    /// The TOML shape is valid but one or more values are invalid.
     #[error(transparent)]
     Validation(ValidationErrors),
 }
 
-/// All semantic issues found in one validation pass.
+/// All local semantic errors found in one pass.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ValidationErrors {
     issues: Vec<ValidationIssue>,
 }
 
 impl ValidationErrors {
-    /// Returns the semantic issues in deterministic traversal order.
+    /// Returns validation errors in deterministic traversal order.
     pub fn issues(&self) -> &[ValidationIssue] {
         &self.issues
     }
@@ -132,22 +305,20 @@ impl fmt::Display for ValidationErrors {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             formatter,
-            "HawkEye configuration has {} validation issue{}",
+            "licenserc.toml has {} validation error{}",
             self.issues.len(),
             if self.issues.len() == 1 { "" } else { "s" }
         )?;
-
         for issue in &self.issues {
             write!(formatter, "\n- {}: {}", issue.path, issue.message)?;
         }
-
         Ok(())
     }
 }
 
 impl std::error::Error for ValidationErrors {}
 
-/// One semantic configuration issue.
+/// One local semantic configuration error.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ValidationIssue {
     path: String,
@@ -155,340 +326,27 @@ pub struct ValidationIssue {
 }
 
 impl ValidationIssue {
-    /// Returns the configuration path associated with the issue.
+    /// Returns the dotted/indexed location of the invalid value.
     pub fn path(&self) -> &str {
         &self.path
     }
 
-    /// Returns the human-readable reason the value is invalid.
+    /// Returns the reason the value is invalid.
     pub fn message(&self) -> &str {
         &self.message
     }
 }
 
-/// Header content and the terms used to recognize a license header safely.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct HeaderConfig {
-    source: HeaderSource,
-    required_terms: Vec<String>,
-}
-
-impl HeaderConfig {
-    /// Returns the single configured header source.
-    pub fn source(&self) -> &HeaderSource {
-        &self.source
-    }
-
-    /// Returns the terms that must all occur in a candidate header.
-    pub fn required_terms(&self) -> &[String] {
-        &self.required_terms
-    }
-}
-
-/// The source of the canonical, unformatted header template.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum HeaderSource {
-    /// A template bundled with HawkEye, addressed by a snake-case name.
-    Builtin(String),
-    /// A template file; relative paths are resolved against the config file.
-    Path(PathBuf),
-    /// A template embedded directly in the configuration.
-    Text(String),
-}
-
-/// File discovery and built-in catalog settings.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct FilesConfig {
-    root: PathBuf,
-    includes: Vec<String>,
-    excludes: Vec<String>,
-    use_default_excludes: bool,
-    use_default_rules: bool,
-}
-
-impl FilesConfig {
-    /// Returns the discovery root, relative to the config file unless absolute.
-    pub fn root(&self) -> &Path {
-        &self.root
-    }
-
-    /// Returns root-relative inclusion patterns.
-    pub fn includes(&self) -> &[String] {
-        &self.includes
-    }
-
-    /// Returns root-relative exclusion patterns.
-    pub fn excludes(&self) -> &[String] {
-        &self.excludes
-    }
-
-    /// Returns whether HawkEye's standard exclusions participate in discovery.
-    pub fn use_default_excludes(&self) -> bool {
-        self.use_default_excludes
-    }
-
-    /// Returns whether built-in file-to-style rules follow user rules.
-    pub fn use_default_rules(&self) -> bool {
-        self.use_default_rules
-    }
-}
-
-/// Opt-in integration with the Git repository containing the discovery root.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct GitConfig {
-    respect_ignore: bool,
-    file_dates: bool,
-}
-
-impl GitConfig {
-    /// Returns whether ignored files are excluded from ordinary discovery.
-    pub fn respect_ignore(&self) -> bool {
-        self.respect_ignore
-    }
-
-    /// Returns whether per-file dates should be derived from Git history.
-    pub fn file_dates(&self) -> bool {
-        self.file_dates
-    }
-}
-
-/// An ordered mapping from path patterns to a canonical output style.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Rule {
-    patterns: Vec<String>,
-    write_style: StyleName,
-    recognize_styles: Vec<StyleName>,
-}
-
-impl Rule {
-    /// Returns the root-relative patterns evaluated by this rule.
-    pub fn patterns(&self) -> &[String] {
-        &self.patterns
-    }
-
-    /// Returns the only style HawkEye writes for matching files.
-    pub fn write_style(&self) -> &StyleName {
-        &self.write_style
-    }
-
-    /// Returns additional styles that HawkEye may replace or remove safely.
-    pub fn recognize_styles(&self) -> &[StyleName] {
-        &self.recognize_styles
-    }
-}
-
-/// A validated snake-case style name.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct StyleName(String);
-
-impl StyleName {
-    /// Returns the name as it appears in the configuration.
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-impl fmt::Display for StyleName {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(&self.0)
-    }
-}
-
-impl Borrow<str> for StyleName {
-    fn borrow(&self) -> &str {
-        &self.0
-    }
-}
-
-impl AsRef<str> for StyleName {
-    fn as_ref(&self) -> &str {
-        &self.0
-    }
-}
-
-/// A syntax-only description of how header lines are wrapped.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Style {
-    /// Every logical header line has its own prefix and suffix.
-    Line(LineStyle),
-    /// One pair of delimiters encloses all logical header lines.
-    Block(BlockStyle),
-}
-
-/// A style that wraps each logical header line independently.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct LineStyle {
-    prefix: String,
-    suffix: String,
-    align_suffix: bool,
-}
-
-impl LineStyle {
-    /// Returns the token written before each logical line.
-    pub fn prefix(&self) -> &str {
-        &self.prefix
-    }
-
-    /// Returns the token written after each logical line.
-    pub fn suffix(&self) -> &str {
-        &self.suffix
-    }
-
-    /// Returns whether suffixes are padded into one aligned column.
-    pub fn align_suffix(&self) -> bool {
-        self.align_suffix
-    }
-}
-
-/// A style that encloses all logical header lines in one block.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct BlockStyle {
-    start: String,
-    prefix: String,
-    suffix: String,
-    end: String,
-}
-
-impl BlockStyle {
-    /// Returns the opening delimiter.
-    pub fn start(&self) -> &str {
-        &self.start
-    }
-
-    /// Returns the token written before each logical line inside the block.
-    pub fn prefix(&self) -> &str {
-        &self.prefix
-    }
-
-    /// Returns the token written after each logical line inside the block.
-    pub fn suffix(&self) -> &str {
-        &self.suffix
-    }
-
-    /// Returns the closing delimiter.
-    pub fn end(&self) -> &str {
-        &self.end
-    }
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields, rename_all = "snake_case")]
-struct RawConfig {
-    schema_version: u32,
-    header: RawHeader,
-    #[serde(default)]
-    files: RawFilesConfig,
-    #[serde(default)]
-    variables: BTreeMap<String, toml::Value>,
-    #[serde(default)]
-    git: RawGitConfig,
-    #[serde(default)]
-    rules: Vec<RawRule>,
-    #[serde(default)]
-    styles: BTreeMap<String, RawStyle>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields, rename_all = "snake_case")]
-struct RawHeader {
-    builtin: Option<String>,
-    path: Option<String>,
-    text: Option<String>,
-    #[serde(default = "default_required_terms")]
-    required_terms: Vec<String>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(default, deny_unknown_fields, rename_all = "snake_case")]
-struct RawFilesConfig {
-    root: String,
-    includes: Vec<String>,
-    excludes: Vec<String>,
-    use_default_excludes: bool,
-    use_default_rules: bool,
-}
-
-impl Default for RawFilesConfig {
-    fn default() -> Self {
-        Self {
-            root: ".".to_owned(),
-            includes: Vec::new(),
-            excludes: Vec::new(),
-            use_default_excludes: true,
-            use_default_rules: true,
-        }
-    }
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(default, deny_unknown_fields, rename_all = "snake_case")]
-struct RawGitConfig {
-    respect_ignore: bool,
-    file_dates: bool,
-}
-
-impl Default for RawGitConfig {
-    fn default() -> Self {
-        Self {
-            respect_ignore: true,
-            file_dates: false,
-        }
-    }
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields, rename_all = "snake_case")]
-struct RawRule {
-    patterns: Vec<String>,
-    write_style: String,
-    #[serde(default)]
-    recognize_styles: Vec<String>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields, rename_all = "snake_case", tag = "kind")]
-enum RawStyle {
-    Line {
-        #[serde(default)]
-        prefix: String,
-        #[serde(default)]
-        suffix: String,
-        #[serde(default)]
-        align_suffix: bool,
-    },
-    Block {
-        start: String,
-        #[serde(default)]
-        prefix: String,
-        #[serde(default)]
-        suffix: String,
-        end: String,
-    },
-}
-
-fn default_required_terms() -> Vec<String> {
+fn default_keywords() -> Vec<String> {
     vec!["copyright".to_owned()]
 }
 
-fn validate(raw: &RawConfig) -> Vec<ValidationIssue> {
+fn validate(config: &Config) -> Vec<ValidationIssue> {
     let mut validator = Validator::default();
-
-    if raw.schema_version != SCHEMA_VERSION {
-        validator.issue(
-            "schema_version",
-            format!(
-                "unsupported schema version {}; this release requires {SCHEMA_VERSION}",
-                raw.schema_version
-            ),
-        );
-    }
-
-    validator.header(&raw.header);
-    validator.files(&raw.files);
-    validator.variables(&raw.variables);
-    validator.rules(&raw.rules);
-    validator.styles(&raw.styles);
-
+    validator.header(&config.header);
+    validator.files(&config.files);
+    validator.styles(&config.styles);
+    validator.rules(&config.rules);
     validator.issues
 }
 
@@ -505,11 +363,10 @@ impl Validator {
         });
     }
 
-    fn header(&mut self, header: &RawHeader) {
+    fn header(&mut self, header: &HeaderConfig) {
         let source_count = usize::from(header.builtin.is_some())
             + usize::from(header.path.is_some())
             + usize::from(header.text.is_some());
-
         if source_count != 1 {
             self.issue(
                 "header",
@@ -517,197 +374,138 @@ impl Validator {
             );
         }
 
-        if let Some(builtin) = &header.builtin {
-            self.identifier("header.builtin", builtin, "built-in header name");
+        if let Some(value) = &header.builtin {
+            self.non_blank("header.builtin", value, "built-in header key");
+            self.no_nul("header.builtin", value);
         }
-        if let Some(path) = &header.path {
-            self.non_blank("header.path", path, "header path");
-            self.no_nul("header.path", path);
+        if let Some(value) = &header.path {
+            if value.as_os_str().is_empty() {
+                self.issue("header.path", "header path must not be empty");
+            }
         }
-        if let Some(text) = &header.text {
-            self.non_blank("header.text", text, "inline header template");
+        if let Some(value) = &header.text {
+            self.non_blank("header.text", value, "inline header template");
+            self.no_nul("header.text", value);
         }
 
-        if header.required_terms.is_empty() {
+        if header.keywords.is_empty() {
             self.issue(
-                "header.required_terms",
-                "at least one term is required for safe header recognition",
+                "header.keywords",
+                "at least one keyword is required to distinguish a header from an ordinary comment",
             );
         }
-
         let mut seen = HashMap::<String, usize>::new();
-        for (index, term) in header.required_terms.iter().enumerate() {
-            let path = format!("header.required_terms[{index}]");
-            self.non_blank(&path, term, "required term");
-
-            if term.trim() != term {
-                self.issue(
-                    &path,
-                    "required terms must not start or end with whitespace",
-                );
-            }
-
-            let normalized = term.to_lowercase();
-            if let Some(first_index) = seen.get(&normalized) {
+        for (index, keyword) in header.keywords.iter().enumerate() {
+            let path = format!("header.keywords[{index}]");
+            self.non_blank(&path, keyword, "keyword");
+            let folded = keyword.to_lowercase();
+            if let Some(first) = seen.get(&folded) {
                 self.issue(
                     path,
-                    format!(
-                        "duplicates `header.required_terms[{first_index}]` under case-insensitive matching"
-                    ),
+                    format!("duplicates `header.keywords[{first}]` case-insensitively"),
                 );
             } else {
-                seen.insert(normalized, index);
+                seen.insert(folded, index);
             }
         }
     }
 
-    fn files(&mut self, files: &RawFilesConfig) {
-        self.non_blank("files.root", &files.root, "file discovery root");
-        self.no_nul("files.root", &files.root);
-        self.patterns("files.includes", &files.includes, false);
-        self.patterns("files.excludes", &files.excludes, false);
+    fn files(&mut self, files: &FilesConfig) {
+        if files.root.as_os_str().is_empty() {
+            self.issue("files.root", "file root must not be empty");
+        }
+        self.patterns("files.includes", &files.includes);
+        self.patterns("files.excludes", &files.excludes);
     }
 
-    fn variables(&mut self, variables: &BTreeMap<String, toml::Value>) {
-        for (name, value) in variables {
-            let path = format!("variables.{name}");
-            self.identifier(&path, name, "variable name");
-            self.variable_value(&path, value);
+    fn patterns(&mut self, path: &str, patterns: &[String]) {
+        for (index, pattern) in patterns.iter().enumerate() {
+            let path = format!("{path}[{index}]");
+            self.non_blank(&path, pattern, "pattern");
+            self.no_nul(&path, pattern);
         }
     }
 
-    fn variable_value(&mut self, path: &str, value: &toml::Value) {
-        match value {
-            toml::Value::Array(values) => {
-                for (index, value) in values.iter().enumerate() {
-                    self.variable_value(&format!("{path}[{index}]"), value);
-                }
-            }
-            toml::Value::Table(values) => {
-                for (name, value) in values {
-                    let child_path = format!("{path}.{name}");
-                    self.identifier(&child_path, name, "variable name");
-                    self.variable_value(&child_path, value);
-                }
-            }
-            _ => {}
-        }
-    }
-
-    fn rules(&mut self, rules: &[RawRule]) {
-        for (index, rule) in rules.iter().enumerate() {
-            let path = format!("rules[{index}]");
-            self.patterns(&format!("{path}.patterns"), &rule.patterns, true);
-            self.identifier(
-                format!("{path}.write_style"),
-                &rule.write_style,
-                "style name",
-            );
-
-            let mut seen = HashMap::<&str, usize>::new();
-            for (style_index, style) in rule.recognize_styles.iter().enumerate() {
-                let style_path = format!("{path}.recognize_styles[{style_index}]");
-                self.identifier(&style_path, style, "style name");
-
-                if style == &rule.write_style {
-                    self.issue(
-                        &style_path,
-                        "the write style is recognized implicitly and must not be repeated",
-                    );
-                }
-
-                if let Some(first_index) = seen.get(&style.as_str()) {
-                    self.issue(
-                        style_path,
-                        format!("duplicates `{path}.recognize_styles[{first_index}]`"),
-                    );
-                } else {
-                    seen.insert(style, style_index);
-                }
-            }
-        }
-    }
-
-    fn styles(&mut self, styles: &BTreeMap<String, RawStyle>) {
+    fn styles(&mut self, styles: &BTreeMap<String, StyleConfig>) {
         for (name, style) in styles {
             let path = format!("styles.{name}");
-            self.identifier(&path, name, "style name");
-
+            self.non_blank(&path, name, "style key");
+            self.no_nul(&path, name);
             match style {
-                RawStyle::Line {
+                StyleConfig::Line {
                     prefix,
                     suffix,
-                    align_suffix,
+                    pad_lines,
                 } => {
-                    self.style_token(&format!("{path}.prefix"), prefix);
-                    self.style_token(&format!("{path}.suffix"), suffix);
-
+                    self.token(&format!("{path}.prefix"), prefix);
+                    self.token(&format!("{path}.suffix"), suffix);
                     if prefix.trim().is_empty() && suffix.trim().is_empty() {
-                        self.issue(
-                            &path,
-                            "a line style needs a non-whitespace prefix or suffix",
-                        );
+                        self.issue(&path, "line style needs a non-whitespace prefix or suffix");
                     }
-                    if *align_suffix && suffix.is_empty() {
+                    if *pad_lines && suffix.is_empty() {
                         self.issue(
-                            format!("{path}.align_suffix"),
-                            "suffix alignment requires a non-empty suffix",
+                            format!("{path}.pad_lines"),
+                            "line padding requires a non-empty suffix",
                         );
                     }
                 }
-                RawStyle::Block {
+                StyleConfig::Block {
                     start,
                     prefix,
                     suffix,
                     end,
                 } => {
-                    self.style_token(&format!("{path}.start"), start);
-                    self.style_token(&format!("{path}.prefix"), prefix);
-                    self.style_token(&format!("{path}.suffix"), suffix);
-                    self.style_token(&format!("{path}.end"), end);
-
+                    self.token(&format!("{path}.start"), start);
+                    self.token(&format!("{path}.prefix"), prefix);
+                    self.token(&format!("{path}.suffix"), suffix);
+                    self.token(&format!("{path}.end"), end);
                     if start.trim().is_empty() {
-                        self.issue(
-                            format!("{path}.start"),
-                            "a block opening delimiter must contain a non-whitespace character",
-                        );
+                        self.issue(format!("{path}.start"), "block start must not be blank");
                     }
                     if end.trim().is_empty() {
-                        self.issue(
-                            format!("{path}.end"),
-                            "a block closing delimiter must contain a non-whitespace character",
-                        );
+                        self.issue(format!("{path}.end"), "block end must not be blank");
                     }
                 }
             }
         }
     }
 
-    fn patterns(&mut self, path: &str, patterns: &[String], require_one: bool) {
-        if require_one && patterns.is_empty() {
-            self.issue(path, "at least one pattern is required");
-        }
-
-        let mut seen = HashMap::<&str, usize>::new();
-        for (index, pattern) in patterns.iter().enumerate() {
-            let pattern_path = format!("{path}[{index}]");
-            self.non_blank(&pattern_path, pattern, "pattern");
-            self.no_nul(&pattern_path, pattern);
-
-            if let Some(first_index) = seen.get(&pattern.as_str()) {
-                self.issue(pattern_path, format!("duplicates `{path}[{first_index}]`"));
-            } else {
-                seen.insert(pattern, index);
+    fn rules(&mut self, rules: &[RuleConfig]) {
+        for (index, rule) in rules.iter().enumerate() {
+            let path = format!("rules[{index}]");
+            if rule.extensions.is_empty() && rule.filenames.is_empty() {
+                self.issue(
+                    &path,
+                    "at least one extension or filename must be configured",
+                );
             }
-        }
-    }
 
-    fn identifier(&mut self, path: impl Into<String>, value: &str, kind: &str) {
-        if !is_snake_case_identifier(value) {
-            self.issue(
-                path,
-                format!("{kind} `{value}` must be an ASCII snake_case identifier"),
+            for (item, extension) in rule.extensions.iter().enumerate() {
+                let item_path = format!("{path}.extensions[{item}]");
+                self.non_blank(&item_path, extension, "extension");
+                if extension.starts_with('.') {
+                    self.issue(&item_path, "extension must not start with `.`");
+                }
+                if extension.contains(['/', '\\']) {
+                    self.issue(&item_path, "extension must not contain a path separator");
+                }
+            }
+            for (item, filename) in rule.filenames.iter().enumerate() {
+                let item_path = format!("{path}.filenames[{item}]");
+                self.non_blank(&item_path, filename, "filename");
+                if filename.contains(['/', '\\']) {
+                    self.issue(&item_path, "filename must not contain a path separator");
+                }
+            }
+
+            self.non_blank(
+                &format!("{path}.style_out"),
+                &rule.style_out,
+                "output style",
             );
+            for (item, style) in rule.styles_in.iter().enumerate() {
+                self.non_blank(&format!("{path}.styles_in[{item}]"), style, "input style");
+            }
         }
     }
 
@@ -723,115 +521,10 @@ impl Validator {
         }
     }
 
-    fn style_token(&mut self, path: &str, token: &str) {
-        if token.contains(['\r', '\n']) {
-            self.issue(path, "style tokens must not contain line endings");
-        }
-    }
-}
-
-fn is_snake_case_identifier(value: &str) -> bool {
-    let mut bytes = value.bytes();
-    matches!(bytes.next(), Some(b'a'..=b'z'))
-        && bytes.all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_')
-        && !value.ends_with('_')
-        && !value.contains("__")
-}
-
-impl From<RawConfig> for Config {
-    fn from(raw: RawConfig) -> Self {
-        let header = raw.header.into();
-        let files = raw.files.into();
-        let git = raw.git.into();
-        let rules = raw.rules.into_iter().map(Into::into).collect();
-        let styles = raw
-            .styles
-            .into_iter()
-            .map(|(name, style)| (StyleName(name), style.into()))
-            .collect();
-
-        Self {
-            schema_version: raw.schema_version,
-            header,
-            files,
-            variables: raw.variables,
-            git,
-            rules,
-            styles,
-        }
-    }
-}
-
-impl From<RawHeader> for HeaderConfig {
-    fn from(raw: RawHeader) -> Self {
-        let source = match (raw.builtin, raw.path, raw.text) {
-            (Some(name), None, None) => HeaderSource::Builtin(name),
-            (None, Some(path), None) => HeaderSource::Path(path.into()),
-            (None, None, Some(text)) => HeaderSource::Text(text),
-            _ => unreachable!("header source cardinality is validated before conversion"),
-        };
-
-        Self {
-            source,
-            required_terms: raw.required_terms,
-        }
-    }
-}
-
-impl From<RawFilesConfig> for FilesConfig {
-    fn from(raw: RawFilesConfig) -> Self {
-        Self {
-            root: raw.root.into(),
-            includes: raw.includes,
-            excludes: raw.excludes,
-            use_default_excludes: raw.use_default_excludes,
-            use_default_rules: raw.use_default_rules,
-        }
-    }
-}
-
-impl From<RawGitConfig> for GitConfig {
-    fn from(raw: RawGitConfig) -> Self {
-        Self {
-            respect_ignore: raw.respect_ignore,
-            file_dates: raw.file_dates,
-        }
-    }
-}
-
-impl From<RawRule> for Rule {
-    fn from(raw: RawRule) -> Self {
-        Self {
-            patterns: raw.patterns,
-            write_style: StyleName(raw.write_style),
-            recognize_styles: raw.recognize_styles.into_iter().map(StyleName).collect(),
-        }
-    }
-}
-
-impl From<RawStyle> for Style {
-    fn from(raw: RawStyle) -> Self {
-        match raw {
-            RawStyle::Line {
-                prefix,
-                suffix,
-                align_suffix,
-            } => Self::Line(LineStyle {
-                prefix,
-                suffix,
-                align_suffix,
-            }),
-            RawStyle::Block {
-                start,
-                prefix,
-                suffix,
-                end,
-            } => Self::Block(BlockStyle {
-                start,
-                prefix,
-                suffix,
-                end,
-            }),
+    fn token(&mut self, path: &str, value: &str) {
+        self.no_nul(path, value);
+        if value.contains(['\r', '\n']) {
+            self.issue(path, "style token must not contain a line ending");
         }
     }
 }
