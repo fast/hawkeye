@@ -24,6 +24,7 @@ mod discovery;
 mod edit;
 mod engine;
 mod error;
+mod git;
 mod report;
 mod resolved;
 mod style;

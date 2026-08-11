@@ -23,6 +23,7 @@ use crate::Result;
 use crate::analyze::analyze;
 use crate::attrs::FileAttrsResolver;
 use crate::discovery::discover;
+use crate::git::GitRepo;
 use crate::report::FileOutcome;
 use crate::report::Mode;
 use crate::report::Report;
@@ -51,10 +52,11 @@ impl Engine {
     }
 
     /// Discovers and analyzes files without modifying the filesystem.
-    pub fn plan(&self, mode: Mode, targets: &[PathBuf]) -> Result<Plan> {
-        let paths = discover(&self.config, targets)?;
-        let attrs =
-            FileAttrsResolver::new(self.config.root(), &paths, self.config.git().file_attrs())?;
+    pub fn plan(&self, mode: Mode) -> Result<Plan> {
+        let git = self.config.git();
+        let repo = GitRepo::discover(self.config.root(), git.ignore().combine(git.file_attrs()))?;
+        let paths = discover(&self.config, repo.as_ref())?;
+        let attrs = FileAttrsResolver::new(&paths, git.file_attrs(), repo.as_ref())?;
         let mut files = Vec::with_capacity(paths.len());
 
         for path in paths {

@@ -26,10 +26,9 @@ use std::path::PathBuf;
 use std::str::FromStr;
 
 use serde::Deserialize;
-use thiserror::Error;
 
-/// The configuration filename used by the command-line tool.
-pub const DEFAULT_CONFIG_FILE: &str = "licenserc.toml";
+/// Configuration filenames tried by the command-line tool, in priority order.
+pub const DEFAULT_CONFIG_FILES: [&str; 2] = ["licenserc.toml", ".licenserc.toml"];
 
 /// A parsed and locally validated `licenserc.toml` document.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
@@ -181,6 +180,16 @@ pub enum FeatureMode {
     Enable,
 }
 
+impl FeatureMode {
+    pub(crate) fn combine(self, other: Self) -> Self {
+        match (self, other) {
+            (Self::Enable, _) | (_, Self::Enable) => Self::Enable,
+            (Self::Auto, _) | (_, Self::Auto) => Self::Auto,
+            (Self::Disable, Self::Disable) => Self::Disable,
+        }
+    }
+}
+
 /// Git integration settings.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(default, deny_unknown_fields)]
@@ -277,15 +286,37 @@ pub enum StyleConfig {
 }
 
 /// An error produced while parsing `licenserc.toml`.
-#[derive(Debug, Error)]
+#[derive(Debug)]
 pub enum ConfigError {
     /// The TOML is malformed or does not match the closed schema.
-    #[error("cannot parse licenserc.toml: {0}")]
-    Parse(#[from] toml::de::Error),
+    Parse(toml::de::Error),
 
     /// The TOML shape is valid but one or more values are invalid.
-    #[error(transparent)]
     Validation(ValidationErrors),
+}
+
+impl fmt::Display for ConfigError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Parse(error) => write!(formatter, "cannot parse licenserc.toml: {error}"),
+            Self::Validation(error) => error.fmt(formatter),
+        }
+    }
+}
+
+impl std::error::Error for ConfigError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Parse(error) => Some(error),
+            Self::Validation(error) => Some(error),
+        }
+    }
+}
+
+impl From<toml::de::Error> for ConfigError {
+    fn from(error: toml::de::Error) -> Self {
+        Self::Parse(error)
+    }
 }
 
 /// All local semantic errors found in one pass.

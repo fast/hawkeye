@@ -17,8 +17,7 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::path::Path;
 use std::path::PathBuf;
-use std::process::Command;
-use std::process::Output;
+use std::time::Instant;
 use std::time::SystemTime;
 
 use jiff::Timestamp;
@@ -28,6 +27,8 @@ use serde::Serialize;
 use crate::Error;
 use crate::Result;
 use crate::config::FeatureMode;
+use crate::git::GitRepo;
+use crate::git::git_path;
 
 /// Per-file values exposed to MiniJinja as `attrs`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -79,9 +80,11 @@ pub(crate) struct FileAttrsResolver {
 }
 
 impl FileAttrsResolver {
-    pub(crate) fn new(root: &Path, files: &[PathBuf], mode: FeatureMode) -> Result<Self> {
-        let current_year = utc_year(SystemTime::now())
-            .ok_or_else(|| Error::Git("the current UTC year is out of range".to_owned()))?;
+    pub(crate) fn new(
+        files: &[PathBuf],
+        mode: FeatureMode,
+        repo: Option<&GitRepo>,
+    ) -> Result<Self> {
         if mode == FeatureMode::Disable {
             return Ok(Self {
                 git_enabled: false,
@@ -89,25 +92,28 @@ impl FileAttrsResolver {
             });
         }
 
-        let Some(repo_root) = discover_repository(root, mode)? else {
+        let Some(repo) = repo else {
             return Ok(Self {
                 git_enabled: false,
                 git: BTreeMap::new(),
             });
         };
+        let current_year = utc_year(SystemTime::now())
+            .ok_or_else(|| Error::Git("the current UTC year is out of range".to_owned()))?;
+        let started = Instant::now();
 
         let selected = files
             .iter()
             .filter_map(|path| {
-                path.strip_prefix(&repo_root)
+                path.strip_prefix(repo.root())
                     .ok()
                     .map(|relative| (git_path(relative), path.clone()))
             })
             .collect::<BTreeMap<_, _>>();
-        let mut git = read_history(&repo_root, &selected)?;
-        apply_worktree_status(&repo_root, &selected, current_year, &mut git)?;
+        let author = current_git_author(repo)?;
+        let mut git = read_history(repo, &selected)?;
+        apply_worktree_status(repo, &selected, current_year, author.as_deref(), &mut git)?;
 
-        let author = current_git_author(&repo_root)?;
         for path in selected.values() {
             if !git.contains_key(path) {
                 git.entry(path.clone()).or_default().record_worktree(
@@ -117,6 +123,11 @@ impl FileAttrsResolver {
                 );
             }
         }
+        log::debug!(
+            "resolved Git attributes for {} files in {:?}",
+            selected.len(),
+            started.elapsed()
+        );
 
         Ok(Self {
             git_enabled: true,
@@ -150,78 +161,62 @@ impl FileAttrsResolver {
     }
 }
 
-fn discover_repository(root: &Path, mode: FeatureMode) -> Result<Option<PathBuf>> {
-    let output = match Command::new("git")
-        .args(["-C"])
-        .arg(root)
-        .args(["rev-parse", "--show-toplevel"])
-        .output()
-    {
-        Ok(output) => output,
-        Err(error) if mode == FeatureMode::Auto && error.kind() == std::io::ErrorKind::NotFound => {
-            return Ok(None);
-        }
-        Err(error) => return Err(Error::Git(format!("cannot start Git: {error}"))),
-    };
-    if !output.status.success() {
-        if mode == FeatureMode::Auto {
-            return Ok(None);
-        }
-        return Err(Error::Git(stderr(&output)));
-    }
-    let path = String::from_utf8_lossy(&output.stdout).trim().to_owned();
-    if path.is_empty() {
-        return Err(Error::Git(
-            "Git returned an empty repository root".to_owned(),
-        ));
-    }
-    PathBuf::from(path)
-        .canonicalize()
-        .map(Some)
-        .map_err(|error| Error::Git(format!("cannot resolve repository root: {error}")))
-}
-
 fn read_history(
-    repo_root: &Path,
-    selected: &BTreeMap<String, PathBuf>,
+    repo: &GitRepo,
+    selected: &BTreeMap<Vec<u8>, PathBuf>,
 ) -> Result<BTreeMap<PathBuf, GitAttrs>> {
-    const MARKER: char = '\u{001e}';
-    if !git_has_head(repo_root)? {
+    const MARKER: u8 = 0x1e;
+    if !repo.has_head()? {
         return Ok(BTreeMap::new());
     }
-    let output = git_output(
-        repo_root,
-        [
-            "-c",
-            "core.quotepath=false",
-            "log",
-            "--full-history",
-            "--no-merges",
-            "--no-renames",
-            "--format=\u{001e}%cI\t%an\t%ae",
-            "--name-only",
-            "--",
-        ],
-    )?;
-    let stdout = String::from_utf8_lossy(&output.stdout);
+    // NUL separators preserve arbitrary path bytes. The record marker keeps commit metadata
+    // distinguishable from a path without relying on Git's quoting rules.
+    let output = repo.output([
+        "-c",
+        "core.quotepath=false",
+        "log",
+        "--full-history",
+        "--no-merges",
+        "--no-renames",
+        "--format=\u{001e}%cI%x00%an",
+        "--name-only",
+        "-z",
+        "--",
+    ])?;
     let mut current: Option<(i16, String)> = None;
+    let mut expecting_author = false;
+    let mut expecting_first_path = false;
     let mut result = BTreeMap::<PathBuf, GitAttrs>::new();
-    for line in stdout.lines() {
-        if let Some(header) = line.strip_prefix(MARKER) {
-            let mut fields = header.splitn(3, '\t');
-            let year = fields
-                .next()
-                .and_then(|date| date.get(..4))
+    for record in output.stdout.split(|byte| *byte == 0) {
+        if let Some(date) = record.strip_prefix(&[MARKER]) {
+            let year = date
+                .get(..4)
+                .and_then(|year| std::str::from_utf8(year).ok())
                 .and_then(|year| year.parse::<i16>().ok());
-            let name = fields.next().unwrap_or_default();
-            let _email = fields.next().unwrap_or_default();
-            current = year.map(|year| (year, name.to_owned()));
+            current = year.map(|year| (year, String::new()));
+            expecting_author = true;
+            expecting_first_path = false;
             continue;
         }
-        if line.is_empty() {
+        if expecting_author {
+            if let Some((_, author)) = &mut current {
+                *author = String::from_utf8_lossy(record).into_owned();
+            }
+            expecting_author = false;
+            expecting_first_path = true;
             continue;
         }
-        let Some(path) = selected.get(line) else {
+        let path = if expecting_first_path {
+            expecting_first_path = false;
+            // `--name-only -z` inserts one newline between the pretty header and its first path.
+            record.strip_prefix(b"\n").unwrap_or(record)
+        } else {
+            record
+        };
+        if path.is_empty() {
+            continue;
+        }
+        let Some(path) = selected.get(path) else {
             continue;
         };
         if let Some((year, author)) = &current {
@@ -235,16 +230,13 @@ fn read_history(
 }
 
 fn apply_worktree_status(
-    repo_root: &Path,
-    selected: &BTreeMap<String, PathBuf>,
+    repo: &GitRepo,
+    selected: &BTreeMap<Vec<u8>, PathBuf>,
     year: i16,
+    author: Option<&str>,
     attrs: &mut BTreeMap<PathBuf, GitAttrs>,
 ) -> Result<()> {
-    let output = git_output(
-        repo_root,
-        ["status", "--porcelain=v1", "-z", "--untracked-files=all"],
-    )?;
-    let author = current_git_author(repo_root)?;
+    let output = repo.output(["status", "--porcelain=v1", "-z", "--untracked-files=all"])?;
     let records = output.stdout.split(|byte| *byte == 0).collect::<Vec<_>>();
     let mut index = 0;
     while index < records.len() {
@@ -254,13 +246,12 @@ fn apply_worktree_status(
             continue;
         }
         let status = &record[..2];
-        let path = String::from_utf8_lossy(&record[3..]).into_owned();
         let new_file = status == b"??" || status.contains(&b'A');
-        if let Some(selected_path) = selected.get(&path) {
+        if let Some(selected_path) = selected.get(&record[3..]) {
             attrs
                 .entry(selected_path.clone())
                 .or_default()
-                .record_worktree(year, author.as_deref(), new_file);
+                .record_worktree(year, author, new_file);
         }
         if status.contains(&b'R') || status.contains(&b'C') {
             index += 1;
@@ -269,62 +260,8 @@ fn apply_worktree_status(
     Ok(())
 }
 
-fn current_git_author(repo_root: &Path) -> Result<Option<String>> {
-    git_optional_config(repo_root, "user.name")
-}
-
-fn git_has_head(repo_root: &Path) -> Result<bool> {
-    let output = Command::new("git")
-        .args(["-C"])
-        .arg(repo_root)
-        .args(["rev-parse", "--verify", "HEAD"])
-        .output()
-        .map_err(|error| Error::Git(format!("cannot inspect Git HEAD: {error}")))?;
-    Ok(output.status.success())
-}
-
-fn git_optional_config(repo_root: &Path, key: &str) -> Result<Option<String>> {
-    let output = Command::new("git")
-        .args(["-C"])
-        .arg(repo_root)
-        .args(["config", "--get", key])
-        .output()
-        .map_err(|error| Error::Git(format!("cannot read {key}: {error}")))?;
-    if !output.status.success() {
-        return Ok(None);
-    }
-    let value = String::from_utf8_lossy(&output.stdout).trim().to_owned();
-    Ok((!value.is_empty()).then_some(value))
-}
-
-fn git_output<'argument>(
-    repo_root: &Path,
-    arguments: impl IntoIterator<Item = &'argument str>,
-) -> Result<Output> {
-    let output = Command::new("git")
-        .args(["-C"])
-        .arg(repo_root)
-        .args(arguments)
-        .output()
-        .map_err(|error| Error::Git(format!("cannot start Git: {error}")))?;
-    if output.status.success() {
-        Ok(output)
-    } else {
-        Err(Error::Git(stderr(&output)))
-    }
-}
-
-fn stderr(output: &Output) -> String {
-    let message = String::from_utf8_lossy(&output.stderr).trim().to_owned();
-    if message.is_empty() {
-        format!("Git exited with {}", output.status)
-    } else {
-        message
-    }
-}
-
-fn git_path(path: &Path) -> String {
-    path.to_string_lossy().replace('\\', "/")
+fn current_git_author(repo: &GitRepo) -> Result<Option<String>> {
+    repo.optional_config("user.name")
 }
 
 fn utc_year(time: SystemTime) -> Option<i16> {

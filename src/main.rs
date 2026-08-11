@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::fmt;
 use std::io;
 use std::io::Write;
 use std::path::PathBuf;
@@ -22,12 +23,14 @@ use clap::Args;
 use clap::Parser;
 use clap::Subcommand;
 use clap::ValueEnum;
+use exn::ResultExt;
 use hawkeye::Engine;
 use hawkeye::Mode;
 use hawkeye::Plan;
 use hawkeye::Report;
 use hawkeye::Status;
-use hawkeye::config::DEFAULT_CONFIG_FILE;
+use hawkeye::config::DEFAULT_CONFIG_FILES;
+use logforth::filter::env_filter::EnvFilterBuilder;
 use similar::TextDiff;
 
 #[derive(Debug, Parser)]
@@ -36,10 +39,9 @@ struct Command {
     #[arg(
         long,
         global = true,
-        default_value = DEFAULT_CONFIG_FILE,
-        help = "Configuration file; relative paths use the current directory"
+        help = "Configuration file; otherwise try licenserc.toml and .licenserc.toml in the current directory"
     )]
-    config: PathBuf,
+    config: Option<PathBuf>,
 
     #[arg(long, global = true, value_enum, default_value_t = Output::Human)]
     output: Output,
@@ -73,9 +75,6 @@ struct CheckOptions {
     /// Fail when selected files have no rule or are not UTF-8 text.
     #[arg(long)]
     fail_if_unknown: bool,
-
-    /// Files or directories to process; defaults to `files.root`.
-    paths: Vec<PathBuf>,
 }
 
 #[derive(Debug, Args)]
@@ -95,23 +94,27 @@ struct EditOptions {
     /// Exit unsuccessfully when files needed changes.
     #[arg(long, action = ArgAction::Set, default_value_t = true)]
     fail_if_updated: bool,
-
-    /// Files or directories to process; defaults to `files.root`.
-    paths: Vec<PathBuf>,
 }
 
 fn main() -> ExitCode {
+    logforth::starter_log::stderr()
+        .filter(EnvFilterBuilder::from_default_env_or("info").build())
+        .apply();
+
     match run(Command::parse()) {
         Ok(code) => code,
         Err(error) => {
-            eprintln!("hawkeye: {error}");
+            log::error!("{error:?}");
             ExitCode::from(2)
         }
     }
 }
 
-fn run(command: Command) -> Result<ExitCode, Box<dyn std::error::Error>> {
-    let engine = Engine::load(&command.config)?;
+fn run(command: Command) -> CliResult<ExitCode> {
+    let config = find_config(command.config)?;
+    log::debug!("loading configuration from {}", config.display());
+    let engine = Engine::load(&config)
+        .or_raise(|| CliError::new(format!("cannot load configuration {}", config.display())))?;
     match command.subcommand {
         SubcommandOptions::Check(options) => {
             let mode = if options.diff {
@@ -119,7 +122,9 @@ fn run(command: Command) -> Result<ExitCode, Box<dyn std::error::Error>> {
             } else {
                 Mode::Check
             };
-            let plan = engine.plan(mode, &options.paths)?;
+            let plan = engine
+                .plan(mode)
+                .or_raise(|| CliError::new("cannot analyze selected files"))?;
             emit(&plan, command.output, options.diff)?;
             let report = plan.report();
             let failed = report.has_violations()
@@ -131,17 +136,15 @@ fn run(command: Command) -> Result<ExitCode, Box<dyn std::error::Error>> {
     }
 }
 
-fn edit(
-    engine: &Engine,
-    mode: Mode,
-    options: EditOptions,
-    output: Output,
-) -> Result<ExitCode, Box<dyn std::error::Error>> {
-    let plan = engine.plan(mode, &options.paths)?;
+fn edit(engine: &Engine, mode: Mode, options: EditOptions, output: Output) -> CliResult<ExitCode> {
+    let plan = engine
+        .plan(mode)
+        .or_raise(|| CliError::new("cannot analyze selected files"))?;
     let report = if options.dry_run {
         plan.report()
     } else {
-        plan.apply()?
+        plan.apply()
+            .or_raise(|| CliError::new("cannot apply planned file edits"))?
     };
     emit(&plan, output, options.diff)?;
     let failed = report.count(Status::Conflict) > 0
@@ -150,7 +153,7 @@ fn edit(
     Ok(policy_exit(failed))
 }
 
-fn emit(plan: &Plan, output: Output, show_diff: bool) -> Result<(), Box<dyn std::error::Error>> {
+fn emit(plan: &Plan, output: Output, show_diff: bool) -> CliResult<()> {
     if show_diff {
         let mut writer: Box<dyn Write> = match output {
             Output::Human => Box::new(io::stdout().lock()),
@@ -164,17 +167,21 @@ fn emit(plan: &Plan, output: Output, show_diff: bool) -> Result<(), Box<dyn std:
                 .unified_diff()
                 .header(&format!("a/{path}"), &format!("b/{path}"))
                 .to_string();
-            writer.write_all(diff.as_bytes())?;
+            writer
+                .write_all(diff.as_bytes())
+                .or_raise(|| CliError::new("cannot write diff output"))?;
         }
     }
 
     let report = plan.report();
     match output {
-        Output::Human => emit_human(plan, &report)?,
+        Output::Human => emit_human(plan, &report)
+            .or_raise(|| CliError::new("cannot write human-readable report"))?,
         Output::Json => {
             let mut stdout = io::stdout().lock();
-            serde_json::to_writer_pretty(&mut stdout, &report)?;
-            writeln!(stdout)?;
+            serde_json::to_writer_pretty(&mut stdout, &report)
+                .or_raise(|| CliError::new("cannot serialize JSON report"))?;
+            writeln!(stdout).or_raise(|| CliError::new("cannot write JSON report"))?;
         }
     }
     Ok(())
@@ -219,3 +226,46 @@ fn policy_exit(failed: bool) -> ExitCode {
         ExitCode::SUCCESS
     }
 }
+
+fn find_config(config: Option<PathBuf>) -> CliResult<PathBuf> {
+    if let Some(config) = config {
+        return Ok(config);
+    }
+
+    let current_dir =
+        std::env::current_dir().or_raise(|| CliError::new("cannot read the current directory"))?;
+    for filename in DEFAULT_CONFIG_FILES {
+        let candidate = current_dir.join(filename);
+        if candidate.is_file() {
+            return Ok(candidate);
+        }
+    }
+    exn::bail!(CliError::new(format!(
+        "cannot find {} in {}; pass --config to select another file",
+        DEFAULT_CONFIG_FILES.join(" or "),
+        current_dir.display()
+    )))
+}
+
+type CliResult<T> = exn::Result<T, CliError>;
+
+#[derive(Debug)]
+struct CliError {
+    message: String,
+}
+
+impl CliError {
+    fn new(message: impl Into<String>) -> Self {
+        Self {
+            message: message.into(),
+        }
+    }
+}
+
+impl fmt::Display for CliError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(&self.message)
+    }
+}
+
+impl std::error::Error for CliError {}

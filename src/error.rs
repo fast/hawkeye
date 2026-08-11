@@ -12,58 +12,44 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::fmt;
 use std::ops::Range;
 use std::path::PathBuf;
-
-use thiserror::Error;
 
 use crate::config::ConfigError;
 
 /// An error returned by HawkEye's library API.
-#[derive(Debug, Error)]
+#[derive(Debug)]
 pub enum Error {
     /// The configuration could not be parsed or locally validated.
-    #[error(transparent)]
-    Config(#[from] ConfigError),
+    Config(ConfigError),
 
     /// A configuration value could only be rejected while resolving resources.
-    #[error("invalid licenserc.toml: {0}")]
     InvalidConfig(String),
 
     /// A template could not be compiled or rendered.
-    #[error("cannot render header template: {0}")]
-    Template(#[from] minijinja::Error),
+    Template(minijinja::Error),
 
     /// File discovery failed.
-    #[error("cannot discover files: {0}")]
-    Discovery(#[from] ignore::Error),
+    Discovery(ignore::Error),
 
     /// A concrete filesystem operation failed.
-    #[error("cannot {operation} {}: {source}", path.display())]
     Io {
         /// The operation being attempted.
         operation: &'static str,
         /// The path involved in the failed operation.
         path: PathBuf,
         /// The underlying I/O error.
-        #[source]
         source: std::io::Error,
     },
 
     /// Git was required or started, but the operation failed.
-    #[error("Git integration is unavailable: {0}")]
     Git(String),
 
-    /// A positional file or directory cannot be processed under `files.root`.
-    #[error("invalid explicit target: {0}")]
-    InvalidTarget(String),
-
     /// A source file changed after its edit was planned.
-    #[error("{} changed after it was analyzed", .0.display())]
     StaleFile(PathBuf),
 
     /// An edit does not point at a valid UTF-8 byte range in its original input.
-    #[error("invalid edit range {range:?} for an input of {input_len} bytes")]
     InvalidEdit {
         /// The invalid byte range.
         range: Range<usize>,
@@ -72,12 +58,82 @@ pub enum Error {
     },
 
     /// HawkEye refuses to replace a symbolic link.
-    #[error("refusing to replace symbolic link {}", .0.display())]
     Symlink(PathBuf),
 
     /// HawkEye refuses to replace one name of a multiply linked file.
-    #[error("refusing to replace hard-linked file {}", .0.display())]
     HardLink(PathBuf),
+}
+
+impl fmt::Display for Error {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Config(error) => error.fmt(formatter),
+            Self::InvalidConfig(message) => {
+                write!(formatter, "invalid licenserc.toml: {message}")
+            }
+            Self::Template(error) => write!(formatter, "cannot render header template: {error}"),
+            Self::Discovery(error) => write!(formatter, "cannot discover files: {error}"),
+            Self::Io {
+                operation,
+                path,
+                source,
+            } => write!(formatter, "cannot {operation} {}: {source}", path.display()),
+            Self::Git(message) => write!(formatter, "Git integration is unavailable: {message}"),
+            Self::StaleFile(path) => {
+                write!(
+                    formatter,
+                    "{} changed after it was analyzed",
+                    path.display()
+                )
+            }
+            Self::InvalidEdit { range, input_len } => write!(
+                formatter,
+                "invalid edit range {range:?} for an input of {input_len} bytes"
+            ),
+            Self::Symlink(path) => {
+                write!(
+                    formatter,
+                    "refusing to replace symbolic link {}",
+                    path.display()
+                )
+            }
+            Self::HardLink(path) => write!(
+                formatter,
+                "refusing to replace hard-linked file {}",
+                path.display()
+            ),
+        }
+    }
+}
+
+impl std::error::Error for Error {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Config(error) => Some(error),
+            Self::Template(error) => Some(error),
+            Self::Discovery(error) => Some(error),
+            Self::Io { source, .. } => Some(source),
+            _ => None,
+        }
+    }
+}
+
+impl From<ConfigError> for Error {
+    fn from(error: ConfigError) -> Self {
+        Self::Config(error)
+    }
+}
+
+impl From<minijinja::Error> for Error {
+    fn from(error: minijinja::Error) -> Self {
+        Self::Template(error)
+    }
+}
+
+impl From<ignore::Error> for Error {
+    fn from(error: ignore::Error) -> Self {
+        Self::Discovery(error)
+    }
 }
 
 impl Error {

@@ -220,7 +220,7 @@ fn refuses_to_guess_an_unaccepted_header_style() {
 }
 
 #[test]
-fn explicit_files_bypass_git_ignore_but_not_config_excludes() {
+fn git_discovery_keeps_force_added_ignored_files() {
     let project = tempfile::tempdir().expect("create discovery project");
     fs::write(
         project.path().join("licenserc.toml"),
@@ -233,30 +233,39 @@ excludes = ["excluded.rs"]
 "#,
     )
     .expect("write config");
-    fs::write(project.path().join(".gitignore"), "ignored.rs\n").expect("write Git ignore file");
-    fs::write(project.path().join("ignored.rs"), "fn ignored() {}\n")
-        .expect("write ignored source");
+    fs::write(
+        project.path().join(".gitignore"),
+        "tracked_ignored.rs\nuntracked_ignored.rs\n",
+    )
+    .expect("write Git ignore file");
+    fs::write(
+        project.path().join("tracked_ignored.rs"),
+        "fn tracked() {}\n",
+    )
+    .expect("write tracked ignored source");
+    fs::write(
+        project.path().join("untracked_ignored.rs"),
+        "fn untracked() {}\n",
+    )
+    .expect("write untracked ignored source");
     fs::write(project.path().join("excluded.rs"), "fn excluded() {}\n")
         .expect("write excluded source");
+    fs::write(project.path().join("deleted.rs"), "fn deleted() {}\n")
+        .expect("write source that will be deleted from the worktree");
     git(project.path(), ["init", "-b", "main"]);
+    git(project.path(), ["add", "-f", "tracked_ignored.rs"]);
+    git(project.path(), ["add", "deleted.rs"]);
+    fs::remove_file(project.path().join("deleted.rs")).expect("delete indexed source");
 
-    let walked = hawkeye(project.path(), ["check", "--output", "json"]);
-    assert!(walked.status.success(), "{}", stderr(&walked));
+    let checked = hawkeye(project.path(), ["check", "--output", "json"]);
+    assert_eq!(checked.status.code(), Some(1), "{}", stderr(&checked));
+    let report = json(&checked);
+    assert_eq!(status(&report, "tracked_ignored.rs"), "missing");
     assert_eq!(
-        json(&walked)["files"]
-            .as_array()
-            .expect("files array")
-            .len(),
-        0
+        report["files"].as_array().expect("files array").len(),
+        1,
+        "untracked ignored and configured excluded files must stay out of discovery"
     );
-
-    let explicit = hawkeye(project.path(), ["check", "ignored.rs"]);
-    assert_eq!(explicit.status.code(), Some(1), "{}", stderr(&explicit));
-    assert!(stdout(&explicit).contains("ignored.rs"));
-
-    let excluded = hawkeye(project.path(), ["check", "excluded.rs"]);
-    assert!(excluded.status.success(), "{}", stderr(&excluded));
-    assert!(stdout(&excluded).starts_with("0 files"));
 }
 
 #[test]
@@ -281,12 +290,31 @@ excludes = ["licenserc.toml"]
     assert_eq!(implicit.status.code(), Some(2));
     assert!(stderr(&implicit).contains("licenserc.toml"));
 
-    let explicit = hawkeye(
-        &child,
-        ["--config", "../licenserc.toml", "check", "source.rs"],
+    let configured = hawkeye(&child, ["--config", "../licenserc.toml", "check"]);
+    assert_eq!(configured.status.code(), Some(1), "{}", stderr(&configured));
+    assert!(stdout(&configured).contains("child/source.rs"));
+
+    let fallback = tempfile::tempdir().expect("create fallback config project");
+    fs::write(
+        fallback.path().join(".licenserc.toml"),
+        r#"[header]
+text = "Copyright 2026 Acme Labs"
+
+[files]
+includes = ["**/*.rs"]
+"#,
+    )
+    .expect("write fallback config");
+    fs::write(fallback.path().join("fallback.rs"), "fn fallback() {}\n")
+        .expect("write fallback source");
+    let fallback_result = hawkeye(fallback.path(), ["check"]);
+    assert_eq!(
+        fallback_result.status.code(),
+        Some(1),
+        "{}",
+        stderr(&fallback_result)
     );
-    assert_eq!(explicit.status.code(), Some(1), "{}", stderr(&explicit));
-    assert!(stdout(&explicit).contains("child/source.rs"));
+    assert!(stdout(&fallback_result).contains("fallback.rs"));
 
     fs::write(
         child.join("bad.toml"),
@@ -313,7 +341,7 @@ text = "Copyright {{ attrs.git_file_created_year }}-{{ attrs.git_file_modified_y
 
 [files]
 includes = ["**/*.rs"]
-excludes = ["licenserc.toml"]
+excludes = ["other.rs"]
 
 [git]
 ignore = "disable"
@@ -365,7 +393,7 @@ file_attrs = "enable"
         "2022-06-01T12:00:00+0000",
     );
 
-    let historical = hawkeye(project.path(), ["check", "--diff", "app.rs"]);
+    let historical = hawkeye(project.path(), ["check", "--diff"]);
     assert_eq!(historical.status.code(), Some(1), "{}", stderr(&historical));
     assert!(
         stdout(&historical).contains("Copyright 2019-2020 Alice, Bob"),
@@ -383,15 +411,7 @@ file_attrs = "enable"
     fs::write(project.path().join("new/fresh.rs"), "fn untracked() {}\n")
         .expect("write untracked source");
 
-    let formatted = hawkeye(
-        project.path(),
-        [
-            "format",
-            "--fail-if-updated=false",
-            "app.rs",
-            "new/fresh.rs",
-        ],
-    );
+    let formatted = hawkeye(project.path(), ["format", "--fail-if-updated=false"]);
     assert!(formatted.status.success(), "{}", stderr(&formatted));
     let year = Timestamp::now().to_zoned(TimeZone::UTC).year();
     let app = fs::read_to_string(project.path().join("app.rs")).expect("read dirty app");
@@ -407,7 +427,7 @@ file_attrs = "enable"
         "{fresh}"
     );
 
-    let checked = hawkeye(project.path(), ["check", "app.rs", "new/fresh.rs"]);
+    let checked = hawkeye(project.path(), ["check"]);
     assert!(checked.status.success(), "{}", stderr(&checked));
 }
 

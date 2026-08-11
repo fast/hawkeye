@@ -22,7 +22,7 @@ HawkEye v7 deliberately uses a new snake-case configuration contract. It does no
 
 ## Command line
 
-HawkEye reads exactly `licenserc.toml` from the current directory unless `--config` is passed. It does not search parent directories.
+Unless `--config` is passed, HawkEye tries `licenserc.toml` and then `.licenserc.toml` in the current directory. It does not search parent directories.
 
 ```shell
 # Report non-canonical files.
@@ -37,11 +37,11 @@ hawkeye format --fail-if-updated=false
 # Remove structurally recognized headers.
 hawkeye remove --fail-if-updated=false
 
-# Process explicit files or directories.
-hawkeye check src/lib.rs tests
-
 # Emit the stable data shape without a separate report version.
 hawkeye check --output json
+
+# Inspect file discovery, Git commands, and timing.
+RUST_LOG=hawkeye=debug hawkeye check
 ```
 
 `check` exits with code 1 for a missing, non-canonical, or conflicting header. `format` and `remove` write safe changes first and then exit with code 1 by default if anything changed; pass `--fail-if-updated=false` for auto-fix workflows. All commands accept `--fail-if-unknown` to treat files without a rule and non-UTF-8 files as policy failures. Configuration, I/O, template, and Git failures use exit code 2.
@@ -121,7 +121,7 @@ Unavailable values remain `null`; they are never silently replaced with the curr
 
 `files.includes` and `files.excludes` are Git-ignore-style path filters relative to `files.root`, with `/` as the logical separator. An empty `includes` list means all files, after which excludes and rule selection still apply. `.git` is always excluded. HawkEye does not maintain another built-in list of generated or dependency directories.
 
-`git.ignore` is `disable`, `auto`, or `enable` and defaults to `auto`. Directory walks obey repository ignore files when enabled. `enable` requires `files.root` to be inside a Git worktree. An explicitly named file bypasses Git ignore rules because the caller selected that exact file, but it still obeys `files.includes` and `files.excludes`; an explicitly named directory performs an ordinary filtered walk.
+`git.ignore` is `disable`, `auto`, or `enable` and defaults to `auto`. When a repository is available, HawkEye asks Git for tracked and non-ignored untracked files. This preserves Git's index semantics: a file force-added with `git add -f` remains selected even if it also matches `.gitignore`. Outside a repository, `auto` falls back to a filesystem walk with Git-ignore parsing; `enable` requires `files.root` to be inside a Git worktree.
 
 ### Rules and styles
 
@@ -147,7 +147,7 @@ The library exposes the same behavior without shelling out to the CLI:
 use hawkeye::{Engine, Mode};
 
 let engine = Engine::load("licenserc.toml")?;
-let plan = engine.plan(Mode::Check, &[])?;
+let plan = engine.plan(Mode::Check)?;
 let report = plan.report();
 # Ok::<(), hawkeye::Error>(())
 ```
