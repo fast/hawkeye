@@ -170,10 +170,9 @@ Repository workflows are exposed through `cargo x`:
 cargo x build
 cargo x test
 cargo x lint
-cargo x publish
 ```
 
-`cargo x publish` runs Cargo's complete crates.io packaging and verification flow without uploading. After the intended version is committed on `main` and the worktree is clean, `cargo x publish --execute` performs the irreversible upload. The command does not create GitHub releases or distribution artifacts.
+Releases use `cargo-release` directly. `cargo release 7.0.0-alpha.1` previews the Alpha 1 release, and adding `--execute` performs the configured commit, crates.io publish, signed tag, and push.
 
 The virtual workspace keeps the product, integration corpus, and development tasks separate without introducing a `crates` directory for a single published package:
 
