@@ -68,7 +68,7 @@ pub(crate) fn analyze(
     if let Some(candidate) = candidate {
         let candidate_lines = candidate.body.lines().count();
         let header_lines = header.lines().count();
-        if (config.style(&candidate.style).is_line() && candidate_lines > header_lines)
+        if candidate_lines > header_lines
             || (candidate_lines < header_lines
                 && config
                     .styles()

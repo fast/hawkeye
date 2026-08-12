@@ -415,8 +415,15 @@ includes = ["**/*.rs"]
 }
 
 #[test]
-fn adjacent_line_comments_are_not_consumed_as_header_text() {
-    for command in ["format", "remove"] {
+fn additional_comment_text_is_not_consumed_as_header_text() {
+    let sources = [
+        "// Copyright 2026 Acme\n// SAFETY: this comment belongs to the code.\nfn main() {}\n",
+        "/*\n * Copyright 2026 Acme\n * SAFETY: this comment belongs to the code.\n */\nfn main() {}\n",
+    ];
+    for (source, command) in sources
+        .into_iter()
+        .flat_map(|source| ["format", "remove"].map(|command| (source, command)))
+    {
         let project = tempfile::tempdir().expect("create adjacent comment project");
         fs::write(
             project.path().join("licenserc.toml"),
@@ -428,8 +435,6 @@ includes = ["**/*.rs"]
 "#,
         )
         .expect("write configuration");
-        let source =
-            "// Copyright 2026 Acme\n// SAFETY: this comment belongs to the code.\nfn main() {}\n";
         fs::write(project.path().join("main.rs"), source).expect("write source");
 
         let result = hawkeye(
