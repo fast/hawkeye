@@ -70,13 +70,16 @@ impl GitRepo {
             return Err(Error::Git(stderr(&output)));
         }
 
-        let path = String::from_utf8_lossy(&output.stdout).trim().to_owned();
+        let path = output
+            .stdout
+            .strip_suffix(b"\n")
+            .unwrap_or(output.stdout.as_slice());
         if path.is_empty() {
             return Err(Error::Git(
                 "Git returned an empty repository root".to_owned(),
             ));
         }
-        let root = PathBuf::from(path)
+        let root = path_from_git_bytes(path)
             .canonicalize()
             .map_err(|error| Error::Git(format!("cannot resolve repository root: {error}")))?;
         log::debug!(

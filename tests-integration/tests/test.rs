@@ -108,6 +108,40 @@ fn git_repository_with_nested_files_root_lifecycle() {
     assert_format_lifecycle("nested_root", project.path(), false);
 }
 
+#[cfg(target_os = "linux")]
+#[test]
+fn git_discovery_preserves_non_utf8_repository_roots() {
+    use std::ffi::OsString;
+    use std::os::unix::ffi::OsStringExt;
+
+    let container = tempfile::tempdir().expect("create repository container");
+    let repository = container
+        .path()
+        .join(OsString::from_vec(b"repository-\xff".to_vec()));
+    fs::create_dir(&repository).expect("create non-UTF-8 repository root");
+    fs::write(
+        repository.join("licenserc.toml"),
+        r#"[header]
+text = "Copyright 2026 Acme"
+
+[files]
+includes = ["**/*.rs"]
+
+[git]
+ignore = "enable"
+"#,
+    )
+    .expect("write configuration");
+    fs::write(repository.join("main.rs"), "fn main() {}\n").expect("write source");
+    git(&repository, ["init", "-b", "main"]);
+
+    let checked = hawkeye(&repository, ["check", "--output", "json"]);
+    assert_exit(&checked, 1);
+    let report = json(&checked);
+    assert_eq!(report["files"][0]["path"], "main.rs");
+    assert_eq!(report["files"][0]["status"], "missing");
+}
+
 #[test]
 fn git_history_branches_dirty_files_and_untracked_directories() {
     let project = case("git-history");
