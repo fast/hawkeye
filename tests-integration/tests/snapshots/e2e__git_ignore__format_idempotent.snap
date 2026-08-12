@@ -1,0 +1,13 @@
+---
+source: tests-integration/tests/e2e.rs
+expression: "&report"
+---
+{
+  "files": [
+    {
+      "changed": false,
+      "path": "tracked_ignored.rs",
+      "status": "clean"
+    }
+  ]
+}

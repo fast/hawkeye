@@ -1,0 +1,25 @@
+---
+source: tests-integration/tests/e2e.rs
+expression: tree_snapshot(root)
+---
+=== .gitignore ===
+source/ignored.rs␊
+=== licenserc.toml ===
+[header]␊
+text = "Copyright 2026 Nested Root"␊
+␊
+[files]␊
+excludes = ["generated.rs"]␊
+includes = ["**/*.rs"]␊
+root = "source"␊
+␊
+[git]␊
+ignore = "enable"␊
+=== source/generated.rs ===
+fn generated() {}␊
+=== source/ignored.rs ===
+fn ignored() {}␊
+=== source/main.rs ===
+// Copyright 2026 Nested Root␊
+␊
+fn main() {}␊

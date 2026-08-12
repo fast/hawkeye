@@ -12,13 +12,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-[header]
-builtin = "Apache-2.0"
+[package]
+name = "tests-integration"
+publish = false
+version = "0.0.0"
 
-[files]
-excludes = ["tests-integration/**"]
-includes = ["**/*.rs", "**/*.toml", "**/*.yaml", "**/*.yml"]
+edition.workspace = true
+rust-version.workspace = true
 
-[props]
-copyright_owner = "FastLabs Developers"
-inception_year = 2026
+[package.metadata.release]
+release = false
+
+[dev-dependencies]
+hawkeye.workspace = true
+insta.workspace = true
+jiff.workspace = true
+serde_json.workspace = true
+tempfile.workspace = true
+
+[lints]
+workspace = true

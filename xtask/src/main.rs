@@ -191,7 +191,15 @@ fn make_doc_cmd() -> StdCommand {
 
 fn make_hawkeye_cmd(fix: bool) -> StdCommand {
     let mut cmd = find_command("cargo");
-    cmd.args(["run", "--quiet", "--bin", "hawkeye", "--"]);
+    cmd.args([
+        "run",
+        "--quiet",
+        "--package",
+        "hawkeye",
+        "--bin",
+        "hawkeye",
+        "--",
+    ]);
     if fix {
         cmd.args(["format", "--fail-if-updated=false"]);
     } else {

@@ -1,0 +1,18 @@
+---
+source: tests-integration/tests/e2e.rs
+expression: "&report"
+---
+{
+  "files": [
+    {
+      "changed": true,
+      "path": "app.rs",
+      "status": "missing"
+    },
+    {
+      "changed": true,
+      "path": "new/fresh.rs",
+      "status": "missing"
+    }
+  ]
+}

@@ -1,0 +1,46 @@
+---
+source: tests-integration/tests/e2e.rs
+expression: tree_snapshot(root)
+---
+=== .gitignore ===
+not_ignored_without_repository.rs␊
+=== Makefile ===
+all:␊
+\t@echo done␊
+=== app.rs ===
+fn main() {}␊
+=== excluded/skip.rs ===
+fn excluded() {}␊
+=== legacy.rs ===
+/*␊
+ * COPYRIGHT 2025 Old Owner␊
+ * Sequence 1-2-3␊
+ */␊
+␊
+fn legacy() {}␊
+=== licenserc.toml ===
+[header]␊
+keywords = ["copyright", "sequence"]␊
+text = """␊
+Copyright {{ props.year }} {{ props.owner }}␊
+Sequence {{ range(1, 4) | join("-") }}␊
+"""␊
+␊
+[files]␊
+excludes = [".gitignore", "licenserc.toml", "excluded/**"]␊
+␊
+[props]␊
+owner = "Acme Labs"␊
+year = 2026␊
+␊
+[[rules]]␊
+extensions = ["rs", "d.ts"]␊
+filenames = ["Makefile"]␊
+style_out = "slash_line"␊
+styles_in = ["slash_block"]␊
+=== not_ignored_without_repository.rs ===
+fn selected_without_a_repository() {}␊
+=== notes.txt ===
+This selected file intentionally has no filename or extension rule.␊
+=== types.d.ts ===
+export type Identifier = string;␊

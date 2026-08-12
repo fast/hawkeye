@@ -12,48 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-[package]
-description = "A license header checker and formatter."
-name = "hawkeye"
-version = "7.0.0-alpha.1"
-
-edition.workspace = true
-homepage.workspace = true
-license.workspace = true
-readme.workspace = true
-repository.workspace = true
-rust-version.workspace = true
-
-[package.metadata.docs.rs]
-all-features = true
-rustdoc-args = ["--cfg", "docsrs"]
-
-[lib]
-path = "src/lib.rs"
-
-[[bin]]
-name = "hawkeye"
-path = "src/main.rs"
-
-[dependencies]
-clap = { version = "4.6.6", features = ["derive"] }
-exn = "0.3.1"
-ignore = "0.4.33"
-jiff = { version = "0.2.35", default-features = false, features = ["std"] }
-log = { version = "0.4.28", features = ["kv_serde", "serde"] }
-logforth = { version = "0.29.1", features = ["starter-log"] }
-minijinja = "2.23.0"
-serde = { version = "1.0.229", features = ["derive"] }
-serde_json = "1.0.151"
-similar = "3.1.2"
-tempfile = "3.27.0"
-toml = "1.1.4"
-
-[lints]
-workspace = true
-
 [workspace]
-members = ["xtask"]
+members = ["crates/*", "tests-integration", "xtask"]
 resolver = "3"
 
 [workspace.package]
@@ -63,6 +23,26 @@ license = "Apache-2.0"
 readme = "README.md"
 repository = "https://github.com/korandoru/hawkeye"
 rust-version = "1.88.0"
+
+[workspace.dependencies]
+# Workspace dependencies
+hawkeye = { version = "7.0.0-alpha.1", path = "crates/hawkeye" }
+
+# crates.io dependencies
+clap = { version = "4.6.6", features = ["derive"] }
+exn = "0.3.1"
+ignore = "0.4.33"
+insta = { version = "1.48.0", features = ["json"] }
+jiff = { version = "0.2.35", default-features = false, features = ["std"] }
+log = { version = "0.4.28", features = ["kv_serde", "serde"] }
+logforth = { version = "0.29.1", features = ["starter-log"] }
+minijinja = "2.23.0"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+similar = "3.1.2"
+tempfile = "3.27.0"
+toml = "1.1.4"
+which = "8.0.4"
 
 [workspace.lints.rust]
 unknown_lints = "deny"

@@ -1,0 +1,10 @@
+[header]
+text = "Copyright 2026 Nested Root"
+
+[files]
+excludes = ["generated.rs"]
+includes = ["**/*.rs"]
+root = "source"
+
+[git]
+ignore = "enable"

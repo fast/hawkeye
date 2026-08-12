@@ -1,0 +1,26 @@
+---
+source: tests-integration/tests/e2e.rs
+expression: "normalize_year(&tree_snapshot(project.path()), &year)"
+---
+=== app.rs ===
+// Copyright 2019-<CURRENT_YEAR> Alice, Bob, Current User␊
+␊
+fn feature() {}␊
+fn dirty() {}␊
+=== licenserc.toml ===
+[header]␊
+text = "Copyright {{ attrs.git_file_created_year }}-{{ attrs.git_file_modified_year }} {{ attrs.git_authors | join(', ') }}"␊
+␊
+[files]␊
+excludes = ["other.rs"]␊
+includes = ["**/*.rs"]␊
+␊
+[git]␊
+file_attrs = "enable"␊
+ignore = "disable"␊
+=== new/fresh.rs ===
+// Copyright <CURRENT_YEAR>-<CURRENT_YEAR> Current User␊
+␊
+fn untracked() {}␊
+=== other.rs ===
+fn other() {}␊

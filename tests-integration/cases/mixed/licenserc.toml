@@ -6,7 +6,7 @@ Sequence {{ range(1, 4) | join("-") }}
 """
 
 [files]
-excludes = ["licenserc.toml", "excluded/**"]
+excludes = [".gitignore", "licenserc.toml", "excluded/**"]
 
 [props]
 owner = "Acme Labs"

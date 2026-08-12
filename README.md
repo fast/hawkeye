@@ -16,7 +16,7 @@
 [actions-badge]: https://github.com/korandoru/hawkeye/actions/workflows/ci.yml/badge.svg
 [actions-url]: https://github.com/korandoru/hawkeye/actions/workflows/ci.yml
 
-HawkEye checks, formats, and removes source-file license headers. The root crate publishes both the reusable `hawkeye` library and the `hawkeye` command-line binary.
+HawkEye checks, formats, and removes source-file license headers. The package in `crates/hawkeye` publishes both the reusable `hawkeye` library and the `hawkeye` command-line binary; the repository root is a virtual Cargo workspace.
 
 HawkEye v7 deliberately uses a new snake-case configuration contract. It does not accept v6 field aliases; migration tooling belongs in a separate tool rather than the runtime parser.
 
@@ -121,7 +121,7 @@ Unavailable values remain `null`; they are never silently replaced with the curr
 
 `files.includes` and `files.excludes` are Git-ignore-style path filters relative to `files.root`, with `/` as the logical separator. An empty `includes` list means all files, after which excludes and rule selection still apply. `.git` is always excluded. HawkEye does not maintain another built-in list of generated or dependency directories.
 
-`git.ignore` is `disable`, `auto`, or `enable` and defaults to `auto`. When a repository is available, HawkEye asks Git for tracked and non-ignored untracked files. This preserves Git's index semantics: a file force-added with `git add -f` remains selected even if it also matches `.gitignore`. Outside a repository, `auto` falls back to a filesystem walk with Git-ignore parsing; `enable` requires `files.root` to be inside a Git worktree.
+`git.ignore` is `disable`, `auto`, or `enable` and defaults to `auto`. When a repository is available, HawkEye asks Git for tracked and non-ignored untracked files. This preserves Git's index semantics: a file force-added with `git add -f` remains selected even if it also matches `.gitignore`. Outside a repository, `auto` falls back to an ordinary filesystem walk because `.gitignore` has no repository context; `enable` requires `files.root` to be inside a Git worktree.
 
 ### Rules and styles
 
@@ -164,7 +164,13 @@ cargo x test
 cargo x lint
 ```
 
-The root `hawkeye` package produces both the library and the command-line binary. The `xtask` package is an unpublished development tool.
+The workspace layout follows the same separation as fastrace:
+
+- `crates/hawkeye` is the only published package and contains the library and command-line binary;
+- `tests-integration` is an unpublished package containing complete repository corpora and Rust-driven end-to-end tests;
+- `xtask` is an unpublished development tool.
+
+Integration tests copy each corpus to a temporary directory, optionally create a real Git repository and history, snapshot the initial tree and reports, run `format`, snapshot the resulting tree, and verify that subsequent `check` and `format` runs are clean and idempotent. The root `licenserc.toml` excludes the entire `tests-integration` directory because those corpora intentionally contain missing, legacy, conflicting, ignored, BOM, CRLF, and otherwise non-canonical files.
 
 ## Minimum Rust version policy
 
