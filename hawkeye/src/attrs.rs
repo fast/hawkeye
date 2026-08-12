@@ -99,6 +99,21 @@ impl FileAttrsResolver {
                 git: BTreeMap::new(),
             });
         };
+
+        let selected = files
+            .iter()
+            .filter_map(|path| {
+                path.strip_prefix(repo.root())
+                    .ok()
+                    .map(|relative| (git_path(relative), path.clone()))
+            })
+            .collect::<BTreeMap<_, _>>();
+        if selected.is_empty() {
+            return Ok(Self {
+                git_enabled: true,
+                git: BTreeMap::new(),
+            });
+        }
         if repo.is_shallow()? {
             let message = "Git file attributes require complete history, but the repository is shallow; fetch complete history first";
             if mode == FeatureMode::Auto {
@@ -114,14 +129,6 @@ impl FileAttrsResolver {
             .ok_or_else(|| Error::Git("the current UTC year is out of range".to_owned()))?;
         let started = Instant::now();
 
-        let selected = files
-            .iter()
-            .filter_map(|path| {
-                path.strip_prefix(repo.root())
-                    .ok()
-                    .map(|relative| (git_path(relative), path.clone()))
-            })
-            .collect::<BTreeMap<_, _>>();
         let author = current_git_author(repo)?;
         let mut git = read_history(repo, &selected)?;
         apply_worktree_status(repo, &selected, current_year, author.as_deref(), &mut git)?;
@@ -180,23 +187,42 @@ fn read_history(
     if !repo.has_head()? {
         return Ok(BTreeMap::new());
     }
+    let mut arguments = vec![
+        "-c",
+        "core.quotepath=false",
+        "log",
+        "--full-history",
+        "--no-merges",
+        "--no-renames",
+        "--format=\u{001e}%cI%x00%an",
+        "--name-only",
+        "-z",
+    ];
+    let pathspecs = history_pathspecs(selected);
+    if pathspecs.is_some() {
+        arguments.push("--stdin");
+    } else {
+        // `git log --stdin` is line-delimited. Fall back to an unfiltered traversal for the rare
+        // repository containing a selected path with an embedded line ending.
+        arguments.push("--");
+    }
     // NUL separators preserve arbitrary path bytes. The record marker keeps commit metadata
     // distinguishable from a path without relying on Git's quoting rules.
-    repo.read_stdout(
-        [
-            "-c",
-            "core.quotepath=false",
-            "log",
-            "--full-history",
-            "--no-merges",
-            "--no-renames",
-            "--format=\u{001e}%cI%x00%an",
-            "--name-only",
-            "-z",
-            "--",
-        ],
-        |reader| parse_history(reader, selected),
-    )
+    repo.read_stdout(arguments, pathspecs.as_deref(), |reader| {
+        parse_history(reader, selected)
+    })
+}
+
+fn history_pathspecs(selected: &BTreeMap<Vec<u8>, PathBuf>) -> Option<Vec<u8>> {
+    let mut input = b"--\n".to_vec();
+    for path in selected.keys() {
+        if path.contains(&b'\n') || path.contains(&b'\r') {
+            return None;
+        }
+        input.extend_from_slice(path);
+        input.push(b'\n');
+    }
+    Some(input)
 }
 
 fn parse_history(

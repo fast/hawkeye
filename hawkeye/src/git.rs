@@ -19,6 +19,7 @@ use std::io::BufReader;
 use std::io::Read;
 use std::io::Seek;
 use std::io::SeekFrom;
+use std::io::Write;
 use std::path::Path;
 use std::path::PathBuf;
 use std::process::Command;
@@ -197,6 +198,7 @@ impl GitRepo {
     pub(crate) fn read_stdout<I, S, Value>(
         &self,
         arguments: I,
+        input: Option<&[u8]>,
         read: impl FnOnce(&mut dyn BufRead) -> Result<Value>,
     ) -> Result<Value>
     where
@@ -212,11 +214,24 @@ impl GitRepo {
         let stderr_writer = stderr
             .try_clone()
             .map_err(|error| Error::Git(format!("cannot clone Git stderr buffer: {error}")))?;
+        let stdin = if let Some(input) = input {
+            let mut file = tempfile::tempfile()
+                .map_err(|error| Error::Git(format!("cannot create Git stdin buffer: {error}")))?;
+            file.write_all(input)
+                .map_err(|error| Error::Git(format!("cannot write Git stdin buffer: {error}")))?;
+            file.seek(SeekFrom::Start(0))
+                .map_err(|error| Error::Git(format!("cannot rewind Git stdin buffer: {error}")))?;
+            Stdio::from(file)
+        } else {
+            Stdio::null()
+        };
         let started = Instant::now();
         let mut child = Command::new("git")
             .args(["-C"])
             .arg(&self.root)
+            .env("GIT_LITERAL_PATHSPECS", "1")
             .args(&arguments)
+            .stdin(stdin)
             .stdout(Stdio::piped())
             .stderr(Stdio::from(stderr_writer))
             .spawn()

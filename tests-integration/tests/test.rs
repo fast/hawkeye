@@ -231,6 +231,24 @@ fn shallow_repository_does_not_produce_git_years() {
     assert!(
         read_normalized(project.path().join("main.rs")).starts_with("// Copyright 2026 Acme\n\n")
     );
+
+    fs::write(
+        project.path().join("licenserc.toml"),
+        r#"[header]
+text = "Copyright 2026 Acme"
+
+[files]
+includes = ["**/*.md"]
+
+[git]
+file_attrs = "enable"
+ignore = "disable"
+"#,
+    )
+    .expect("write empty selection configuration");
+    let empty = hawkeye(project.path(), ["check", "--output", "json"]);
+    assert_exit(&empty, 0);
+    assert_eq!(json(&empty)["files"].as_array().map(Vec::len), Some(0));
 }
 
 #[test]
