@@ -131,6 +131,8 @@ Unavailable values remain `null`; they are never silently replaced with the curr
 
 `git.ignore` is `disable`, `auto`, or `enable` and defaults to `auto`. When a repository is available, HawkEye asks Git for tracked and non-ignored untracked files. This preserves Git's index semantics: a file force-added with `git add -f` remains selected even if it also matches `.gitignore`. Outside a repository, `auto` falls back to an ordinary filesystem walk because `.gitignore` has no repository context; `enable` requires `files.root` to be inside a Git worktree.
 
+Git-backed capabilities invoke the `git` executable from `PATH`. Standard GitHub-hosted runner images include Git; self-hosted runners and custom containers must provide it themselves.
+
 ### Rules and styles
 
 Rules are checked in declaration order, followed by HawkEye's built-in language rules as low-priority fallbacks. `extensions` are exact case-insensitive suffixes without a leading dot, so `d.ts` directly supports a multi-segment extension. `filenames` are complete case-insensitive basenames. Rules do not use path globs.
@@ -146,6 +148,8 @@ Built-in output styles include line comments for slash, hash, dash, percent, sem
 `git.file_attrs` is `disable`, `auto`, or `enable` and defaults to `disable` because history traversal has a cost. `auto` populates attributes when a repository is available; `enable` turns repository discovery and Git command failures into operational errors.
 
 History is traversed once per run. Each non-merge commit is compared through Git's normal changed-path output, avoiding a merge commit being attributed as a file modification merely because histories joined. Dirty tracked files and files inside untracked directories use the current UTC year and current configured Git author.
+
+A shallow repository cannot provide truthful creation years. In that situation, `file_attrs = "enable"` fails with an instruction to fetch complete history; `auto` logs a warning and leaves Git-derived attributes unavailable instead of manufacturing years from the shallow boundary.
 
 ## Library
 

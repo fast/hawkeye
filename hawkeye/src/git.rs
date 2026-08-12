@@ -136,6 +136,17 @@ impl GitRepo {
         Ok(output.status.success())
     }
 
+    pub(crate) fn is_shallow(&self) -> Result<bool> {
+        let output = self.output(["rev-parse", "--is-shallow-repository"])?;
+        match String::from_utf8_lossy(&output.stdout).trim() {
+            "true" => Ok(true),
+            "false" => Ok(false),
+            value => Err(Error::Git(format!(
+                "Git returned an invalid shallow-repository value: {value:?}"
+            ))),
+        }
+    }
+
     pub(crate) fn optional_config(&self, key: &str) -> Result<Option<String>> {
         let output = Command::new("git")
             .args(["-C"])

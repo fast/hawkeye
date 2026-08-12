@@ -98,6 +98,17 @@ impl FileAttrsResolver {
                 git: BTreeMap::new(),
             });
         };
+        if repo.is_shallow()? {
+            let message = "Git file attributes require complete history, but the repository is shallow; fetch complete history first";
+            if mode == FeatureMode::Auto {
+                log::warn!("{message}; continuing with Git file attributes disabled");
+                return Ok(Self {
+                    git_enabled: false,
+                    git: BTreeMap::new(),
+                });
+            }
+            return Err(Error::Git(message.to_owned()));
+        }
         let current_year = utc_year(SystemTime::now())
             .ok_or_else(|| Error::Git("the current UTC year is out of range".to_owned()))?;
         let started = Instant::now();

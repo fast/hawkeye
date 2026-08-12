@@ -146,6 +146,55 @@ fn git_history_branches_dirty_files_and_untracked_directories() {
 }
 
 #[test]
+fn shallow_repository_does_not_produce_git_years() {
+    let project = tempfile::tempdir().expect("create shallow repository");
+    fs::write(project.path().join("main.rs"), "fn main() {}\n").expect("write source");
+    git(project.path(), ["init", "-b", "main"]);
+    git(project.path(), ["config", "user.name", "Current User"]);
+    git(
+        project.path(),
+        ["config", "user.email", "current@example.com"],
+    );
+    git(project.path(), ["add", "main.rs"]);
+    git_commit(
+        project.path(),
+        "initial",
+        "Alice",
+        "alice@example.com",
+        "2019-06-01T12:00:00+0000",
+    );
+    let head = git_stdout(project.path(), ["rev-parse", "HEAD"]);
+    fs::write(project.path().join(".git/shallow"), format!("{head}\n"))
+        .expect("mark repository as shallow");
+
+    fs::write(
+        project.path().join("licenserc.toml"),
+        git_attrs_config("enable"),
+    )
+    .expect("write required Git attributes configuration");
+    let required = hawkeye(project.path(), ["check"]);
+    assert_exit(&required, 2);
+    assert!(stderr(&required).contains("repository is shallow"));
+    assert_eq!(read_normalized(project.path().join("main.rs")), "fn main() {}\n");
+
+    fs::write(
+        project.path().join("licenserc.toml"),
+        git_attrs_config("auto"),
+    )
+    .expect("write automatic Git attributes configuration");
+    let automatic = hawkeye(
+        project.path(),
+        ["format", "--fail-if-updated=false", "--output", "json"],
+    );
+    assert_exit(&automatic, 0);
+    assert!(stderr(&automatic).contains("repository is shallow"));
+    assert!(
+        read_normalized(project.path().join("main.rs"))
+            .starts_with("// Copyright 2026 Acme\n\n")
+    );
+}
+
+#[test]
 fn configuration_candidates_are_local_strict_and_ordered() {
     let project = tempfile::tempdir().expect("create config project");
     let child = project.path().join("child");
@@ -625,6 +674,21 @@ fn setup_history_repository(project: &Path) {
     fs::write(project.join("new/fresh.rs"), "fn untracked() {}\n").expect("write untracked source");
 }
 
+fn git_attrs_config(mode: &str) -> String {
+    format!(
+        r#"[header]
+text = "Copyright 2026 Acme"
+
+[files]
+includes = ["**/*.rs"]
+
+[git]
+file_attrs = "{mode}"
+ignore = "disable"
+"#
+    )
+}
+
 fn git<I, S>(directory: &Path, arguments: I)
 where
     I: IntoIterator<Item = S>,
@@ -636,6 +700,20 @@ where
         .output()
         .expect("run Git");
     assert!(output.status.success(), "Git failed:\n{}", stderr(&output));
+}
+
+fn git_stdout<I, S>(directory: &Path, arguments: I) -> String
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<OsStr>,
+{
+    let output = Command::new("git")
+        .args(arguments)
+        .current_dir(directory)
+        .output()
+        .expect("run Git");
+    assert!(output.status.success(), "Git failed:\n{}", stderr(&output));
+    stdout(&output).trim().to_owned()
 }
 
 fn git_commit(directory: &Path, message: &str, name: &str, email: &str, date: &str) {
