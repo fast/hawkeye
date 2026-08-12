@@ -1,0 +1,13 @@
+---
+source: tests-integration/tests/test.rs
+expression: "&report"
+---
+{
+  "files": [
+    {
+      "changed": true,
+      "path": "tracked_ignored.rs",
+      "status": "missing"
+    }
+  ]
+}

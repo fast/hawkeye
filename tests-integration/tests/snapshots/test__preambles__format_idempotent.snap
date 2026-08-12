@@ -1,0 +1,28 @@
+---
+source: tests-integration/tests/test.rs
+expression: "&report"
+---
+{
+  "files": [
+    {
+      "changed": false,
+      "path": "bom.cs",
+      "status": "clean"
+    },
+    {
+      "changed": false,
+      "path": "document.xml",
+      "status": "clean"
+    },
+    {
+      "changed": false,
+      "path": "script.py",
+      "status": "clean"
+    },
+    {
+      "changed": false,
+      "path": "windows.rs",
+      "status": "clean"
+    }
+  ]
+}

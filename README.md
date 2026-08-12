@@ -16,7 +16,7 @@
 [actions-badge]: https://github.com/korandoru/hawkeye/actions/workflows/ci.yml/badge.svg
 [actions-url]: https://github.com/korandoru/hawkeye/actions/workflows/ci.yml
 
-HawkEye checks, formats, and removes source-file license headers. The package in `crates/hawkeye` publishes both the reusable `hawkeye` library and the `hawkeye` command-line binary; the repository root is a virtual Cargo workspace.
+HawkEye checks, formats, and removes source-file license headers. The package in `hawkeye` publishes both the reusable `hawkeye` library and the `hawkeye` command-line binary; the repository root is a virtual Cargo workspace.
 
 HawkEye v7 deliberately uses a new snake-case configuration contract. It does not accept v6 field aliases; migration tooling belongs in a separate tool rather than the runtime parser.
 
@@ -164,10 +164,10 @@ cargo x test
 cargo x lint
 ```
 
-The workspace layout follows the same separation as fastrace:
+The virtual workspace keeps the product, integration corpus, and development tasks separate without introducing a `crates` directory for a single published package:
 
-- `crates/hawkeye` is the only published package and contains the library and command-line binary;
-- `tests-integration` is an unpublished package containing complete repository corpora and Rust-driven end-to-end tests;
+- `hawkeye` is the only published package and contains the library and command-line binary;
+- `tests-integration` is an unpublished package containing complete repository corpora and Rust-driven integration tests;
 - `xtask` is an unpublished development tool.
 
 Integration tests copy each corpus to a temporary directory, optionally create a real Git repository and history, snapshot the initial tree and reports, run `format`, snapshot the resulting tree, and verify that subsequent `check` and `format` runs are clean and idempotent. The root `licenserc.toml` excludes the entire `tests-integration` directory because those corpora intentionally contain missing, legacy, conflicting, ignored, BOM, CRLF, and otherwise non-canonical files.

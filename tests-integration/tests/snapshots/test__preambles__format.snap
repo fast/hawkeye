@@ -1,0 +1,28 @@
+---
+source: tests-integration/tests/test.rs
+expression: "&report"
+---
+{
+  "files": [
+    {
+      "changed": true,
+      "path": "bom.cs",
+      "status": "missing"
+    },
+    {
+      "changed": true,
+      "path": "document.xml",
+      "status": "missing"
+    },
+    {
+      "changed": true,
+      "path": "script.py",
+      "status": "missing"
+    },
+    {
+      "changed": true,
+      "path": "windows.rs",
+      "status": "missing"
+    }
+  ]
+}

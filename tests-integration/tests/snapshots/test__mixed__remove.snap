@@ -1,0 +1,38 @@
+---
+source: tests-integration/tests/test.rs
+expression: "&report"
+---
+{
+  "files": [
+    {
+      "changed": true,
+      "path": "Makefile",
+      "status": "replaceable"
+    },
+    {
+      "changed": true,
+      "path": "app.rs",
+      "status": "replaceable"
+    },
+    {
+      "changed": true,
+      "path": "legacy.rs",
+      "status": "replaceable"
+    },
+    {
+      "changed": true,
+      "path": "not_ignored_without_repository.rs",
+      "status": "replaceable"
+    },
+    {
+      "changed": false,
+      "path": "notes.txt",
+      "status": "unsupported"
+    },
+    {
+      "changed": true,
+      "path": "types.d.ts",
+      "status": "replaceable"
+    }
+  ]
+}

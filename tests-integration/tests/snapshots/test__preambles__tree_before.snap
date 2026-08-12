@@ -1,0 +1,24 @@
+---
+source: tests-integration/tests/test.rs
+expression: tree_snapshot(root)
+---
+=== bom.cs ===
+\u{feff}public class Example {}␊
+=== document.xml ===
+<?xml version="1.0" encoding="UTF-8"?>␊
+␊
+<project />␊
+=== licenserc.toml ===
+[header]␊
+text = "Copyright 2026 Acme Labs"␊
+␊
+[files]␊
+excludes = ["licenserc.toml"]␊
+includes = ["**/*.cs", "**/*.py", "**/*.rs", "**/*.xml"]␊
+=== script.py ===
+#!/usr/bin/env python3␊
+# -*- coding: utf-8 -*-␊
+␊
+print("hello")␊
+=== windows.rs ===
+fn main() {}␍␊

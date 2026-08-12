@@ -1,0 +1,13 @@
+---
+source: tests-integration/tests/test.rs
+expression: "&report"
+---
+{
+  "files": [
+    {
+      "changed": true,
+      "path": "main.rs",
+      "status": "missing"
+    }
+  ]
+}

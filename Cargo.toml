@@ -13,7 +13,7 @@
 # limitations under the License.
 
 [workspace]
-members = ["crates/*", "tests-integration", "xtask"]
+members = ["hawkeye", "tests-integration", "xtask"]
 resolver = "3"
 
 [workspace.package]
@@ -26,7 +26,7 @@ rust-version = "1.88.0"
 
 [workspace.dependencies]
 # Workspace dependencies
-hawkeye = { version = "7.0.0-alpha.1", path = "crates/hawkeye" }
+hawkeye = { version = "7.0.0-alpha.1", path = "hawkeye" }
 
 # crates.io dependencies
 clap = { version = "4.6.6", features = ["derive"] }

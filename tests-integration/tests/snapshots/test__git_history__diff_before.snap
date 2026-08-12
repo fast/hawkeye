@@ -1,0 +1,17 @@
+---
+source: tests-integration/tests/test.rs
+expression: "normalize_year(&stderr(&checked), &year)"
+---
+--- a/app.rs
++++ b/app.rs
+@@ -1,2 +1,4 @@
++// Copyright 2019-<CURRENT_YEAR> Alice, Bob, Current User
++
+ fn feature() {}
+ fn dirty() {}
+--- a/new/fresh.rs
++++ b/new/fresh.rs
+@@ -1 +1,3 @@
++// Copyright <CURRENT_YEAR>-<CURRENT_YEAR> Current User
++
+ fn untracked() {}
