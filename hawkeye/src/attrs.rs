@@ -15,6 +15,7 @@
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::fs;
+use std::io::BufRead;
 use std::path::Path;
 use std::path::PathBuf;
 use std::time::Instant;
@@ -176,29 +177,50 @@ fn read_history(
     repo: &GitRepo,
     selected: &BTreeMap<Vec<u8>, PathBuf>,
 ) -> Result<BTreeMap<PathBuf, GitAttrs>> {
-    const MARKER: u8 = 0x1e;
     if !repo.has_head()? {
         return Ok(BTreeMap::new());
     }
     // NUL separators preserve arbitrary path bytes. The record marker keeps commit metadata
     // distinguishable from a path without relying on Git's quoting rules.
-    let output = repo.output([
-        "-c",
-        "core.quotepath=false",
-        "log",
-        "--full-history",
-        "--no-merges",
-        "--no-renames",
-        "--format=\u{001e}%cI%x00%an",
-        "--name-only",
-        "-z",
-        "--",
-    ])?;
+    repo.read_stdout(
+        [
+            "-c",
+            "core.quotepath=false",
+            "log",
+            "--full-history",
+            "--no-merges",
+            "--no-renames",
+            "--format=\u{001e}%cI%x00%an",
+            "--name-only",
+            "-z",
+            "--",
+        ],
+        |reader| parse_history(reader, selected),
+    )
+}
+
+fn parse_history(
+    reader: &mut dyn BufRead,
+    selected: &BTreeMap<Vec<u8>, PathBuf>,
+) -> Result<BTreeMap<PathBuf, GitAttrs>> {
+    const MARKER: u8 = 0x1e;
     let mut current: Option<(i16, String)> = None;
     let mut expecting_author = false;
     let mut expecting_first_path = false;
     let mut result = BTreeMap::<PathBuf, GitAttrs>::new();
-    for record in output.stdout.split(|byte| *byte == 0) {
+    let mut record = Vec::new();
+    loop {
+        record.clear();
+        let read = reader
+            .read_until(0, &mut record)
+            .map_err(|error| Error::Git(format!("cannot read Git history: {error}")))?;
+        if read == 0 {
+            break;
+        }
+        if record.last() == Some(&0) {
+            record.pop();
+        }
+        let record = record.as_slice();
         if let Some(date) = record.strip_prefix(&[MARKER]) {
             let year = date
                 .get(..4)
@@ -279,4 +301,29 @@ fn utc_year(time: SystemTime) -> Option<i16> {
     Timestamp::try_from(time)
         .ok()
         .map(|timestamp| timestamp.to_zoned(TimeZone::UTC).year())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io::BufReader;
+    use std::io::Cursor;
+
+    use super::*;
+
+    #[test]
+    fn history_parser_handles_records_across_small_buffers() {
+        let selected_path = PathBuf::from("/repo/src/main.rs");
+        let selected = BTreeMap::from([(b"src/main.rs".to_vec(), selected_path.clone())]);
+        let history = b"\x1e2024-01-02T00:00:00Z\0Alice\0\nsrc/main.rs\0other.rs\0\x1e2020-03-04T00:00:00Z\0Bob\0\nsrc/main.rs\0";
+        let mut reader = BufReader::with_capacity(3, Cursor::new(history));
+
+        let attrs = parse_history(&mut reader, &selected).expect("parse history");
+        let attrs = attrs.get(&selected_path).expect("selected file attributes");
+        assert_eq!(attrs.created_year, Some(2020));
+        assert_eq!(attrs.modified_year, Some(2024));
+        assert_eq!(
+            attrs.authors,
+            BTreeSet::from(["Alice".to_owned(), "Bob".to_owned()])
+        );
+    }
 }

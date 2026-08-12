@@ -20,11 +20,11 @@ use std::process::Command;
 use std::process::Output;
 use std::sync::OnceLock;
 
-use jiff::Timestamp;
-use jiff::tz::TimeZone;
 use hawkeye::Engine;
 use hawkeye::Mode;
 use hawkeye::Status;
+use jiff::Timestamp;
+use jiff::tz::TimeZone;
 use serde_json::Value;
 use tempfile::TempDir;
 
@@ -178,7 +178,10 @@ fn shallow_repository_does_not_produce_git_years() {
     let required = hawkeye(project.path(), ["check"]);
     assert_exit(&required, 2);
     assert!(stderr(&required).contains("repository is shallow"));
-    assert_eq!(read_normalized(project.path().join("main.rs")), "fn main() {}\n");
+    assert_eq!(
+        read_normalized(project.path().join("main.rs")),
+        "fn main() {}\n"
+    );
 
     fs::write(
         project.path().join("licenserc.toml"),
@@ -192,8 +195,7 @@ fn shallow_repository_does_not_produce_git_years() {
     assert_exit(&automatic, 0);
     assert!(stderr(&automatic).contains("repository is shallow"));
     assert!(
-        read_normalized(project.path().join("main.rs"))
-            .starts_with("// Copyright 2026 Acme\n\n")
+        read_normalized(project.path().join("main.rs")).starts_with("// Copyright 2026 Acme\n\n")
     );
 }
 
@@ -294,7 +296,10 @@ includes = ["**/*.rs"]
         "{}",
         stderr(&formatted)
     );
-    assert_eq!(read_normalized(project.path().join("main.rs")), "fn main() {}\n");
+    assert_eq!(
+        read_normalized(project.path().join("main.rs")),
+        "fn main() {}\n"
+    );
 }
 
 #[test]

@@ -14,10 +14,16 @@
 
 use std::ffi::OsStr;
 use std::ffi::OsString;
+use std::io::BufRead;
+use std::io::BufReader;
+use std::io::Read;
+use std::io::Seek;
+use std::io::SeekFrom;
 use std::path::Path;
 use std::path::PathBuf;
 use std::process::Command;
 use std::process::Output;
+use std::process::Stdio;
 use std::time::Instant;
 
 use crate::Error;
@@ -182,6 +188,65 @@ impl GitRepo {
             Ok(output)
         } else {
             Err(Error::Git(stderr(&output)))
+        }
+    }
+
+    pub(crate) fn read_stdout<I, S, Value>(
+        &self,
+        arguments: I,
+        read: impl FnOnce(&mut dyn BufRead) -> Result<Value>,
+    ) -> Result<Value>
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<OsStr>,
+    {
+        let arguments = arguments
+            .into_iter()
+            .map(|argument| argument.as_ref().to_owned())
+            .collect::<Vec<_>>();
+        let mut stderr = tempfile::tempfile()
+            .map_err(|error| Error::Git(format!("cannot create Git stderr buffer: {error}")))?;
+        let stderr_writer = stderr
+            .try_clone()
+            .map_err(|error| Error::Git(format!("cannot clone Git stderr buffer: {error}")))?;
+        let started = Instant::now();
+        let mut child = Command::new("git")
+            .args(["-C"])
+            .arg(&self.root)
+            .args(&arguments)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::from(stderr_writer))
+            .spawn()
+            .map_err(|error| Error::Git(format!("cannot start Git: {error}")))?;
+        let stdout = child
+            .stdout
+            .take()
+            .expect("Git stdout was configured as a pipe");
+        let parsed = read(&mut BufReader::new(stdout));
+        if parsed.is_err() {
+            let _ = child.kill();
+        }
+        let status = child
+            .wait()
+            .map_err(|error| Error::Git(format!("cannot wait for Git: {error}")))?;
+        log::debug!("Git {:?} completed in {:?}", arguments, started.elapsed());
+        let value = parsed?;
+        if status.success() {
+            return Ok(value);
+        }
+
+        stderr
+            .seek(SeekFrom::Start(0))
+            .map_err(|error| Error::Git(format!("cannot rewind Git stderr: {error}")))?;
+        let mut bytes = Vec::new();
+        stderr
+            .read_to_end(&mut bytes)
+            .map_err(|error| Error::Git(format!("cannot read Git stderr: {error}")))?;
+        let message = String::from_utf8_lossy(&bytes).trim().to_owned();
+        if message.is_empty() {
+            Err(Error::Git(format!("Git exited with {status}")))
+        } else {
+            Err(Error::Git(message))
         }
     }
 }
