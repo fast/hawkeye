@@ -272,7 +272,7 @@ useDefaultRules = true
 }
 
 #[test]
-fn custom_styles_cannot_replace_builtin_styles() {
+fn custom_styles_override_builtin_styles_with_a_warning() {
     let project = tempfile::tempdir().expect("create style validation project");
     fs::write(
         project.path().join("licenserc.toml"),
@@ -285,13 +285,19 @@ prefix = "# "
 "##,
     )
     .expect("write configuration");
+    fs::write(project.path().join("main.rs"), "fn main() {}\n").expect("write source");
 
-    let checked = hawkeye(project.path(), ["check"]);
-    assert_exit(&checked, 2);
+    let formatted = hawkeye(project.path(), ["format", "--fail-if-updated=false"]);
+    assert_exit(&formatted, 0);
     assert!(
-        stderr(&checked).contains("styles.slash_line conflicts with a built-in style"),
+        stderr(&formatted)
+            .contains("custom style \"slash_line\" overrides a built-in style of the same name"),
         "{}",
-        stderr(&checked)
+        stderr(&formatted)
+    );
+    assert_eq!(
+        read_normalized(project.path().join("main.rs")),
+        "# Copyright 2026 Acme\n\nfn main() {}\n"
     );
 }
 

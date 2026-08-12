@@ -139,7 +139,7 @@ Rules are checked in declaration order, followed by HawkEye's built-in language 
 
 `style_out` is the one canonical output syntax. `styles_in` adds syntaxes that can be structurally recognized and safely replaced or removed. The output style is always accepted as input and need not be repeated. If the leading text parses as a known comment header and contains all configured keywords but its style is not accepted by the rule, HawkEye reports `conflict` instead of guessing a deletion range.
 
-Custom line styles wrap each logical header line with `prefix` and `suffix`. `pad_lines = true` right-pads shorter lines so suffixes align; it requires a non-empty suffix. Custom block styles write `start` and `end` on their own lines and wrap body lines with `prefix` and `suffix`. A custom style name cannot replace a built-in style of the same name.
+Custom line styles wrap each logical header line with `prefix` and `suffix`. `pad_lines = true` right-pads shorter lines so suffixes align; it requires a non-empty suffix. Custom block styles write `start` and `end` on their own lines and wrap body lines with `prefix` and `suffix`. A custom style with the same name as a built-in style overrides it and emits a warning; built-in rules then use the custom definition.
 
 Built-in output styles include line comments for slash, hash, dash, percent, semicolon, apostrophe, bang, tilde, batch, and Haml syntaxes, plus block comments for C, XML, Lua, Pascal, Velocity, Mustache, MVEL, FreeMarker, JSP, ColdFusion, ASP, Swift banners, and AsciiDoc. The built-in filename and extension rules cover the corresponding v6 language set, while user rules always take precedence.
 
