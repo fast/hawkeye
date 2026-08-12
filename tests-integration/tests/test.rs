@@ -272,6 +272,30 @@ useDefaultRules = true
 }
 
 #[test]
+fn custom_styles_cannot_replace_builtin_styles() {
+    let project = tempfile::tempdir().expect("create style validation project");
+    fs::write(
+        project.path().join("licenserc.toml"),
+        r##"[header]
+text = "Copyright 2026 Acme"
+
+[styles.slash_line]
+kind = "line"
+prefix = "# "
+"##,
+    )
+    .expect("write configuration");
+
+    let checked = hawkeye(project.path(), ["check"]);
+    assert_exit(&checked, 2);
+    assert!(
+        stderr(&checked).contains("styles.slash_line conflicts with a built-in style"),
+        "{}",
+        stderr(&checked)
+    );
+}
+
+#[test]
 fn rendered_header_must_include_recognition_keywords() {
     let project = tempfile::tempdir().expect("create template validation project");
     fs::write(

@@ -112,6 +112,11 @@ impl Config {
 
         let mut styles = builtin_styles();
         for (name, style) in self.styles() {
+            if styles.contains_key(name) {
+                return Err(Error::InvalidConfig(format!(
+                    "styles.{name} conflicts with a built-in style of the same name"
+                )));
+            }
             styles.insert(
                 name.clone(),
                 Style::from_config(name.clone(), style.clone()),
