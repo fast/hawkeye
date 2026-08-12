@@ -84,11 +84,12 @@ impl Engine {
                 .transpose()?
                 .filter(|output| output.as_bytes() != original)
                 .map(String::into_bytes);
+            let original = updated.as_ref().map(|_| original);
             files.push(PlannedFile {
                 absolute_path: path,
                 relative_path: relative,
                 status: analysis.status,
-                original: Some(original),
+                original,
                 updated,
                 file_attrs: Some(file_attrs),
             });
@@ -186,7 +187,10 @@ impl PlannedFile {
         self.updated.is_some()
     }
 
-    /// Returns the original UTF-8 source when the file is supported text.
+    /// Returns the original UTF-8 source when this plan contains an edit.
+    ///
+    /// Unchanged source contents are discarded during planning so large checks do not retain every
+    /// selected file in memory.
     pub fn original(&self) -> Option<&str> {
         self.original
             .as_deref()
