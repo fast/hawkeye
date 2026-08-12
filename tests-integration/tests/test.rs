@@ -276,6 +276,38 @@ includes = ["**/*.rs"]
 }
 
 #[test]
+fn php_opening_line_remains_before_the_header() {
+    let project = tempfile::tempdir().expect("create PHP preamble project");
+    fs::write(
+        project.path().join("licenserc.toml"),
+        r#"[header]
+text = "Copyright 2026 Acme"
+
+[files]
+includes = ["**/*.php"]
+"#,
+    )
+    .expect("write configuration");
+    fs::write(
+        project.path().join("main.php"),
+        "<?php declare(strict_types=1);\n\necho \"hello\";\n",
+    )
+    .expect("write PHP source");
+
+    let formatted = hawkeye(
+        project.path(),
+        ["format", "--fail-if-updated=false", "--output", "json"],
+    );
+    assert_exit(&formatted, 0);
+    assert_eq!(
+        read_normalized(project.path().join("main.php")),
+        "<?php declare(strict_types=1);\n/*\n * Copyright 2026 Acme\n */\n\necho \"hello\";\n"
+    );
+    let checked = hawkeye(project.path(), ["check", "--output", "json"]);
+    assert_exit(&checked, 0);
+}
+
+#[test]
 fn header_template_path_is_not_a_source_target() {
     let project = tempfile::tempdir().expect("create header path project");
     fs::write(

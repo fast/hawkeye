@@ -154,7 +154,9 @@ fn preamble_offset(input: &str) -> usize {
     let lower = first.content.to_ascii_lowercase();
     if (first.content.starts_with("#!") && !first.content.starts_with("#!["))
         || (lower.starts_with("<?xml") && lower.ends_with("?>"))
-        || first.content.trim().eq_ignore_ascii_case("<?php")
+        || lower
+            .strip_prefix("<?php")
+            .is_some_and(|tail| tail.chars().next().is_none_or(char::is_whitespace))
         || lower.starts_with("<!doctype ")
         || first.content.starts_with("%YAML")
         || first.content.starts_with("%TAG")
