@@ -164,7 +164,7 @@ let report = plan.report();
 # Ok::<(), hawkeye::Error>(())
 ```
 
-`Config` is the Serde-facing TOML model. `Config::resolve` produces `ResolvedConfig`, which owns resolved paths, compiled templates, styles, and ordered rules. `Engine::plan` performs discovery and analysis without writes; unchanged source contents are discarded instead of being retained for the lifetime of the plan. `Plan::apply` performs atomic same-directory replacements after checking that each input is unchanged. Symbolic links and multiply linked files are not replaced.
+`Config` is the Serde-facing TOML model. `Config::resolve` produces `ResolvedConfig`, which owns resolved paths, compiled templates, styles, and ordered rules. `Engine::plan` performs discovery and analysis without writes; unchanged source contents are discarded instead of being retained for the lifetime of the plan. Before writing anything, `Plan::apply` validates every edited input, then performs atomic same-directory replacements while checking each input again for concurrent changes. Symbolic links and multiply linked files are not replaced.
 
 ## Development
 

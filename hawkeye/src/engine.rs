@@ -28,6 +28,7 @@ use crate::report::FileOutcome;
 use crate::report::Mode;
 use crate::report::Report;
 use crate::report::Status;
+use crate::writer::validate_source;
 use crate::writer::write_atomic;
 
 /// The reusable library entry point for one resolved HawkEye configuration.
@@ -135,6 +136,12 @@ impl Plan {
 
     /// Atomically applies every planned edit after checking for stale inputs.
     pub fn apply(&self) -> Result<Report> {
+        for file in &self.files {
+            let (Some(original), Some(_)) = (&file.original, &file.updated) else {
+                continue;
+            };
+            validate_source(&file.absolute_path, original)?;
+        }
         for file in &self.files {
             let (Some(original), Some(updated)) = (&file.original, &file.updated) else {
                 continue;

@@ -21,7 +21,7 @@ use tempfile::NamedTempFile;
 use crate::Error;
 use crate::Result;
 
-pub(crate) fn write_atomic(path: &Path, expected: &[u8], updated: &[u8]) -> Result<()> {
+pub(crate) fn validate_source(path: &Path, expected: &[u8]) -> Result<()> {
     let metadata = fs::symlink_metadata(path)
         .map_err(|source| Error::io("read metadata for", path, source))?;
     if metadata.file_type().is_symlink() {
@@ -39,6 +39,13 @@ pub(crate) fn write_atomic(path: &Path, expected: &[u8], updated: &[u8]) -> Resu
     if current != expected {
         return Err(Error::StaleFile(path.to_path_buf()));
     }
+    Ok(())
+}
+
+pub(crate) fn write_atomic(path: &Path, expected: &[u8], updated: &[u8]) -> Result<()> {
+    validate_source(path, expected)?;
+    let metadata = fs::symlink_metadata(path)
+        .map_err(|source| Error::io("read metadata for", path, source))?;
 
     let parent = path.parent().ok_or_else(|| {
         Error::InvalidConfig(format!("source path has no parent: {}", path.display()))

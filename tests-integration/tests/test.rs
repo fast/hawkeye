@@ -462,6 +462,36 @@ includes = ["**/*.rs"]
     assert!(missing.updated().is_some());
 }
 
+#[test]
+fn plan_checks_every_input_before_writing_any_file() {
+    let project = tempfile::tempdir().expect("create stale plan project");
+    fs::write(
+        project.path().join("licenserc.toml"),
+        r#"[header]
+text = "Copyright 2026 Acme"
+
+[files]
+includes = ["**/*.rs"]
+"#,
+    )
+    .expect("write configuration");
+    fs::write(project.path().join("a.rs"), "fn a() {}\n").expect("write first source");
+    fs::write(project.path().join("b.rs"), "fn b() {}\n").expect("write second source");
+
+    let engine = Engine::load(project.path().join("licenserc.toml")).expect("load engine");
+    let plan = engine.plan(Mode::Format).expect("plan format");
+    fs::write(project.path().join("b.rs"), "fn b_changed() {}\n")
+        .expect("change second source after planning");
+
+    let error = plan.apply().expect_err("stale plan must fail");
+    assert!(matches!(error, hawkeye::Error::StaleFile(path) if path.ends_with("b.rs")));
+    assert_eq!(read_normalized(project.path().join("a.rs")), "fn a() {}\n");
+    assert_eq!(
+        read_normalized(project.path().join("b.rs")),
+        "fn b_changed() {}\n"
+    );
+}
+
 fn assert_format_lifecycle(name: &str, project: &Path, conflict: bool) {
     assert_tree_snapshot(&format!("{name}__tree_before"), project);
 
