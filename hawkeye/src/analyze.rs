@@ -67,6 +67,16 @@ pub(crate) fn analyze(
     };
 
     if let Some(candidate) = candidate {
+        if candidate.body.lines().count() < header.lines().count()
+            && config
+                .styles()
+                .any(|style| style.extract(input, candidate.range.end).is_some())
+        {
+            return Analysis {
+                status: Status::Conflict,
+                edit: None,
+            };
+        }
         let end = consume_blank_lines(input, candidate.range.end);
         let range = candidate.range.start..end;
         if mode == Mode::Remove {

@@ -245,6 +245,36 @@ includes = ["**/*.rs"]
     assert_eq!(read_normalized(project.path().join("main.rs")), "fn main() {}\n");
 }
 
+#[test]
+fn malformed_header_is_not_partially_replaced() {
+    let project = tempfile::tempdir().expect("create malformed header project");
+    fs::write(
+        project.path().join("licenserc.toml"),
+        r#"[header]
+text = """
+Copyright 2026 Acme
+Licensed under Example
+"""
+
+[files]
+includes = ["**/*.rs"]
+"#,
+    )
+    .expect("write configuration");
+    let source = "// Copyright 2025 Acme\n\n// Licensed under Example\n\nfn main() {}\n";
+    fs::write(project.path().join("main.rs"), source).expect("write malformed header");
+
+    let formatted = hawkeye(
+        project.path(),
+        ["format", "--fail-if-updated=false", "--output", "json"],
+    );
+    assert_exit(&formatted, 1);
+    let report = json(&formatted);
+    assert_eq!(report["files"][0]["status"], "conflict");
+    assert_eq!(report["files"][0]["changed"], false);
+    assert_eq!(read_normalized(project.path().join("main.rs")), source);
+}
+
 fn assert_format_lifecycle(name: &str, project: &Path, conflict: bool) {
     assert_tree_snapshot(&format!("{name}__tree_before"), project);
 
