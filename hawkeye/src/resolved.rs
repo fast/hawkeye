@@ -191,7 +191,19 @@ impl ResolvedConfig {
     }
 
     pub(crate) fn render_header(&self, attrs: &FileAttrs) -> Result<String> {
-        self.template.render(&self.props, attrs)
+        let header = self.template.render(&self.props, attrs)?;
+        let folded = header.to_lowercase();
+        if let Some(keyword) = self
+            .keywords
+            .iter()
+            .find(|keyword| !folded.contains(keyword.as_str()))
+        {
+            return Err(Error::InvalidConfig(format!(
+                "header template output for {:?} does not contain recognition keyword {keyword:?}",
+                attrs.filename
+            )));
+        }
+        Ok(header)
     }
 
     pub(crate) fn keywords(&self) -> &[String] {

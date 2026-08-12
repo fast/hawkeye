@@ -217,6 +217,34 @@ useDefaultRules = true
     assert!(stderr(&invalid).contains("useDefaultRules"));
 }
 
+#[test]
+fn rendered_header_must_include_recognition_keywords() {
+    let project = tempfile::tempdir().expect("create template validation project");
+    fs::write(
+        project.path().join("licenserc.toml"),
+        r#"[header]
+text = "Confidential Siemens 2026"
+
+[files]
+includes = ["**/*.rs"]
+"#,
+    )
+    .expect("write configuration");
+    fs::write(project.path().join("main.rs"), "fn main() {}\n").expect("write source");
+
+    let formatted = hawkeye(
+        project.path(),
+        ["format", "--fail-if-updated=false", "--output", "json"],
+    );
+    assert_exit(&formatted, 2);
+    assert!(
+        stderr(&formatted).contains("does not contain recognition keyword \"copyright\""),
+        "{}",
+        stderr(&formatted)
+    );
+    assert_eq!(read_normalized(project.path().join("main.rs")), "fn main() {}\n");
+}
+
 fn assert_format_lifecycle(name: &str, project: &Path, conflict: bool) {
     assert_tree_snapshot(&format!("{name}__tree_before"), project);
 
