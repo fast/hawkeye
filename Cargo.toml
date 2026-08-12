@@ -30,19 +30,19 @@ hawkeye = { version = "7.0.0-alpha.1", path = "hawkeye" }
 
 # crates.io dependencies
 clap = { version = "4.6.6", features = ["derive"] }
-exn = "0.3.1"
-ignore = "0.4.33"
+exn = { version = "0.3.1" }
+ignore = { version = "0.4.33" }
 insta = { version = "1.48.0", features = ["json"] }
 jiff = { version = "0.2.35", default-features = false, features = ["std"] }
 log = { version = "0.4.28", features = ["kv_serde", "serde"] }
 logforth = { version = "0.29.1", features = ["starter-log"] }
-minijinja = "2.23.0"
+minijinja = { version = "2.23.0" }
 serde = { version = "1.0.229", features = ["derive"] }
-serde_json = "1.0.151"
-similar = "3.1.2"
-tempfile = "3.27.0"
-toml = "1.1.4"
-which = "8.0.4"
+serde_json = { version = "1.0.151" }
+similar = { version = "3.1.2" }
+tempfile = { version = "3.27.0" }
+toml = { version = "1.1.4" }
+which = { version = "8.0.4" }
 
 [workspace.lints.rust]
 unknown_lints = "deny"

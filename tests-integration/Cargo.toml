@@ -24,11 +24,11 @@ rust-version.workspace = true
 release = false
 
 [dev-dependencies]
-hawkeye.workspace = true
-insta.workspace = true
-jiff.workspace = true
-serde_json.workspace = true
-tempfile.workspace = true
+hawkeye = { workspace = true }
+insta = { workspace = true }
+jiff = { workspace = true }
+serde_json = { workspace = true }
+tempfile = { workspace = true }
 
 [lints]
 workspace = true
