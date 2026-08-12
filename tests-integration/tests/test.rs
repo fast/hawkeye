@@ -363,6 +363,36 @@ includes = ["**/*.rs"]
 }
 
 #[test]
+fn adjacent_line_comments_are_not_consumed_as_header_text() {
+    for command in ["format", "remove"] {
+        let project = tempfile::tempdir().expect("create adjacent comment project");
+        fs::write(
+            project.path().join("licenserc.toml"),
+            r#"[header]
+text = "Copyright 2026 Acme"
+
+[files]
+includes = ["**/*.rs"]
+"#,
+        )
+        .expect("write configuration");
+        let source =
+            "// Copyright 2026 Acme\n// SAFETY: this comment belongs to the code.\nfn main() {}\n";
+        fs::write(project.path().join("main.rs"), source).expect("write source");
+
+        let result = hawkeye(
+            project.path(),
+            [command, "--fail-if-updated=false", "--output", "json"],
+        );
+        assert_exit(&result, 1);
+        let report = json(&result);
+        assert_eq!(report["files"][0]["status"], "conflict");
+        assert_eq!(report["files"][0]["changed"], false);
+        assert_eq!(read_normalized(project.path().join("main.rs")), source);
+    }
+}
+
+#[test]
 fn php_opening_line_remains_before_the_header() {
     let project = tempfile::tempdir().expect("create PHP preamble project");
     fs::write(

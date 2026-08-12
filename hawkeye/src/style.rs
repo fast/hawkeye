@@ -126,6 +126,10 @@ impl Style {
         output
     }
 
+    pub(crate) fn is_line(&self) -> bool {
+        matches!(self.syntax, Syntax::Line { .. })
+    }
+
     pub(crate) fn extract(&self, input: &str, offset: usize) -> Option<Candidate> {
         let start = skip_blank_lines(input, offset);
         let (range, body) = match &self.syntax {

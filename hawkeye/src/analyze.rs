@@ -67,10 +67,13 @@ pub(crate) fn analyze(
     };
 
     if let Some(candidate) = candidate {
-        if candidate.body.lines().count() < header.lines().count()
-            && config
-                .styles()
-                .any(|style| style.extract(input, candidate.range.end).is_some())
+        let candidate_lines = candidate.body.lines().count();
+        let header_lines = header.lines().count();
+        if (config.style(&candidate.style).is_line() && candidate_lines > header_lines)
+            || (candidate_lines < header_lines
+                && config
+                    .styles()
+                    .any(|style| style.extract(input, candidate.range.end).is_some()))
         {
             return Analysis {
                 status: Status::Conflict,
