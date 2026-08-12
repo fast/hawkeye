@@ -19,7 +19,6 @@ use crate::edit::Edit;
 use crate::report::Mode;
 use crate::report::Status;
 use crate::style::Candidate;
-use crate::style::consume_blank_lines;
 use crate::style::skip_blank_lines;
 
 pub(crate) struct Analysis {
@@ -80,7 +79,7 @@ pub(crate) fn analyze(
                 edit: None,
             };
         }
-        let end = consume_blank_lines(input, candidate.range.end);
+        let end = skip_blank_lines(input, candidate.range.end);
         let range = candidate.range.start..end;
         if mode == Mode::Remove {
             return Analysis {

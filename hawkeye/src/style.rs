@@ -302,19 +302,6 @@ pub(crate) fn skip_blank_lines(input: &str, mut position: usize) -> usize {
     position
 }
 
-pub(crate) fn consume_blank_lines(input: &str, mut position: usize) -> usize {
-    while let Some(line) = next_line(input, position) {
-        if !line.content.trim().is_empty() {
-            break;
-        }
-        position = line.end;
-        if position == input.len() {
-            break;
-        }
-    }
-    position
-}
-
 fn truncate_trailing_spaces(output: &mut String) {
     let trimmed = output.trim_end_matches([' ', '\t']).len();
     output.truncate(trimmed);
