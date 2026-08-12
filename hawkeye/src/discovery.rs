@@ -63,6 +63,9 @@ pub(crate) fn discover(config: &ResolvedConfig, repo: Option<&GitRepo>) -> Resul
         );
     }
 
+    if let Some(header_path) = config.header_path() {
+        files.remove(header_path);
+    }
     Ok(files.into_iter().collect())
 }
 

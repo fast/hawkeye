@@ -275,6 +275,37 @@ includes = ["**/*.rs"]
     assert_eq!(read_normalized(project.path().join("main.rs")), source);
 }
 
+#[test]
+fn header_template_path_is_not_a_source_target() {
+    let project = tempfile::tempdir().expect("create header path project");
+    fs::write(
+        project.path().join("licenserc.toml"),
+        r#"[header]
+path = "license.rs"
+
+[files]
+includes = ["**/*.rs"]
+"#,
+    )
+    .expect("write configuration");
+    fs::write(project.path().join("license.rs"), "Copyright 2026 Acme\n")
+        .expect("write header template");
+    fs::write(project.path().join("main.rs"), "fn main() {}\n").expect("write source");
+
+    let formatted = hawkeye(
+        project.path(),
+        ["format", "--fail-if-updated=false", "--output", "json"],
+    );
+    assert_exit(&formatted, 0);
+    let report = json(&formatted);
+    assert_eq!(report["files"].as_array().map(Vec::len), Some(1));
+    assert_eq!(report["files"][0]["path"], "main.rs");
+    assert_eq!(
+        read_normalized(project.path().join("license.rs")),
+        "Copyright 2026 Acme\n"
+    );
+}
+
 fn assert_format_lifecycle(name: &str, project: &Path, conflict: bool) {
     assert_tree_snapshot(&format!("{name}__tree_before"), project);
 

@@ -31,6 +31,7 @@ use crate::template::HeaderTemplate;
 pub struct ResolvedConfig {
     config_path: PathBuf,
     root: PathBuf,
+    header_path: Option<PathBuf>,
     includes: Vec<String>,
     excludes: Vec<String>,
     props: BTreeMap<String, toml::Value>,
@@ -78,22 +79,34 @@ impl Config {
             )));
         }
 
-        let source = if let Some(key) = self.header().builtin() {
-            builtin_header(key).ok_or_else(|| {
-                Error::InvalidConfig(format!(
-                    "unknown header.builtin {key:?}; available values are Apache-2.0, Apache-2.0-ASF, and Elastic-2.0"
-                ))
-            })?
-            .to_owned()
+        let (source, header_path) = if let Some(key) = self.header().builtin() {
+            (
+                builtin_header(key).ok_or_else(|| {
+                    Error::InvalidConfig(format!(
+                        "unknown header.builtin {key:?}; available values are Apache-2.0, Apache-2.0-ASF, and Elastic-2.0"
+                    ))
+                })?
+                .to_owned(),
+                None,
+            )
         } else if let Some(path) = self.header().path() {
             let path = resolve_path(config_dir, path);
-            fs::read_to_string(&path)
-                .map_err(|source| Error::io("read header template", &path, source))?
+            let path = path
+                .canonicalize()
+                .map_err(|source| Error::io("resolve header template", &path, source))?;
+            (
+                fs::read_to_string(&path)
+                    .map_err(|source| Error::io("read header template", &path, source))?,
+                Some(path),
+            )
         } else {
-            self.header()
-                .text()
-                .expect("Config validation guarantees exactly one header source")
-                .to_owned()
+            (
+                self.header()
+                    .text()
+                    .expect("Config validation guarantees exactly one header source")
+                    .to_owned(),
+                None,
+            )
         };
         let template = HeaderTemplate::new(source)?;
 
@@ -125,6 +138,7 @@ impl Config {
         Ok(ResolvedConfig {
             config_path,
             root,
+            header_path,
             includes: self.files().includes().to_vec(),
             excludes: self.files().excludes().to_vec(),
             props: self.props().clone(),
@@ -178,6 +192,10 @@ impl ResolvedConfig {
 
     pub(crate) fn rule_for(&self, path: &Path) -> Option<&Rule> {
         self.rules.iter().find(|rule| rule.matches(path))
+    }
+
+    pub(crate) fn header_path(&self) -> Option<&Path> {
+        self.header_path.as_deref()
     }
 
     pub(crate) fn style(&self, name: &str) -> &Style {
