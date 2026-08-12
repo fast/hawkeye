@@ -20,6 +20,14 @@ HawkEye checks, formats, and removes source-file license headers. The package in
 
 HawkEye v7 deliberately uses a new snake-case configuration contract. It does not accept v6 field aliases; migration tooling belongs in a separate tool rather than the runtime parser.
 
+## Installation
+
+The v7 prerelease is distributed through crates.io and includes both the `hawkeye` library and command-line binary:
+
+```shell
+cargo install hawkeye --version 7.0.0-alpha.1 --locked
+```
+
 ## Command line
 
 Unless `--config` is passed, HawkEye tries `licenserc.toml` and then `.licenserc.toml` in the current directory. It does not search parent directories.
@@ -162,7 +170,10 @@ Repository workflows are exposed through `cargo x`:
 cargo x build
 cargo x test
 cargo x lint
+cargo x publish
 ```
+
+`cargo x publish` runs Cargo's complete crates.io packaging and verification flow without uploading. After the intended version is committed on `main` and the worktree is clean, `cargo x publish --execute` performs the irreversible upload. The command does not create GitHub releases or distribution artifacts.
 
 The virtual workspace keeps the product, integration corpus, and development tasks separate without introducing a `crates` directory for a single published package:
 

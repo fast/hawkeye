@@ -13,8 +13,11 @@
 # limitations under the License.
 
 [package]
+categories = ["command-line-utilities", "development-tools"]
 description = "A license header checker and formatter."
+keywords = ["copyright", "header", "license", "source-code"]
 name = "hawkeye"
+publish = ["crates-io"]
 version = "7.0.0-alpha.1"
 
 edition.workspace = true

@@ -36,6 +36,7 @@ impl Command {
         match self.sub {
             SubCommand::Build(cmd) => cmd.run(),
             SubCommand::Lint(cmd) => cmd.run(),
+            SubCommand::Publish(cmd) => cmd.run(),
             SubCommand::Test(cmd) => cmd.run(),
         }
     }
@@ -47,6 +48,8 @@ enum SubCommand {
     Build(CommandBuild),
     #[clap(about = "Run workspace quality checks.")]
     Lint(CommandLint),
+    #[clap(about = "Validate or publish the hawkeye crate to crates.io.")]
+    Publish(CommandPublish),
     #[clap(about = "Run workspace unit tests.")]
     Test(CommandTest),
 }
@@ -72,6 +75,18 @@ struct CommandTest {
 impl CommandTest {
     fn run(self) {
         run_command(make_test_cmd(self.no_capture, &[]));
+    }
+}
+
+#[derive(Parser)]
+struct CommandPublish {
+    #[arg(long, help = "Upload the crate instead of running Cargo's dry run.")]
+    execute: bool,
+}
+
+impl CommandPublish {
+    fn run(self) {
+        run_command(make_publish_cmd(self.execute));
     }
 }
 
@@ -145,6 +160,15 @@ fn make_test_cmd(no_capture: bool, features: &[&str]) -> StdCommand {
     }
     if no_capture {
         cmd.args(["--", "--nocapture"]);
+    }
+    cmd
+}
+
+fn make_publish_cmd(execute: bool) -> StdCommand {
+    let mut cmd = find_command("cargo");
+    cmd.args(["publish", "--locked", "--package", "hawkeye"]);
+    if !execute {
+        cmd.arg("--dry-run");
     }
     cmd
 }
