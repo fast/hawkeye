@@ -19,6 +19,7 @@
 
 mod analyze;
 mod attrs;
+mod config;
 mod discovery;
 mod edit;
 mod engine;
@@ -30,8 +31,17 @@ mod style;
 mod template;
 mod writer;
 
-pub mod config;
 pub use self::attrs::FileAttrs;
+pub use self::config::Config;
+pub use self::config::ConfigError;
+pub use self::config::FeatureMode;
+pub use self::config::FilesConfig;
+pub use self::config::GitConfig;
+pub use self::config::HeaderConfig;
+pub use self::config::RuleConfig;
+pub use self::config::StyleConfig;
+pub use self::config::ValidationErrors;
+pub use self::config::ValidationIssue;
 pub use self::engine::Engine;
 pub use self::engine::Plan;
 pub use self::engine::PlannedFile;

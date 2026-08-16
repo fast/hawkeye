@@ -27,9 +27,6 @@ use std::str::FromStr;
 
 use serde::Deserialize;
 
-/// Configuration filenames tried by the command-line tool, in priority order.
-pub const DEFAULT_CONFIG_FILES: [&str; 2] = ["licenserc.toml", ".licenserc.toml"];
-
 /// A parsed and locally validated `licenserc.toml` document.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]

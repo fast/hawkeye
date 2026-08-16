@@ -29,9 +29,10 @@ use hawkeye::Mode;
 use hawkeye::Plan;
 use hawkeye::Report;
 use hawkeye::Status;
-use hawkeye::config::DEFAULT_CONFIG_FILES;
 use logforth::filter::env_filter::EnvFilterBuilder;
 use similar::TextDiff;
+
+const DEFAULT_CONFIG_FILES: [&str; 2] = ["licenserc.toml", ".licenserc.toml"];
 
 #[derive(Debug, Parser)]
 #[command(version, about)]
