@@ -46,7 +46,7 @@ hawkeye format --fail-if-updated=false
 hawkeye remove --fail-if-updated=false
 
 # Emit the stable data shape without a separate report version.
-hawkeye check --output json
+hawkeye check --output-format json
 
 # Inspect file discovery, Git commands, and timing.
 RUST_LOG=hawkeye=debug hawkeye check

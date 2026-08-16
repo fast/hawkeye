@@ -35,7 +35,7 @@ fn mixed_repository_lifecycle() {
 
     let removed = hawkeye(
         project.path(),
-        ["remove", "--fail-if-updated=false", "--output", "json"],
+        ["remove", "--fail-if-updated=false", "--output-format=json"],
     );
     assert_exit(&removed, 0);
     assert_json_snapshot("mixed__remove", &removed);
@@ -135,7 +135,7 @@ ignore = "enable"
     fs::write(repository.join("main.rs"), "fn main() {}\n").expect("write source");
     git(&repository, ["init", "-b", "main"]);
 
-    let checked = hawkeye(&repository, ["check", "--output", "json"]);
+    let checked = hawkeye(&repository, ["check", "--output-format=json"]);
     assert_exit(&checked, 1);
     let report = json(&checked);
     assert_eq!(report["files"][0]["path"], "main.rs");
@@ -150,7 +150,7 @@ fn git_history_branches_dirty_files_and_untracked_directories() {
 
     assert_tree_snapshot("git_history__tree_before", project.path());
 
-    let checked = hawkeye(project.path(), ["check", "--diff", "--output", "json"]);
+    let checked = hawkeye(project.path(), ["check", "--diff", "--output-format=json"]);
     assert_exit(&checked, 1);
     assert_json_snapshot("git_history__check_before", &checked);
     insta::assert_snapshot!(
@@ -160,7 +160,7 @@ fn git_history_branches_dirty_files_and_untracked_directories() {
 
     let formatted = hawkeye(
         project.path(),
-        ["format", "--fail-if-updated=false", "--output", "json"],
+        ["format", "--fail-if-updated=false", "--output-format=json"],
     );
     assert_exit(&formatted, 0);
     assert_json_snapshot("git_history__format", &formatted);
@@ -169,13 +169,13 @@ fn git_history_branches_dirty_files_and_untracked_directories() {
         normalize_year(&tree_snapshot(project.path()), &year)
     );
 
-    let checked = hawkeye(project.path(), ["check", "--output", "json"]);
+    let checked = hawkeye(project.path(), ["check", "--output-format=json"]);
     assert_exit(&checked, 0);
     assert_json_snapshot("git_history__check_after", &checked);
 
     let idempotent = hawkeye(
         project.path(),
-        ["format", "--fail-if-updated=false", "--output", "json"],
+        ["format", "--fail-if-updated=false", "--output-format=json"],
     );
     assert_exit(&idempotent, 0);
     let report = assert_json_snapshot("git_history__format_idempotent", &idempotent);
@@ -224,7 +224,7 @@ fn shallow_repository_does_not_produce_git_years() {
     .expect("write automatic Git attributes configuration");
     let automatic = hawkeye(
         project.path(),
-        ["format", "--fail-if-updated=false", "--output", "json"],
+        ["format", "--fail-if-updated=false", "--output-format=json"],
     );
     assert_exit(&automatic, 0);
     assert!(stderr(&automatic).contains("repository is shallow"));
@@ -246,7 +246,7 @@ ignore = "disable"
 "#,
     )
     .expect("write empty selection configuration");
-    let empty = hawkeye(project.path(), ["check", "--output", "json"]);
+    let empty = hawkeye(project.path(), ["check", "--output-format=json"]);
     assert_exit(&empty, 0);
     assert_eq!(json(&empty)["files"].as_array().map(Vec::len), Some(0));
 }
@@ -370,7 +370,7 @@ includes = ["**/*.rs"]
 
     let formatted = hawkeye(
         project.path(),
-        ["format", "--fail-if-updated=false", "--output", "json"],
+        ["format", "--fail-if-updated=false", "--output-format=json"],
     );
     assert_exit(&formatted, 2);
     assert!(
@@ -405,7 +405,7 @@ includes = ["**/*.rs"]
 
     let formatted = hawkeye(
         project.path(),
-        ["format", "--fail-if-updated=false", "--output", "json"],
+        ["format", "--fail-if-updated=false", "--output-format=json"],
     );
     assert_exit(&formatted, 1);
     let report = json(&formatted);
@@ -439,7 +439,7 @@ includes = ["**/*.rs"]
 
         let result = hawkeye(
             project.path(),
-            [command, "--fail-if-updated=false", "--output", "json"],
+            [command, "--fail-if-updated=false", "--output-format=json"],
         );
         assert_exit(&result, 1);
         let report = json(&result);
@@ -470,14 +470,14 @@ includes = ["**/*.php"]
 
     let formatted = hawkeye(
         project.path(),
-        ["format", "--fail-if-updated=false", "--output", "json"],
+        ["format", "--fail-if-updated=false", "--output-format=json"],
     );
     assert_exit(&formatted, 0);
     assert_eq!(
         read_normalized(project.path().join("main.php")),
         "<?php declare(strict_types=1);\n/*\n * Copyright 2026 Acme\n */\n\necho \"hello\";\n"
     );
-    let checked = hawkeye(project.path(), ["check", "--output", "json"]);
+    let checked = hawkeye(project.path(), ["check", "--output-format=json"]);
     assert_exit(&checked, 0);
 }
 
@@ -500,7 +500,7 @@ includes = ["**/*.rs"]
 
     let formatted = hawkeye(
         project.path(),
-        ["format", "--fail-if-updated=false", "--output", "json"],
+        ["format", "--fail-if-updated=false", "--output-format=json"],
     );
     assert_exit(&formatted, 0);
     let report = json(&formatted);
@@ -588,26 +588,26 @@ includes = ["**/*.rs"]
 fn assert_format_lifecycle(name: &str, project: &Path, conflict: bool) {
     assert_tree_snapshot(&format!("{name}__tree_before"), project);
 
-    let checked = hawkeye(project, ["check", "--output", "json"]);
+    let checked = hawkeye(project, ["check", "--output-format=json"]);
     assert_exit(&checked, 1);
     assert_json_snapshot(&format!("{name}__check_before"), &checked);
 
     let formatted = hawkeye(
         project,
-        ["format", "--fail-if-updated=false", "--output", "json"],
+        ["format", "--fail-if-updated=false", "--output-format=json"],
     );
     assert_exit(&formatted, i32::from(conflict));
     let formatted_report = assert_json_snapshot(&format!("{name}__format"), &formatted);
     assert!(changed_files(&formatted_report) > 0);
     assert_tree_snapshot(&format!("{name}__tree_after"), project);
 
-    let checked = hawkeye(project, ["check", "--output", "json"]);
+    let checked = hawkeye(project, ["check", "--output-format=json"]);
     assert_exit(&checked, i32::from(conflict));
     assert_json_snapshot(&format!("{name}__check_after"), &checked);
 
     let idempotent = hawkeye(
         project,
-        ["format", "--fail-if-updated=false", "--output", "json"],
+        ["format", "--fail-if-updated=false", "--output-format=json"],
     );
     assert_exit(&idempotent, i32::from(conflict));
     let idempotent_report =

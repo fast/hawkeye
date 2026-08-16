@@ -37,22 +37,24 @@ const DEFAULT_CONFIG_FILES: [&str; 2] = ["licenserc.toml", ".licenserc.toml"];
 #[derive(Debug, Parser)]
 #[command(version, about)]
 struct Command {
+    #[arg(long, global = true, help = "path to the config file")]
+    config: Option<PathBuf>,
+
     #[arg(
         long,
         global = true,
-        help = "Configuration file; otherwise try licenserc.toml and .licenserc.toml in the current directory"
+        value_enum,
+        help = "output format",
+        default_value_t = OutputFormat::Human
     )]
-    config: Option<PathBuf>,
-
-    #[arg(long, global = true, value_enum, default_value_t = Output::Human)]
-    output: Output,
+    output_format: OutputFormat,
 
     #[command(subcommand)]
     subcommand: SubcommandOptions,
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
-enum Output {
+enum OutputFormat {
     Human,
     Json,
 }
@@ -126,18 +128,27 @@ fn run(command: Command) -> CliResult<ExitCode> {
             let plan = engine
                 .plan(mode)
                 .or_raise(|| CliError::new("cannot analyze selected files"))?;
-            emit(&plan, command.output, options.diff)?;
+            emit(&plan, command.output_format, options.diff)?;
             let report = plan.report();
             let failed = report.has_violations()
                 || (options.fail_if_unknown && report.count(Status::Unsupported) > 0);
             Ok(policy_exit(failed))
         }
-        SubcommandOptions::Format(options) => edit(&engine, Mode::Format, options, command.output),
-        SubcommandOptions::Remove(options) => edit(&engine, Mode::Remove, options, command.output),
+        SubcommandOptions::Format(options) => {
+            edit(&engine, Mode::Format, options, command.output_format)
+        }
+        SubcommandOptions::Remove(options) => {
+            edit(&engine, Mode::Remove, options, command.output_format)
+        }
     }
 }
 
-fn edit(engine: &Engine, mode: Mode, options: EditOptions, output: Output) -> CliResult<ExitCode> {
+fn edit(
+    engine: &Engine,
+    mode: Mode,
+    options: EditOptions,
+    output_format: OutputFormat,
+) -> CliResult<ExitCode> {
     let plan = engine
         .plan(mode)
         .or_raise(|| CliError::new("cannot analyze selected files"))?;
@@ -147,18 +158,18 @@ fn edit(engine: &Engine, mode: Mode, options: EditOptions, output: Output) -> Cl
         plan.apply()
             .or_raise(|| CliError::new("cannot apply planned file edits"))?
     };
-    emit(&plan, output, options.diff)?;
+    emit(&plan, output_format, options.diff)?;
     let failed = report.count(Status::Conflict) > 0
         || (options.fail_if_unknown && report.count(Status::Unsupported) > 0)
         || (options.fail_if_updated && report.changed() > 0);
     Ok(policy_exit(failed))
 }
 
-fn emit(plan: &Plan, output: Output, show_diff: bool) -> CliResult<()> {
+fn emit(plan: &Plan, output_format: OutputFormat, show_diff: bool) -> CliResult<()> {
     if show_diff {
-        let mut writer: Box<dyn Write> = match output {
-            Output::Human => Box::new(io::stdout().lock()),
-            Output::Json => Box::new(io::stderr().lock()),
+        let mut writer: Box<dyn Write> = match output_format {
+            OutputFormat::Human => Box::new(io::stdout().lock()),
+            OutputFormat::Json => Box::new(io::stderr().lock()),
         };
         for file in plan.files().iter().filter(|file| file.changed()) {
             let old = file.original().expect("changed files are UTF-8");
@@ -175,10 +186,10 @@ fn emit(plan: &Plan, output: Output, show_diff: bool) -> CliResult<()> {
     }
 
     let report = plan.report();
-    match output {
-        Output::Human => emit_human(plan, &report)
+    match output_format {
+        OutputFormat::Human => emit_human(plan, &report)
             .or_raise(|| CliError::new("cannot write human-readable report"))?,
-        Output::Json => {
+        OutputFormat::Json => {
             let mut stdout = io::stdout().lock();
             serde_json::to_writer_pretty(&mut stdout, &report)
                 .or_raise(|| CliError::new("cannot serialize JSON report"))?;
