@@ -150,13 +150,9 @@ fn git_history_branches_dirty_files_and_untracked_directories() {
 
     assert_tree_snapshot("git_history__tree_before", project.path());
 
-    let checked = hawkeye(project.path(), ["check", "--diff", "--output-format=json"]);
+    let checked = hawkeye(project.path(), ["check", "--output-format=json"]);
     assert_exit(&checked, 1);
     assert_json_snapshot("git_history__check_before", &checked);
-    insta::assert_snapshot!(
-        "git_history__diff_before",
-        normalize_year(&stderr(&checked), &year)
-    );
 
     let formatted = hawkeye(
         project.path(),
@@ -272,9 +268,20 @@ includes = ["**/*.rs"]
     assert_exit(&implicit, 2);
     assert!(stderr(&implicit).contains("licenserc.toml"));
 
-    let configured = hawkeye(&child, ["--config", "../licenserc.toml", "check", "--diff"]);
-    assert_exit(&configured, 1);
-    assert!(stdout(&configured).contains("Copyright 2026 Parent"));
+    let configured = hawkeye(
+        &child,
+        [
+            "--config",
+            "../licenserc.toml",
+            "format",
+            "--fail-if-updated=false",
+        ],
+    );
+    assert_exit(&configured, 0);
+    assert_eq!(
+        read_normalized(child.join("source.rs")),
+        "// Copyright 2026 Parent\n\nfn child() {}\n"
+    );
 
     let fallback = tempfile::tempdir().expect("create fallback config project");
     fs::write(
@@ -289,9 +296,12 @@ includes = ["**/*.rs"]
     .expect("write fallback config");
     fs::write(fallback.path().join("fallback.rs"), "fn fallback() {}\n")
         .expect("write fallback source");
-    let fallback_result = hawkeye(fallback.path(), ["check", "--diff"]);
-    assert_exit(&fallback_result, 1);
-    assert!(stdout(&fallback_result).contains("Copyright 2026 Fallback"));
+    let fallback_result = hawkeye(fallback.path(), ["format", "--fail-if-updated=false"]);
+    assert_exit(&fallback_result, 0);
+    assert_eq!(
+        read_normalized(fallback.path().join("fallback.rs")),
+        "// Copyright 2026 Fallback\n\nfn fallback() {}\n"
+    );
 
     fs::write(
         fallback.path().join("licenserc.toml"),
@@ -303,10 +313,12 @@ includes = ["**/*.rs"]
 "#,
     )
     .expect("write primary config");
-    let primary_result = hawkeye(fallback.path(), ["check", "--diff"]);
-    assert_exit(&primary_result, 1);
-    assert!(stdout(&primary_result).contains("Copyright 2026 Primary"));
-    assert!(!stdout(&primary_result).contains("Copyright 2026 Fallback"));
+    let primary_result = hawkeye(fallback.path(), ["format", "--fail-if-updated=false"]);
+    assert_exit(&primary_result, 0);
+    assert_eq!(
+        read_normalized(fallback.path().join("fallback.rs")),
+        "// Copyright 2026 Primary\n\nfn fallback() {}\n"
+    );
 
     fs::write(
         child.join("bad.toml"),

@@ -30,7 +30,6 @@ use hawkeye::Plan;
 use hawkeye::Report;
 use hawkeye::Status;
 use logforth::filter::env_filter::EnvFilterBuilder;
-use similar::TextDiff;
 
 const DEFAULT_CONFIG_FILES: [&str; 2] = ["licenserc.toml", ".licenserc.toml"];
 
@@ -71,10 +70,6 @@ enum SubcommandOptions {
 
 #[derive(Debug, Args)]
 struct CheckOptions {
-    /// Print the edits that `format` would make.
-    #[arg(long)]
-    diff: bool,
-
     /// Fail when selected files have no rule or are not UTF-8 text.
     #[arg(long)]
     fail_if_unknown: bool,
@@ -85,10 +80,6 @@ struct EditOptions {
     /// Plan changes without writing them.
     #[arg(long)]
     dry_run: bool,
-
-    /// Print unified diffs for planned changes.
-    #[arg(long)]
-    diff: bool,
 
     /// Fail when selected files have no rule or are not UTF-8 text.
     #[arg(long)]
@@ -120,15 +111,10 @@ fn run(command: Command) -> CliResult<ExitCode> {
         .or_raise(|| CliError::new(format!("cannot load configuration {}", config.display())))?;
     match command.subcommand {
         SubcommandOptions::Check(options) => {
-            let mode = if options.diff {
-                Mode::Format
-            } else {
-                Mode::Check
-            };
             let plan = engine
-                .plan(mode)
+                .plan(Mode::Check)
                 .or_raise(|| CliError::new("cannot analyze selected files"))?;
-            emit(&plan, command.output_format, options.diff)?;
+            emit(&plan, command.output_format)?;
             let report = plan.report();
             let failed = report.has_violations()
                 || (options.fail_if_unknown && report.count(Status::Unsupported) > 0);
@@ -158,33 +144,14 @@ fn edit(
         plan.apply()
             .or_raise(|| CliError::new("cannot apply planned file edits"))?
     };
-    emit(&plan, output_format, options.diff)?;
+    emit(&plan, output_format)?;
     let failed = report.count(Status::Conflict) > 0
         || (options.fail_if_unknown && report.count(Status::Unsupported) > 0)
         || (options.fail_if_updated && report.changed() > 0);
     Ok(policy_exit(failed))
 }
 
-fn emit(plan: &Plan, output_format: OutputFormat, show_diff: bool) -> CliResult<()> {
-    if show_diff {
-        let mut writer: Box<dyn Write> = match output_format {
-            OutputFormat::Human => Box::new(io::stdout().lock()),
-            OutputFormat::Json => Box::new(io::stderr().lock()),
-        };
-        for file in plan.files().iter().filter(|file| file.changed()) {
-            let old = file.original().expect("changed files are UTF-8");
-            let new = file.updated().expect("changed files have replacement text");
-            let path = file.path().to_string_lossy().replace('\\', "/");
-            let diff = TextDiff::from_lines(old, new)
-                .unified_diff()
-                .header(&format!("a/{path}"), &format!("b/{path}"))
-                .to_string();
-            writer
-                .write_all(diff.as_bytes())
-                .or_raise(|| CliError::new("cannot write diff output"))?;
-        }
-    }
-
+fn emit(plan: &Plan, output_format: OutputFormat) -> CliResult<()> {
     let report = plan.report();
     match output_format {
         OutputFormat::Human => emit_human(plan, &report)
