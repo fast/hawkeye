@@ -33,7 +33,7 @@ path = "src/lib.rs"
 
 [[bin]]
 name = "hawkeye"
-path = "src/main.rs"
+path = "src/bin/hawkeye/main.rs"
 
 [dependencies]
 clap = { workspace = true }
