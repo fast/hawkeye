@@ -19,7 +19,6 @@
 
 mod analyze;
 mod attrs;
-pub mod config;
 mod discovery;
 mod edit;
 mod engine;
@@ -31,14 +30,15 @@ mod style;
 mod template;
 mod writer;
 
-pub use attrs::FileAttrs;
-pub use engine::Engine;
-pub use engine::Plan;
-pub use engine::PlannedFile;
-pub use error::Error;
-pub use error::Result;
-pub use report::FileOutcome;
-pub use report::Mode;
-pub use report::Report;
-pub use report::Status;
-pub use resolved::ResolvedConfig;
+pub mod config;
+pub use self::attrs::FileAttrs;
+pub use self::engine::Engine;
+pub use self::engine::Plan;
+pub use self::engine::PlannedFile;
+pub use self::error::Error;
+pub use self::error::Result;
+pub use self::report::FileOutcome;
+pub use self::report::Mode;
+pub use self::report::Report;
+pub use self::report::Status;
+pub use self::resolved::ResolvedConfig;
