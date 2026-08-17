@@ -66,96 +66,96 @@ prefix = "-# "
 
 [styles.xml_line]
 kind = "line"
+pad_lines = true
 prefix = "<!-- "
 suffix = " -->"
-pad_lines = true
 
 [styles.slash_block]
-kind = "block"
-start = "/*"
-prefix = " * "
 end = " */"
+kind = "block"
+prefix = " * "
+start = "/*"
 
 [styles.javadoc_block]
-kind = "block"
-start = "/**"
-prefix = " * "
 end = " */"
+kind = "block"
+prefix = " * "
+start = "/**"
 
 [styles.xml_block]
-kind = "block"
-start = "<!--"
-prefix = "    "
 end = "-->"
+kind = "block"
+prefix = "    "
+start = "<!--"
 
 [styles.lua_block]
-kind = "block"
-start = "--[["
-prefix = "    "
 end = "]]"
+kind = "block"
+prefix = "    "
+start = "--[["
 
 [styles.brace_star_block]
-kind = "block"
-start = "{*"
-prefix = " * "
 end = " *}"
+kind = "block"
+prefix = " * "
+start = "{*"
 
 [styles.hash_star_block]
-kind = "block"
-start = "#*"
-prefix = " * "
 end = " *#"
+kind = "block"
+prefix = " * "
+start = "#*"
 
 [styles.mustache_block]
-kind = "block"
-start = "{{!"
-prefix = "    "
 end = "}}"
+kind = "block"
+prefix = "    "
+start = "{{!"
 
 [styles.mvel_block]
-kind = "block"
-start = "@comment{"
-prefix = "  "
 end = "}"
+kind = "block"
+prefix = "  "
+start = "@comment{"
 
 [styles.freemarker_block]
-kind = "block"
-start = "<#--"
-prefix = "    "
 end = "-->"
+kind = "block"
+prefix = "    "
+start = "<#--"
 
 [styles.freemarker_alt_block]
-kind = "block"
-start = "[#--"
-prefix = "    "
 end = "--]"
+kind = "block"
+prefix = "    "
+start = "[#--"
 
 [styles.jsp_block]
-kind = "block"
-start = "<%--"
-prefix = "    "
 end = "--%>"
+kind = "block"
+prefix = "    "
+start = "<%--"
 
 [styles.coldfusion_block]
-kind = "block"
-start = "<!---"
-prefix = "    "
 end = "--->"
+kind = "block"
+prefix = "    "
+start = "<!---"
 
 [styles.asp_block]
-kind = "block"
-start = "<%"
-prefix = "' "
 end = "%>"
+kind = "block"
+prefix = "' "
+start = "<%"
 
 [styles.swift_banner]
-kind = "block"
-start = "//===----------------------------------------------------------------------===//"
-prefix = "// "
 end = "//===----------------------------------------------------------------------===//"
+kind = "block"
+prefix = "// "
+start = "//===----------------------------------------------------------------------===//"
 
 [styles.asciidoc_block]
-kind = "block"
-start = "////"
-prefix = "// "
 end = "////"
+kind = "block"
+prefix = "// "
+start = "////"
