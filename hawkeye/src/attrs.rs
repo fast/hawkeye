@@ -31,21 +31,14 @@ use crate::config::FeatureMode;
 use crate::git::GitRepo;
 use crate::git::git_path;
 
-/// Per-file values exposed to MiniJinja as `attrs`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct FileAttrs {
-    /// The basename of the current source file.
-    pub filename: String,
-    /// The filesystem creation year, when the platform exposes one.
-    pub disk_file_created_year: Option<i16>,
-    /// The filesystem modification year.
-    pub disk_file_modified_year: Option<i16>,
-    /// The earliest commit year associated with the file.
-    pub git_file_created_year: Option<i16>,
-    /// The latest commit year, or the current year for a dirty file.
-    pub git_file_modified_year: Option<i16>,
-    /// Distinct Git commit authors associated with the file.
-    pub git_authors: Vec<String>,
+pub(crate) struct FileAttrs {
+    pub(crate) filename: String,
+    disk_file_created_year: Option<i16>,
+    disk_file_modified_year: Option<i16>,
+    git_file_created_year: Option<i16>,
+    git_file_modified_year: Option<i16>,
+    git_authors: Vec<String>,
 }
 
 #[derive(Debug, Clone, Default)]

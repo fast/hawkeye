@@ -162,8 +162,9 @@ ignore = "auto"
     let plan = Engine::new(config)
         .plan(Mode::Check)
         .expect("fall back to filesystem discovery");
-    assert_eq!(plan.files().len(), 1);
-    assert_eq!(plan.files()[0].status(), Status::Missing);
+    let report = plan.report();
+    assert_eq!(report.files().len(), 1);
+    assert_eq!(report.files()[0].status, Status::Missing);
 }
 
 #[cfg(target_os = "linux")]
@@ -548,51 +549,6 @@ includes = ["**/*.rs"]
         read_normalized(project.path().join("license.rs")),
         "Copyright 2026 Acme\n"
     );
-}
-
-#[test]
-fn plan_retains_source_only_for_planned_edits() {
-    let project = tempfile::tempdir().expect("create plan memory project");
-    fs::write(
-        project.path().join("licenserc.toml"),
-        r#"[header]
-text = "Copyright 2026 Acme"
-
-[files]
-includes = ["**/*.rs"]
-"#,
-    )
-    .expect("write configuration");
-    let body = "fn body() {}\n".repeat(100_000);
-    fs::write(
-        project.path().join("clean.rs"),
-        format!("// Copyright 2026 Acme\n\n{body}"),
-    )
-    .expect("write large clean source");
-    fs::write(project.path().join("missing.rs"), "fn missing() {}\n")
-        .expect("write missing source");
-
-    let config = ResolvedConfig::load(project.path().join("licenserc.toml"))
-        .expect("load resolved configuration");
-    let engine = Engine::new(config);
-    let plan = engine.plan(Mode::Format).expect("plan format");
-    let clean = plan
-        .files()
-        .iter()
-        .find(|file| file.path() == Path::new("clean.rs"))
-        .expect("clean planned file");
-    assert_eq!(clean.status(), Status::Clean);
-    assert!(clean.original().is_none());
-    assert!(clean.updated().is_none());
-
-    let missing = plan
-        .files()
-        .iter()
-        .find(|file| file.path() == Path::new("missing.rs"))
-        .expect("missing planned file");
-    assert_eq!(missing.status(), Status::Missing);
-    assert!(missing.original().is_some());
-    assert!(missing.updated().is_some());
 }
 
 #[test]

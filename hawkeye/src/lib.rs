@@ -31,7 +31,6 @@ mod style;
 mod template;
 mod writer;
 
-pub use self::attrs::FileAttrs;
 pub use self::config::Config;
 pub use self::config::FeatureMode;
 pub use self::config::FilesConfig;
@@ -41,7 +40,6 @@ pub use self::config::RuleConfig;
 pub use self::config::StyleConfig;
 pub use self::engine::Engine;
 pub use self::engine::Plan;
-pub use self::engine::PlannedFile;
 pub use self::error::Error;
 pub use self::error::ErrorKind;
 pub use self::report::FileOutcome;

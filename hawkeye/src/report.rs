@@ -77,28 +77,13 @@ pub struct FileOutcome {
     pub changed: bool,
 }
 
-impl FileOutcome {
-    pub(crate) fn new(path: PathBuf, status: Status, changed: bool) -> Self {
-        Self {
-            path,
-            status,
-            changed,
-        }
-    }
-}
-
 /// A path-sorted operation report.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 pub struct Report {
-    files: Vec<FileOutcome>,
+    pub(crate) files: Vec<FileOutcome>,
 }
 
 impl Report {
-    pub(crate) fn new(mut files: Vec<FileOutcome>) -> Self {
-        files.sort_by(|left, right| left.path.cmp(&right.path));
-        Self { files }
-    }
-
     /// Returns all selected file outcomes in path order.
     pub fn files(&self) -> &[FileOutcome] {
         &self.files

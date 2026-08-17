@@ -13,12 +13,10 @@
 // limitations under the License.
 
 use std::fs;
-use std::path::Path;
 use std::path::PathBuf;
 
 use crate::Error;
 use crate::ErrorKind;
-use crate::FileAttrs;
 use crate::ResolvedConfig;
 use crate::analyze::analyze;
 use crate::attrs::FileAttrsResolver;
@@ -88,50 +86,37 @@ impl Engine {
                 status: analysis.status,
                 original,
                 updated,
-                file_attrs: Some(file_attrs),
             });
         }
 
         files.sort_by(|left, right| left.relative_path.cmp(&right.relative_path));
-        Ok(Plan { mode, files })
+        Ok(Plan { files })
     }
 }
 
 /// A complete, deterministic operation plan produced before any file is written.
 pub struct Plan {
-    mode: Mode,
     files: Vec<PlannedFile>,
 }
 
 impl Plan {
-    /// Returns the operation represented by this plan.
-    pub fn mode(&self) -> Mode {
-        self.mode
-    }
-
-    /// Returns every selected file in path order.
-    pub fn files(&self) -> &[PlannedFile] {
-        &self.files
-    }
-
     /// Builds the serializable report for this plan.
     pub fn report(&self) -> Report {
-        Report::new(
-            self.files
+        Report {
+            files: self
+                .files
                 .iter()
-                .map(|file| {
-                    FileOutcome::new(
-                        file.relative_path.clone(),
-                        file.status,
-                        file.updated.is_some(),
-                    )
+                .map(|file| FileOutcome {
+                    path: file.relative_path.clone(),
+                    status: file.status,
+                    changed: file.updated.is_some(),
                 })
                 .collect(),
-        )
+        }
     }
 
     /// Atomically applies every planned edit after checking for stale inputs.
-    pub fn apply(&self) -> Result<Report, Error> {
+    pub fn apply(&self) -> Result<(), Error> {
         for file in &self.files {
             let (Some(original), Some(_)) = (&file.original, &file.updated) else {
                 continue;
@@ -144,18 +129,17 @@ impl Plan {
             };
             write_atomic(&file.absolute_path, original, updated)?;
         }
-        Ok(self.report())
+        Ok(())
     }
 }
 
 /// The analysis and optional replacement planned for one file.
-pub struct PlannedFile {
+struct PlannedFile {
     absolute_path: PathBuf,
     relative_path: PathBuf,
     status: Status,
     original: Option<Vec<u8>>,
     updated: Option<Vec<u8>>,
-    file_attrs: Option<FileAttrs>,
 }
 
 impl PlannedFile {
@@ -166,49 +150,6 @@ impl PlannedFile {
             status: Status::Unsupported,
             original: None,
             updated: None,
-            file_attrs: None,
         }
-    }
-
-    /// Returns the canonical source path.
-    pub fn absolute_path(&self) -> &Path {
-        &self.absolute_path
-    }
-
-    /// Returns the source path relative to `files.root`.
-    pub fn path(&self) -> &Path {
-        &self.relative_path
-    }
-
-    /// Returns the file's analysis status.
-    pub fn status(&self) -> Status {
-        self.status
-    }
-
-    /// Returns whether this plan would modify the file.
-    pub fn changed(&self) -> bool {
-        self.updated.is_some()
-    }
-
-    /// Returns the original UTF-8 source when this plan contains an edit.
-    ///
-    /// Unchanged source contents are discarded during planning so large checks do not retain every
-    /// selected file in memory.
-    pub fn original(&self) -> Option<&str> {
-        self.original
-            .as_deref()
-            .and_then(|input| std::str::from_utf8(input).ok())
-    }
-
-    /// Returns the complete replacement source when an edit is planned.
-    pub fn updated(&self) -> Option<&str> {
-        self.updated
-            .as_deref()
-            .and_then(|input| std::str::from_utf8(input).ok())
-    }
-
-    /// Returns values exposed to the header template for this file.
-    pub fn file_attrs(&self) -> Option<&FileAttrs> {
-        self.file_attrs.as_ref()
     }
 }

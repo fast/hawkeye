@@ -27,7 +27,6 @@ use exn::ResultExt;
 use exn::bail;
 use hawkeye::Engine;
 use hawkeye::Mode;
-use hawkeye::Plan;
 use hawkeye::Report;
 use hawkeye::ResolvedConfig;
 use hawkeye::Status;
@@ -121,8 +120,8 @@ fn do_main() -> Result<ExitCode, Error> {
             let plan = engine
                 .plan(Mode::Check)
                 .or_raise(|| Error::new("cannot analyze selected files"))?;
-            emit(&plan, cmd.output_format)?;
             let report = plan.report();
+            emit(Mode::Check, &report, cmd.output_format)?;
             let failed = report.has_violations()
                 || (options.fail_if_unknown && report.count(Status::Unsupported) > 0);
             Ok(policy_exit(failed))
@@ -145,23 +144,21 @@ fn edit(
     let plan = engine
         .plan(mode)
         .or_raise(|| Error::new("cannot analyze selected files"))?;
-    let report = if options.dry_run {
-        plan.report()
-    } else {
+    if !options.dry_run {
         plan.apply()
-            .or_raise(|| Error::new("cannot apply planned file edits"))?
-    };
-    emit(&plan, output_format)?;
+            .or_raise(|| Error::new("cannot apply planned file edits"))?;
+    }
+    let report = plan.report();
+    emit(mode, &report, output_format)?;
     let failed = report.count(Status::Conflict) > 0
         || (options.fail_if_unknown && report.count(Status::Unsupported) > 0)
         || (options.fail_on_change && report.changed() > 0);
     Ok(policy_exit(failed))
 }
 
-fn emit(plan: &Plan, output_format: OutputFormat) -> Result<(), Error> {
-    let report = plan.report();
+fn emit(mode: Mode, report: &Report, output_format: OutputFormat) -> Result<(), Error> {
     match output_format {
-        OutputFormat::Human => emit_human(plan, &report)
+        OutputFormat::Human => emit_human(mode, report)
             .or_raise(|| Error::new("cannot write human-readable report"))?,
         OutputFormat::Json => {
             let mut stdout = io::stdout().lock();
@@ -173,26 +170,26 @@ fn emit(plan: &Plan, output_format: OutputFormat) -> Result<(), Error> {
     Ok(())
 }
 
-fn emit_human(plan: &Plan, report: &Report) -> io::Result<()> {
+fn emit_human(mode: Mode, report: &Report) -> io::Result<()> {
     let mut stdout = io::stdout().lock();
-    for file in plan.files() {
-        let label = if file.changed() {
-            match (plan.mode(), file.status()) {
+    for file in report.files() {
+        let label = if file.changed {
+            match (mode, file.status) {
                 (Mode::Remove, _) => "remove",
                 (_, Status::Missing) => "add",
                 _ => "replace",
             }
         } else {
-            match file.status() {
+            match file.status {
                 Status::Clean => continue,
-                Status::Missing if plan.mode() == Mode::Remove => continue,
+                Status::Missing if mode == Mode::Remove => continue,
                 Status::Missing => "missing",
                 Status::Replaceable => "replaceable",
                 Status::Conflict => "conflict",
                 Status::Unsupported => "unsupported",
             }
         };
-        let path = file.path().to_string_lossy().replace('\\', "/");
+        let path = file.path.to_string_lossy().replace('\\', "/");
         writeln!(stdout, "{label:>11}  {path}")?;
     }
     writeln!(
