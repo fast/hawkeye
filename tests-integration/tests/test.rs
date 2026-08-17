@@ -583,6 +583,31 @@ text = "Copyright 2026 Acme"
 }
 
 #[test]
+fn header_source_requires_exactly_one_value() {
+    let project = tempfile::tempdir().expect("create header source project");
+    for (name, source) in [
+        ("missing", "[header]\n"),
+        (
+            "multiple",
+            "[header]\nbuiltin = \"Apache-2.0\"\ntext = \"Copyright 2026 Acme\"\n",
+        ),
+    ] {
+        let path = project.path().join(format!("{name}.toml"));
+        fs::write(&path, source).expect("write invalid header source configuration");
+        let config = Config::load(&path).expect("header source fields must deserialize");
+        let error = config
+            .validate()
+            .expect_err("invalid header source must fail validation");
+        assert_eq!(error.kind(), ErrorKind::ConfigInvalid);
+        assert!(
+            error
+                .to_string()
+                .contains("exactly one of `builtin`, `path`, or `text` must be set")
+        );
+    }
+}
+
+#[test]
 fn invalid_discovery_pattern_is_a_configuration_error() {
     let project = tempfile::tempdir().expect("create invalid pattern project");
     let path = project.path().join("licenserc.toml");

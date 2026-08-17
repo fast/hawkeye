@@ -66,6 +66,12 @@ struct Analysis {
     edit: Option<Edit>,
 }
 
+enum HeaderSource {
+    Builtin(String),
+    Path(PathBuf),
+    Text(String),
+}
+
 impl Engine {
     /// Validates and builds an engine from parsed configuration.
     pub fn new(config: Config) -> Result<Self, Error> {
@@ -93,9 +99,15 @@ impl Engine {
             ));
         }
 
-        let (source, header_path) = if let Some(key) = header.builtin.as_deref() {
-            (
-                builtin_header(key).ok_or_else(|| {
+        let header_source = match (header.builtin, header.path, header.text) {
+            (Some(value), None, None) => HeaderSource::Builtin(value),
+            (None, Some(value), None) => HeaderSource::Path(value),
+            (None, None, Some(value)) => HeaderSource::Text(value),
+            _ => unreachable!("validated config has exactly one header source"),
+        };
+        let (source, header_path) = match header_source {
+            HeaderSource::Builtin(key) => (
+                builtin_header(&key).ok_or_else(|| {
                     Error::new(
                         ErrorKind::ConfigInvalid,
                         format!(
@@ -105,34 +117,27 @@ impl Engine {
                 })?
                 .to_owned(),
                 None,
-            )
-        } else if let Some(path) = header.path.as_deref() {
-            let path = path.canonicalize().map_err(|source| {
-                Error::new(
-                    ErrorKind::Unexpected,
-                    format!("cannot resolve header template {}", path.display()),
-                )
-                .with_source(source)
-            })?;
-            (
-                fs::read_to_string(&path).map_err(|source| {
+            ),
+            HeaderSource::Path(path) => {
+                let path = path.canonicalize().map_err(|source| {
                     Error::new(
                         ErrorKind::Unexpected,
-                        format!("cannot read header template {}", path.display()),
+                        format!("cannot resolve header template {}", path.display()),
                     )
                     .with_source(source)
-                })?,
-                Some(path),
-            )
-        } else {
-            (
-                header
-                    .text
-                    .as_deref()
-                    .expect("Config validation guarantees exactly one header source")
-                    .to_owned(),
-                None,
-            )
+                })?;
+                (
+                    fs::read_to_string(&path).map_err(|source| {
+                        Error::new(
+                            ErrorKind::Unexpected,
+                            format!("cannot read header template {}", path.display()),
+                        )
+                        .with_source(source)
+                    })?,
+                    Some(path),
+                )
+            }
+            HeaderSource::Text(source) => (source, None),
         };
         let template = HeaderTemplate::new(source)?;
 
@@ -169,7 +174,7 @@ impl Engine {
             git,
             keywords: header
                 .keywords
-                .iter()
+                .into_iter()
                 .map(|keyword| keyword.to_lowercase())
                 .collect(),
             template,
