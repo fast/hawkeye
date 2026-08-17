@@ -21,53 +21,55 @@ use ignore::WalkBuilder;
 use ignore::overrides::Override;
 use ignore::overrides::OverrideBuilder;
 
-use crate::Engine;
+use super::Engine;
 use crate::Error;
 use crate::ErrorKind;
 use crate::config::FeatureMode;
 use crate::git::GitRepo;
 
-pub(crate) fn discover(engine: &Engine, repo: Option<&GitRepo>) -> Result<Vec<PathBuf>, Error> {
-    let started = Instant::now();
-    let selection = build_selection(engine)?;
-    let mut files = BTreeSet::new();
+impl Engine {
+    pub(super) fn discover(&self, repo: Option<&GitRepo>) -> Result<Vec<PathBuf>, Error> {
+        let started = Instant::now();
+        let selection = build_selection(self)?;
+        let mut files = BTreeSet::new();
 
-    if engine.git.ignore != FeatureMode::Disable
-        && let Some(repo) = repo
-    {
-        for path in repo.list_files(&engine.root)? {
-            let relative = path
-                .strip_prefix(&engine.root)
-                .expect("Git discovery only returns paths inside files.root");
-            if selection.matched(relative, false).is_whitelist() {
-                files.insert(path);
+        if self.git.ignore != FeatureMode::Disable
+            && let Some(repo) = repo
+        {
+            for path in repo.list_files(&self.root)? {
+                let relative = path
+                    .strip_prefix(&self.root)
+                    .expect("Git discovery only returns paths inside files.root");
+                if selection.matched(relative, false).is_whitelist() {
+                    files.insert(path);
+                }
             }
+            log::debug!(
+                "selected {} files through the Git index in {:?}",
+                files.len(),
+                started.elapsed()
+            );
+        } else {
+            let exclusions = build_exclusions(self)?;
+            walk(
+                &self.root,
+                &selection,
+                &exclusions,
+                self.git.ignore,
+                &mut files,
+            )?;
+            log::debug!(
+                "selected {} files through a filesystem walk in {:?}",
+                files.len(),
+                started.elapsed()
+            );
         }
-        log::debug!(
-            "selected {} files through the Git index in {:?}",
-            files.len(),
-            started.elapsed()
-        );
-    } else {
-        let exclusions = build_exclusions(engine)?;
-        walk(
-            &engine.root,
-            &selection,
-            &exclusions,
-            engine.git.ignore,
-            &mut files,
-        )?;
-        log::debug!(
-            "selected {} files through a filesystem walk in {:?}",
-            files.len(),
-            started.elapsed()
-        );
-    }
 
-    if let Some(header_path) = &engine.header_path {
-        files.remove(header_path);
+        if let Some(header_path) = &self.header_path {
+            files.remove(header_path);
+        }
+        Ok(files.into_iter().collect())
     }
-    Ok(files.into_iter().collect())
 }
 
 fn build_selection(engine: &Engine) -> Result<Override, Error> {

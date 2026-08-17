@@ -17,10 +17,8 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![deny(missing_docs)]
 
-mod analyze;
 mod attrs;
 mod config;
-mod discovery;
 mod edit;
 mod engine;
 mod error;

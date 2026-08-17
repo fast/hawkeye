@@ -12,6 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+mod analyze;
+mod discovery;
+
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::fs;
@@ -20,12 +23,11 @@ use std::path::PathBuf;
 
 use crate::Error;
 use crate::ErrorKind;
-use crate::analyze::analyze;
 use crate::attrs::FileAttrs;
 use crate::attrs::FileAttrsResolver;
 use crate::config::Config;
 use crate::config::GitConfig;
-use crate::discovery::discover;
+use crate::edit::Edit;
 use crate::git::GitRepo;
 use crate::report::FileOutcome;
 use crate::report::Mode;
@@ -39,24 +41,29 @@ use crate::writer::write_atomic;
 
 /// A reusable HawkEye runtime built from one configuration.
 pub struct Engine {
-    pub(crate) root: PathBuf,
-    pub(crate) header_path: Option<PathBuf>,
-    pub(crate) includes: Vec<String>,
-    pub(crate) excludes: Vec<String>,
-    pub(crate) props: BTreeMap<String, toml::Value>,
-    pub(crate) git: GitConfig,
-    pub(crate) keywords: Vec<String>,
-    pub(crate) template: HeaderTemplate,
-    pub(crate) styles: BTreeMap<String, Style>,
-    pub(crate) rules: Vec<Rule>,
+    root: PathBuf,
+    header_path: Option<PathBuf>,
+    includes: Vec<String>,
+    excludes: Vec<String>,
+    props: BTreeMap<String, toml::Value>,
+    git: GitConfig,
+    keywords: Vec<String>,
+    template: HeaderTemplate,
+    styles: BTreeMap<String, Style>,
+    rules: Vec<Rule>,
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct Rule {
-    pub(crate) extensions: BTreeSet<String>,
-    pub(crate) filenames: BTreeSet<String>,
-    pub(crate) style_out: String,
-    pub(crate) styles_in: Vec<String>,
+struct Rule {
+    extensions: BTreeSet<String>,
+    filenames: BTreeSet<String>,
+    style_out: String,
+    styles_in: Vec<String>,
+}
+
+struct Analysis {
+    status: Status,
+    edit: Option<Edit>,
 }
 
 impl Engine {
@@ -175,7 +182,7 @@ impl Engine {
     pub fn plan(&self, mode: Mode) -> Result<Plan, Error> {
         let git = self.git;
         let repo = GitRepo::discover(&self.root, git.ignore.combine(git.file_attrs))?;
-        let paths = discover(self, repo.as_ref())?;
+        let paths = self.discover(repo.as_ref())?;
         let attrs = FileAttrsResolver::new(&paths, git.file_attrs, repo.as_ref())?;
         let mut files = Vec::with_capacity(paths.len());
 
@@ -202,7 +209,7 @@ impl Engine {
             };
             let file_attrs = attrs.for_file(&path)?;
             let header = self.render_header(&file_attrs)?;
-            let analysis = analyze(self, &relative, input, &header, mode);
+            let analysis = self.analyze(&relative, input, &header, mode);
             let updated = analysis
                 .edit
                 .as_ref()
@@ -224,17 +231,17 @@ impl Engine {
         Ok(Plan { files })
     }
 
-    pub(crate) fn rule_for(&self, path: &Path) -> Option<&Rule> {
+    fn rule_for(&self, path: &Path) -> Option<&Rule> {
         self.rules.iter().find(|rule| rule.matches(path))
     }
 
-    pub(crate) fn style(&self, name: &str) -> &Style {
+    fn style(&self, name: &str) -> &Style {
         self.styles
             .get(name)
             .expect("resolved rules only refer to known styles")
     }
 
-    pub(crate) fn render_header(&self, attrs: &FileAttrs) -> Result<String, Error> {
+    fn render_header(&self, attrs: &FileAttrs) -> Result<String, Error> {
         let header = self.template.render(&self.props, attrs)?;
         let folded = header.to_lowercase();
         if let Some(keyword) = self
@@ -315,7 +322,7 @@ impl PlannedFile {
 }
 
 impl Rule {
-    pub(crate) fn matches(&self, path: &Path) -> bool {
+    fn matches(&self, path: &Path) -> bool {
         let Some(filename) = path.file_name() else {
             return false;
         };
@@ -330,9 +337,9 @@ impl Rule {
 
 fn builtin_header(key: &str) -> Option<&'static str> {
     match key {
-        "Apache-2.0" => Some(include_str!("builtin/Apache-2.0.txt")),
-        "Apache-2.0-ASF" => Some(include_str!("builtin/Apache-2.0-ASF.txt")),
-        "Elastic-2.0" => Some(include_str!("builtin/Elastic-2.0.txt")),
+        "Apache-2.0" => Some(include_str!("../builtin/Apache-2.0.txt")),
+        "Apache-2.0-ASF" => Some(include_str!("../builtin/Apache-2.0-ASF.txt")),
+        "Elastic-2.0" => Some(include_str!("../builtin/Elastic-2.0.txt")),
         _ => None,
     }
 }
