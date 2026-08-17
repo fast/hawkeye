@@ -24,7 +24,6 @@ use hawkeye::Config;
 use hawkeye::Engine;
 use hawkeye::ErrorKind;
 use hawkeye::Mode;
-use hawkeye::ResolvedConfig;
 use hawkeye::Status;
 use jiff::Timestamp;
 use jiff::tz::TimeZone;
@@ -136,8 +135,8 @@ ignore = "enable"
 "#,
     )
     .expect("write required Git configuration");
-    let config = ResolvedConfig::load(&config_path).expect("load required Git configuration");
-    let engine = Engine::new(config);
+    let config = Config::load(&config_path).expect("load required Git configuration");
+    let engine = Engine::new(config).expect("initialize required Git engine");
     let error = match engine.plan(Mode::Check) {
         Ok(_) => panic!("required Git discovery must reject a non-Git directory"),
         Err(error) => error,
@@ -158,8 +157,9 @@ ignore = "auto"
 "#,
     )
     .expect("write automatic Git configuration");
-    let config = ResolvedConfig::load(&config_path).expect("load automatic Git configuration");
+    let config = Config::load(&config_path).expect("load automatic Git configuration");
     let plan = Engine::new(config)
+        .expect("initialize automatic Git engine")
         .plan(Mode::Check)
         .expect("fall back to filesystem discovery");
     let report = plan.report();
@@ -552,18 +552,15 @@ includes = ["**/*.rs"]
 }
 
 #[test]
-fn programmatic_config_is_revalidated_before_resolution() {
-    let project = tempfile::tempdir().expect("create configuration project");
-    let path = project.path().join("licenserc.toml");
+fn programmatic_config_is_revalidated_before_engine_initialization() {
     let source = r#"[header]
 text = "Copyright 2026 Acme"
 "#;
-    fs::write(&path, source).expect("write configuration");
 
     let mut config = Config::from_toml(source).expect("parse configuration");
     config.header.text = None;
 
-    let error = match config.resolve(&path) {
+    let error = match Engine::new(config) {
         Ok(_) => panic!("mutated configuration must be validated again"),
         Err(error) => error,
     };
@@ -588,8 +585,8 @@ includes = ["["]
     )
     .expect("write configuration");
 
-    let config = ResolvedConfig::load(&path).expect("load configuration before file discovery");
-    let engine = Engine::new(config);
+    let config = Config::load(&path).expect("load configuration before file discovery");
+    let engine = Engine::new(config).expect("initialize engine before file discovery");
     let error = match engine.plan(Mode::Check) {
         Ok(_) => panic!("invalid discovery pattern must fail"),
         Err(error) => error,
@@ -613,9 +610,8 @@ includes = ["**/*.rs"]
     fs::write(project.path().join("a.rs"), "fn a() {}\n").expect("write first source");
     fs::write(project.path().join("b.rs"), "fn b() {}\n").expect("write second source");
 
-    let config = ResolvedConfig::load(project.path().join("licenserc.toml"))
-        .expect("load resolved configuration");
-    let engine = Engine::new(config);
+    let config = Config::load(project.path().join("licenserc.toml")).expect("load configuration");
+    let engine = Engine::new(config).expect("initialize engine");
     let plan = engine.plan(Mode::Format).expect("plan format");
     fs::write(project.path().join("b.rs"), "fn b_changed() {}\n")
         .expect("change second source after planning");

@@ -153,16 +153,16 @@ A shallow repository cannot provide truthful creation years. In that situation, 
 The library exposes the same behavior without shelling out to the CLI:
 
 ```rust
-use hawkeye::{Engine, Mode, ResolvedConfig};
+use hawkeye::{Config, Engine, Mode};
 
-let config = ResolvedConfig::load("licenserc.toml")?;
-let engine = Engine::new(config);
+let config = Config::load("licenserc.toml")?;
+let engine = Engine::new(config)?;
 let plan = engine.plan(Mode::Check)?;
 let report = plan.report();
 # Ok::<(), hawkeye::Error>(())
 ```
 
-`Config` is the Serde-facing TOML model. `Config::resolve` produces `ResolvedConfig`, which owns resolved paths, compiled templates, styles, and ordered rules. `Engine::plan` performs discovery and analysis without writes; unchanged source contents are discarded instead of being retained for the lifetime of the plan. Before writing anything, `Plan::apply` validates every edited input, then performs atomic same-directory replacements while checking each input again for concurrent changes. Symbolic links and multiply linked files are not replaced.
+`Config` is the Serde-facing TOML model, and `Config::load` anchors relative paths to the configuration file. `Engine::new` validates the config and directly owns the resolved paths, compiled template, styles, and ordered rules. `Engine::plan` performs discovery and analysis without writes; unchanged source contents are discarded instead of being retained for the lifetime of the plan. Before writing anything, `Plan::apply` validates every edited input, then performs atomic same-directory replacements while checking each input again for concurrent changes. Symbolic links and multiply linked files are not replaced.
 
 ## Development
 

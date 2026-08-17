@@ -25,10 +25,10 @@ use clap::ValueEnum;
 use exn::Result;
 use exn::ResultExt;
 use exn::bail;
+use hawkeye::Config;
 use hawkeye::Engine;
 use hawkeye::Mode;
 use hawkeye::Report;
-use hawkeye::ResolvedConfig;
 use hawkeye::Status;
 use logforth::filter::rustlog::RustLogFilterBuilder;
 
@@ -108,8 +108,8 @@ fn do_main() -> Result<ExitCode, Error> {
     };
     log::debug!("loading config from {}", config.display());
 
-    let config = ResolvedConfig::load(config).or_raise(|| Error::new("cannot load config"))?;
-    let engine = Engine::new(config);
+    let config = Config::load(config).or_raise(|| Error::new("cannot load config"))?;
+    let engine = Engine::new(config).or_raise(|| Error::new("cannot initialize engine"))?;
 
     match cmd.subcommand {
         SubcommandOptions::Check(options) => {

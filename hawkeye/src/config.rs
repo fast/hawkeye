@@ -14,13 +14,14 @@
 
 //! The strict `licenserc.toml` model.
 //!
-//! [`Config`] contains every value represented directly by TOML. A later
-//! resolution step turns it into a filesystem-ready `ResolvedConfig`; there is
-//! intentionally no separately named raw configuration layer.
+//! [`Config`] contains every value represented directly by TOML. [`Config::load`]
+//! also anchors relative paths to the directory containing the loaded file.
 
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::fmt;
+use std::fs;
+use std::path::Path;
 use std::path::PathBuf;
 
 use serde::Deserialize;
@@ -52,6 +53,42 @@ pub struct Config {
 }
 
 impl Config {
+    /// Reads and parses one `licenserc.toml`, anchoring its relative paths to the file.
+    pub fn load<P: AsRef<Path>>(path: P) -> Result<Self, Error> {
+        let path = path.as_ref();
+        let source = fs::read_to_string(path).map_err(|err| {
+            Error::new(
+                ErrorKind::Unexpected,
+                format!("cannot read config from {}", path.display()),
+            )
+            .with_source(err)
+        })?;
+        let mut config = Self::from_toml(&source)?;
+        let path = path.canonicalize().map_err(|err| {
+            Error::new(
+                ErrorKind::Unexpected,
+                format!("cannot resolve {}", path.display()),
+            )
+            .with_source(err)
+        })?;
+        let directory = path.parent().ok_or_else(|| {
+            Error::new(
+                ErrorKind::ConfigInvalid,
+                "configuration path has no parent directory",
+            )
+        })?;
+
+        if config.files.root.is_relative() {
+            config.files.root = directory.join(&config.files.root);
+        }
+        if let Some(header_path) = &mut config.header.path
+            && header_path.is_relative()
+        {
+            *header_path = directory.join(&*header_path);
+        }
+        Ok(config)
+    }
+
     /// Parses strict snake-case TOML and validates local invariants.
     pub fn from_toml(source: &str) -> Result<Self, Error> {
         let config = toml::from_str::<Self>(source).map_err(|source| {

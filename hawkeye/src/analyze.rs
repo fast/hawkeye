@@ -14,7 +14,7 @@
 
 use std::path::Path;
 
-use crate::ResolvedConfig;
+use crate::Engine;
 use crate::edit::Edit;
 use crate::report::Mode;
 use crate::report::Status;
@@ -28,13 +28,13 @@ pub(crate) struct Analysis {
 }
 
 pub(crate) fn analyze(
-    config: &ResolvedConfig,
+    engine: &Engine,
     path: &Path,
     input: &str,
     header: &str,
     mode: Mode,
 ) -> Analysis {
-    let Some(rule) = config.rule_for(path) else {
+    let Some(rule) = engine.rule_for(path) else {
         return Analysis {
             status: Status::Unsupported,
             edit: None,
@@ -44,7 +44,7 @@ pub(crate) fn analyze(
     let offset = preamble_offset(input);
     let eol = detect_eol(input);
     let rendered = {
-        let mut value = config.style(&rule.style_out).render(header, eol);
+        let mut value = engine.style(&rule.style_out).render(header, eol);
         value.push_str(eol);
         value
     };
@@ -52,8 +52,8 @@ pub(crate) fn analyze(
     let candidates = rule
         .styles_in
         .iter()
-        .filter_map(|name| config.style(name).extract(input, offset))
-        .filter(|candidate| has_keywords(&candidate.body, &config.keywords))
+        .filter_map(|name| engine.style(name).extract(input, offset))
+        .filter(|candidate| has_keywords(&candidate.body, &engine.keywords))
         .collect::<Vec<_>>();
 
     let candidate = match unique_candidate(candidates) {
@@ -71,7 +71,7 @@ pub(crate) fn analyze(
         let header_lines = header.lines().count();
         if candidate_lines > header_lines
             || (candidate_lines < header_lines
-                && config
+                && engine
                     .styles
                     .values()
                     .any(|style| style.extract(input, candidate.range.end).is_some()))
@@ -103,10 +103,10 @@ pub(crate) fn analyze(
                 edit: (mode == Mode::Format).then(|| Edit::new(range, rendered)),
             }
         }
-    } else if config.styles.values().any(|style| {
+    } else if engine.styles.values().any(|style| {
         style
             .extract(input, offset)
-            .is_some_and(|candidate| has_keywords(&candidate.body, &config.keywords))
+            .is_some_and(|candidate| has_keywords(&candidate.body, &engine.keywords))
     }) {
         Analysis {
             status: Status::Conflict,
