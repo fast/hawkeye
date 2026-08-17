@@ -46,16 +46,11 @@ impl HeaderTemplate {
         props: &BTreeMap<String, toml::Value>,
         attrs: &FileAttrs,
     ) -> Result<String, Error> {
-        let rendered = self
+        let template = self
             .environment
             .get_template("header")
-            .map_err(|err| {
-                Error::new(
-                    ErrorKind::Unexpected,
-                    "cannot load compiled header template",
-                )
-                .with_source(err)
-            })?
+            .expect("header template is registered during construction");
+        let rendered = template
             .render(minijinja::context! { props, attrs })
             .map_err(|err| {
                 Error::new(ErrorKind::ConfigInvalid, "cannot render header template")
