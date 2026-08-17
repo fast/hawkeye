@@ -304,29 +304,21 @@ fn truncate_trailing_spaces(output: &mut String) {
 }
 
 #[derive(Debug, Clone, Copy)]
-struct Line<'input> {
-    content: &'input str,
-    end: usize,
+pub(crate) struct Line<'input> {
+    pub(crate) content: &'input str,
+    pub(crate) end: usize,
 }
 
-fn next_line(input: &str, position: usize) -> Option<Line<'_>> {
-    if position >= input.len() {
-        return None;
-    }
-    let tail = &input[position..];
-    if let Some(relative_end) = tail.find('\n') {
-        let mut content_end = position + relative_end;
-        if input.as_bytes().get(content_end.wrapping_sub(1)) == Some(&b'\r') {
-            content_end -= 1;
-        }
-        Some(Line {
-            content: &input[position..content_end],
-            end: position + relative_end + 1,
-        })
+pub(crate) fn next_line(input: &str, position: usize) -> Option<Line<'_>> {
+    let tail = input.get(position..)?;
+    let line = tail.split_inclusive('\n').next()?;
+    let content = if let Some(content) = line.strip_suffix('\n') {
+        content.strip_suffix('\r').unwrap_or(content)
     } else {
-        Some(Line {
-            content: tail,
-            end: input.len(),
-        })
-    }
+        line
+    };
+    Some(Line {
+        content,
+        end: position + line.len(),
+    })
 }

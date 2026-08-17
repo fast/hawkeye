@@ -19,6 +19,7 @@ use crate::edit::Edit;
 use crate::report::Mode;
 use crate::report::Status;
 use crate::style::Candidate;
+use crate::style::next_line;
 use crate::style::skip_blank_lines;
 
 pub(crate) struct Analysis {
@@ -182,32 +183,4 @@ fn preamble_offset(input: &str) -> usize {
         position = line.end;
     }
     position
-}
-
-#[derive(Clone, Copy)]
-struct Line<'input> {
-    content: &'input str,
-    end: usize,
-}
-
-fn next_line(input: &str, position: usize) -> Option<Line<'_>> {
-    if position >= input.len() {
-        return None;
-    }
-    let tail = &input[position..];
-    if let Some(relative_end) = tail.find('\n') {
-        let mut content_end = position + relative_end;
-        if input.as_bytes().get(content_end.wrapping_sub(1)) == Some(&b'\r') {
-            content_end -= 1;
-        }
-        Some(Line {
-            content: &input[position..content_end],
-            end: position + relative_end + 1,
-        })
-    } else {
-        Some(Line {
-            content: tail,
-            end: input.len(),
-        })
-    }
 }
