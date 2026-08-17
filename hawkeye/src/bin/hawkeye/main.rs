@@ -31,8 +31,6 @@ use hawkeye::Report;
 use hawkeye::Status;
 use logforth::filter::rustlog::RustLogFilterBuilder;
 
-const DEFAULT_CONFIG_FILES: [&str; 2] = ["licenserc.toml", ".licenserc.toml"];
-
 #[derive(Debug, Parser)]
 #[command(version, about)]
 struct Command {
@@ -213,7 +211,8 @@ fn find_config(config: Option<PathBuf>) -> CliResult<PathBuf> {
 
     let current_dir =
         std::env::current_dir().or_raise(|| CliError::new("cannot read the current directory"))?;
-    for filename in DEFAULT_CONFIG_FILES {
+    let filenames = ["licenserc.toml", ".licenserc.toml"];
+    for filename in filenames {
         let candidate = current_dir.join(filename);
         if candidate.is_file() {
             return Ok(candidate);
@@ -221,7 +220,7 @@ fn find_config(config: Option<PathBuf>) -> CliResult<PathBuf> {
     }
     exn::bail!(CliError::new(format!(
         "cannot find {} in {}; pass --config to select another file",
-        DEFAULT_CONFIG_FILES.join(" or "),
+        filenames.join(" or "),
         current_dir.display()
     )))
 }
