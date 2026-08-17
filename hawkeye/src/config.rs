@@ -370,8 +370,6 @@ impl Validator {
     }
 
     fn rules(&mut self, rules: &[RuleConfig]) {
-        let mut extensions = HashMap::<String, String>::new();
-        let mut filenames = HashMap::<String, String>::new();
         for (index, rule) in rules.iter().enumerate() {
             let path = format!("rules[{index}]");
             if rule.extensions.is_empty() && rule.filenames.is_empty() {
@@ -390,34 +388,12 @@ impl Validator {
                 if extension.contains(['/', '\\']) {
                     self.issue(&item_path, "extension must not contain a path separator");
                 }
-                if !extension.trim().is_empty() {
-                    let folded = extension.to_lowercase();
-                    if let Some(first) = extensions.get(&folded) {
-                        self.issue(
-                            &item_path,
-                            format!("duplicates `{first}` case-insensitively"),
-                        );
-                    } else {
-                        extensions.insert(folded, item_path);
-                    }
-                }
             }
             for (item, filename) in rule.filenames.iter().enumerate() {
                 let item_path = format!("{path}.filenames[{item}]");
                 self.non_blank(&item_path, filename);
                 if filename.contains(['/', '\\']) {
                     self.issue(&item_path, "filename must not contain a path separator");
-                }
-                if !filename.trim().is_empty() {
-                    let folded = filename.to_lowercase();
-                    if let Some(first) = filenames.get(&folded) {
-                        self.issue(
-                            &item_path,
-                            format!("duplicates `{first}` case-insensitively"),
-                        );
-                    } else {
-                        filenames.insert(folded, item_path);
-                    }
                 }
             }
 

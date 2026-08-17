@@ -107,7 +107,7 @@ suffix = ""
 end = "-->"
 
 [[rules]]
-# User rules run in declaration order before built-in fallback rules.
+# The first matching user rule wins; built-in rules are fallbacks.
 # Extensions omit the leading dot and may contain multiple segments.
 extensions = ["rs", "d.ts"]
 # Filenames are complete basenames. Both selectors are case-insensitive.
@@ -156,7 +156,7 @@ Git-backed capabilities invoke the `git` executable from `PATH`. Standard GitHub
 
 ### Rules and styles
 
-Rules are checked in declaration order, followed by HawkEye's built-in language rules as low-priority fallbacks. `extensions` are exact case-insensitive suffixes without a leading dot, so `d.ts` directly supports a multi-segment extension. `filenames` are complete case-insensitive basenames. Rules do not use path globs.
+The first matching rule wins. User rules are checked in declaration order, followed by HawkEye's built-in language rules as low-priority fallbacks, so an earlier user rule may intentionally override a later user rule or a built-in rule. `extensions` are exact case-insensitive suffixes without a leading dot, so `d.ts` directly supports a multi-segment extension. `filenames` are complete case-insensitive basenames. Rules do not use path globs.
 
 `style_out` is the one canonical output syntax. `styles_in` is the complete set of syntaxes that can be structurally recognized and safely replaced or removed. An empty list defaults to `[style_out]`; a non-empty list must include `style_out` so formatted output is accepted on the next run. If the leading text parses as a known comment header and contains all configured keywords but its style is not accepted by the rule, HawkEye reports `conflict` instead of guessing a deletion range.
 

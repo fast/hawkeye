@@ -493,41 +493,47 @@ styles_in = ["slash_line", "slash_block", "slash_block"]
 }
 
 #[test]
-fn duplicate_rule_selectors_are_rejected_case_insensitively() {
+fn rules_use_first_match_then_fall_back_to_builtins() {
     let project = tempfile::tempdir().expect("create rule project");
     fs::write(
         project.path().join("licenserc.toml"),
         r#"[header]
 text = "Copyright 2026 Acme"
 
+[files]
+includes = ["**/*.widget", "**/*.rs"]
+
 [[rules]]
-extensions = ["RS"]
-filenames = ["Makefile"]
+extensions = ["WIDGET"]
+style_out = "hash_line"
+
+[[rules]]
+extensions = ["widget"]
 style_out = "slash_line"
 
 [[rules]]
 extensions = ["rs"]
-filenames = ["makefile"]
 style_out = "hash_line"
 "#,
     )
-    .expect("write duplicate selectors");
+    .expect("write ordered rules");
+    fs::write(project.path().join("example.widget"), "content\n").expect("write custom source");
+    fs::write(project.path().join("example.rs"), "fn main() {}\n").expect("write Rust source");
+
+    let formatted = hawkeye(project.path(), ["format"]);
+    assert_exit(&formatted, 0);
+    assert!(
+        read_normalized(project.path().join("example.widget"))
+            .starts_with("# Copyright 2026 Acme\n\n"),
+        "the first user rule must win over a later rule with the same selector"
+    );
+    assert!(
+        read_normalized(project.path().join("example.rs")).starts_with("# Copyright 2026 Acme\n\n"),
+        "a user rule must win over the built-in Rust rule"
+    );
 
     let checked = hawkeye(project.path(), ["check"]);
-    assert_exit(&checked, 2);
-    let message = stderr(&checked);
-    assert!(
-        message.contains(
-            "rules[1].extensions[0]: duplicates `rules[0].extensions[0]` case-insensitively"
-        ),
-        "{message}"
-    );
-    assert!(
-        message.contains(
-            "rules[1].filenames[0]: duplicates `rules[0].filenames[0]` case-insensitively"
-        ),
-        "{message}"
-    );
+    assert_exit(&checked, 0);
 }
 
 #[test]

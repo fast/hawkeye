@@ -175,14 +175,28 @@ impl Engine {
         let configured_rules = configured_rules
             .into_iter()
             .enumerate()
-            .map(|(index, rule)| Rule::new(format!("rules[{index}]"), rule, &styles));
+            .map(|(index, rule)| (format!("rules[{index}]"), rule));
         let builtin_rules = builtin::RULES
             .iter()
             .cloned()
             .enumerate()
-            .map(|(index, rule)| Rule::new(format!("builtin.rules[{index}]"), rule, &styles));
+            .map(|(index, rule)| (format!("builtin.rules[{index}]"), rule));
+        let mut selectors = BTreeMap::<(&str, String), String>::new();
         let rules = configured_rules
             .chain(builtin_rules)
+            .map(|(source, rule)| {
+                let extensions = rule.extensions.iter().map(|value| ("extension", value));
+                let filenames = rule.filenames.iter().map(|value| ("filename", value));
+                for (kind, selector) in extensions.chain(filenames) {
+                    let key = (kind, selector.to_lowercase());
+                    if let Some(owner) = selectors.get(&key) {
+                        log::debug!("{source} {kind} {selector:?} is shadowed by {owner}");
+                    } else {
+                        selectors.insert(key, source.clone());
+                    }
+                }
+                Rule::new(&source, rule, &styles)
+            })
             .collect::<Result<Vec<_>, Error>>()?;
 
         Ok(Self {
