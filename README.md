@@ -55,33 +55,51 @@ RUST_LOG=hawkeye=debug hawkeye check
 
 ## Configuration
 
-This example shows every configuration section. Exactly one of `header.builtin`, `header.path`, or `header.text` is allowed.
+This copyable example shows every configuration section and annotates the contract of each field.
 
 ```toml
 [header]
+# Choose exactly one source. Built-in keys are opaque and case-sensitive.
 builtin = "Apache-2.0"
+# A relative path is resolved from the directory containing this config file.
+# path = "HEADER.txt"
+# Inline text and files use the same MiniJinja syntax.
+# text = "Copyright {{ props.inception_year }} {{ props.copyright_owner }}"
+
+# All keywords must occur case-insensitively before a parsed comment can be
+# replaced or removed. The default is ["copyright"].
 keywords = ["copyright"]
 
 [files]
+# A relative root is resolved from the directory containing this config file.
 root = "."
+# Patterns are relative to root. An empty list selects every discovered file.
 includes = ["**/*.rs", "**/*.toml"]
+# Excludes are applied after includes. Negated patterns are not accepted.
 excludes = ["generated/**"]
 
 [props]
+# Arbitrary TOML values in this table are exposed to templates as `props`.
 copyright_owner = "Acme Developers"
 inception_year = 2026
 
 [git]
+# Each Git capability accepts "disable", "auto", or "enable".
+# `auto` uses Git when root is inside a worktree and otherwise falls back.
 ignore = "auto"
+# History traversal is opt-in because large repositories can make it expensive.
 file_attrs = "disable"
 
 [styles.quoted_line]
+# A line style wraps every logical header line independently.
 kind = "line"
 prefix = "<!-- "
 suffix = " -->"
+# Padding aligns non-empty suffixes at the same column.
 pad_lines = true
 
 [styles.quoted_block]
+# A block style writes start and end on separate lines.
 kind = "block"
 start = "<!--"
 prefix = "    "
@@ -89,9 +107,15 @@ suffix = ""
 end = "-->"
 
 [[rules]]
+# User rules run in declaration order before built-in fallback rules.
+# Extensions omit the leading dot and may contain multiple segments.
 extensions = ["rs", "d.ts"]
+# Filenames are complete basenames. Both selectors are case-insensitive.
 filenames = ["Cargo.toml"]
+# Exactly one style is used for canonical output.
 style_out = "slash_line"
+# A non-empty list is the complete accepted input set and must include
+# style_out. Omitting this field or using [] defaults to [style_out].
 styles_in = ["slash_line", "slash_block"]
 ```
 
