@@ -30,7 +30,6 @@ use crate::git::GitRepo;
 impl Engine {
     pub(super) fn discover(&self, repo: Option<&GitRepo>) -> Result<Vec<PathBuf>, Error> {
         let started = Instant::now();
-        let selection = build_selection(self)?;
         let mut files = BTreeSet::new();
 
         if self.git.ignore != FeatureMode::Disable
@@ -40,7 +39,7 @@ impl Engine {
                 let relative = path
                     .strip_prefix(&self.root)
                     .expect("Git discovery only returns paths inside files.root");
-                if selection.matched(relative, false).is_whitelist() {
+                if self.selection.matched(relative, false).is_whitelist() {
                     files.insert(path);
                 }
             }
@@ -50,11 +49,10 @@ impl Engine {
                 started.elapsed()
             );
         } else {
-            let exclusions = build_exclusions(self)?;
             walk(
                 &self.root,
-                &selection,
-                &exclusions,
+                &self.selection,
+                &self.exclusions,
                 self.git.ignore,
                 &mut files,
             )?;
@@ -72,35 +70,38 @@ impl Engine {
     }
 }
 
-fn build_selection(engine: &Engine) -> Result<Override, Error> {
-    let mut builder = OverrideBuilder::new(&engine.root);
-    if engine.includes.is_empty() {
+pub(super) fn compile_patterns(
+    root: &Path,
+    includes: &[String],
+    excludes: &[String],
+) -> Result<(Override, Override), Error> {
+    let mut builder = OverrideBuilder::new(root);
+    if includes.is_empty() {
         builder.add("**").map_err(selection_error)?;
     } else {
-        for pattern in &engine.includes {
+        for pattern in includes {
             builder.add(pattern).map_err(selection_error)?;
         }
     }
     builder.add("!.git").map_err(selection_error)?;
     builder.add("!.git/**").map_err(selection_error)?;
-    for pattern in &engine.excludes {
+    for pattern in excludes {
         builder
             .add(&format!("!{pattern}"))
             .map_err(selection_error)?;
     }
-    builder.build().map_err(selection_error)
-}
+    let selection = builder.build().map_err(selection_error)?;
 
-fn build_exclusions(engine: &Engine) -> Result<Override, Error> {
-    let mut builder = OverrideBuilder::new(&engine.root);
+    let mut builder = OverrideBuilder::new(root);
     builder.add("!.git").map_err(selection_error)?;
     builder.add("!.git/**").map_err(selection_error)?;
-    for pattern in &engine.excludes {
+    for pattern in excludes {
         builder
             .add(&format!("!{pattern}"))
             .map_err(selection_error)?;
     }
-    builder.build().map_err(selection_error)
+    let exclusions = builder.build().map_err(selection_error)?;
+    Ok((selection, exclusions))
 }
 
 fn selection_error(source: ignore::Error) -> Error {

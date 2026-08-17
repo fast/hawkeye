@@ -21,6 +21,8 @@ use std::fs;
 use std::path::Path;
 use std::path::PathBuf;
 
+use ignore::overrides::Override;
+
 use crate::Error;
 use crate::ErrorKind;
 use crate::attrs::FileAttrs;
@@ -45,8 +47,8 @@ use crate::writer::write_atomic;
 pub struct Engine {
     root: PathBuf,
     header_path: Option<PathBuf>,
-    includes: Vec<String>,
-    excludes: Vec<String>,
+    selection: Override,
+    exclusions: Override,
     props: BTreeMap<String, toml::Value>,
     git: GitConfig,
     keywords: Vec<String>,
@@ -94,6 +96,8 @@ impl Engine {
                 format!("files.root is not a directory: {}", root.display()),
             ));
         }
+        let (selection, exclusions) =
+            discovery::compile_patterns(&root, &files.includes, &files.excludes)?;
 
         let (template, header_path) = if let Some(content) = header.text {
             (HeaderTemplate::new(content)?, None)
@@ -160,8 +164,8 @@ impl Engine {
         Ok(Self {
             root,
             header_path,
-            includes: files.includes,
-            excludes: files.excludes,
+            selection,
+            exclusions,
             props,
             git,
             keywords: header

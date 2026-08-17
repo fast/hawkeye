@@ -626,9 +626,8 @@ includes = ["["]
     .expect("write configuration");
 
     let config = Config::load(&path).expect("load configuration before file discovery");
-    let engine = Engine::new(config).expect("initialize engine before file discovery");
-    let error = match engine.plan(Mode::Check) {
-        Ok(_) => panic!("invalid discovery pattern must fail"),
+    let error = match Engine::new(config) {
+        Ok(_) => panic!("invalid discovery pattern must fail during engine initialization"),
         Err(error) => error,
     };
     assert_eq!(error.kind(), ErrorKind::ConfigInvalid);
