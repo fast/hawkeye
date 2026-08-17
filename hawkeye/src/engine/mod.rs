@@ -137,7 +137,7 @@ impl Engine {
             if styles.contains_key(&name) {
                 log::warn!("custom style {name:?} overrides a built-in style of the same name");
             }
-            styles.insert(name.clone(), Style::from_config(name, style));
+            styles.insert(name, Style::new(style));
         }
 
         let mut rules = configured_rules

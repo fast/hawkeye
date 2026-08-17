@@ -18,13 +18,7 @@ use std::ops::Range;
 use crate::config::StyleConfig;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct Style {
-    name: String,
-    syntax: Syntax,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-enum Syntax {
+pub(crate) enum Style {
     Line {
         prefix: String,
         suffix: String,
@@ -40,19 +34,18 @@ enum Syntax {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Candidate {
-    pub(crate) style: String,
     pub(crate) range: Range<usize>,
     pub(crate) body: String,
 }
 
 impl Style {
-    pub(crate) fn from_config(name: String, config: StyleConfig) -> Self {
-        let syntax = match config {
+    pub(crate) fn new(config: StyleConfig) -> Self {
+        match config {
             StyleConfig::Line {
                 prefix,
                 suffix,
                 pad_lines,
-            } => Syntax::Line {
+            } => Self::Line {
                 prefix,
                 suffix,
                 pad_lines,
@@ -62,21 +55,20 @@ impl Style {
                 prefix,
                 suffix,
                 end,
-            } => Syntax::Block {
+            } => Self::Block {
                 start,
                 prefix,
                 suffix,
                 end,
             },
-        };
-        Self { name, syntax }
+        }
     }
 
     pub(crate) fn render(&self, body: &str, eol: &str) -> String {
         let lines = body.split('\n').collect::<Vec<_>>();
         let mut output = String::new();
-        match &self.syntax {
-            Syntax::Line {
+        match self {
+            Self::Line {
                 prefix,
                 suffix,
                 pad_lines,
@@ -102,7 +94,7 @@ impl Style {
                     output.push_str(eol);
                 }
             }
-            Syntax::Block {
+            Self::Block {
                 start,
                 prefix,
                 suffix,
@@ -128,13 +120,13 @@ impl Style {
 
     pub(crate) fn extract(&self, input: &str, offset: usize) -> Option<Candidate> {
         let start = skip_blank_lines(input, offset);
-        let (range, body) = match &self.syntax {
-            Syntax::Line {
+        let (range, body) = match self {
+            Self::Line {
                 prefix,
                 suffix,
                 pad_lines,
             } => extract_line(input, start, prefix, suffix, *pad_lines)?,
-            Syntax::Block {
+            Self::Block {
                 start: opening,
                 prefix,
                 suffix,
@@ -142,7 +134,6 @@ impl Style {
             } => extract_block(input, start, opening, prefix, suffix, closing)?,
         };
         Some(Candidate {
-            style: self.name.clone(),
             range: offset..range.end,
             body,
         })
@@ -191,7 +182,7 @@ pub(crate) fn builtin_styles() -> BTreeMap<String, Style> {
     ];
     configs
         .into_iter()
-        .map(|(name, config)| (name.to_owned(), Style::from_config(name.to_owned(), config)))
+        .map(|(name, config)| (name.to_owned(), Style::new(config)))
         .collect()
 }
 

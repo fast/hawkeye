@@ -43,8 +43,12 @@ impl Engine {
         let candidates = rule
             .styles_in
             .iter()
-            .filter_map(|name| self.style(name).extract(input, offset))
-            .filter(|candidate| has_keywords(&candidate.body, &self.keywords))
+            .filter_map(|name| {
+                self.style(name)
+                    .extract(input, offset)
+                    .map(|candidate| (name.as_str(), candidate))
+            })
+            .filter(|(_, candidate)| has_keywords(&candidate.body, &self.keywords))
             .collect::<Vec<_>>();
 
         let candidate = match unique_candidate(candidates) {
@@ -57,7 +61,7 @@ impl Engine {
             }
         };
 
-        if let Some(candidate) = candidate {
+        if let Some((style_name, candidate)) = candidate {
             let candidate_lines = candidate.body.lines().count();
             let header_lines = header.lines().count();
             if candidate_lines > header_lines
@@ -80,7 +84,7 @@ impl Engine {
                     edit: Some(Edit::new(range, String::new())),
                 };
             }
-            let clean = candidate.style == rule.style_out
+            let clean = style_name == rule.style_out
                 && candidate.body == header
                 && input.get(range.clone()) == Some(rendered.as_str());
             if clean {
@@ -113,17 +117,17 @@ impl Engine {
     }
 }
 
-fn unique_candidate(candidates: Vec<Candidate>) -> Result<Option<Candidate>, ()> {
+fn unique_candidate(candidates: Vec<(&str, Candidate)>) -> Result<Option<(&str, Candidate)>, ()> {
     let mut candidates = candidates.into_iter();
-    let Some(first) = candidates.next() else {
+    let Some((style_name, first)) = candidates.next() else {
         return Ok(None);
     };
-    for candidate in candidates {
+    for (_, candidate) in candidates {
         if candidate.range != first.range || candidate.body != first.body {
             return Err(());
         }
     }
-    Ok(Some(first))
+    Ok(Some((style_name, first)))
 }
 
 fn has_keywords(body: &str, keywords: &[String]) -> bool {
