@@ -319,7 +319,11 @@ impl Plan {
         }
     }
 
-    /// Atomically applies every planned edit after checking for stale inputs.
+    /// Checks every input, then applies each edit with an atomic same-directory replacement.
+    ///
+    /// A stale input found during the initial check prevents all writes. The complete multi-file
+    /// operation is not transactional: a file changed concurrently during the write phase can
+    /// fail after earlier replacements have completed.
     pub fn apply(&self) -> Result<(), Error> {
         for file in &self.files {
             let (Some(original), Some(_)) = (&file.original, &file.updated) else {
