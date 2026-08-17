@@ -66,96 +66,96 @@ prefix = "-# "
 
 [styles.xml_line]
 kind = "line"
-pad_lines = true
 prefix = "<!-- "
 suffix = " -->"
+pad_lines = true
 
 [styles.slash_block]
-end = " */"
 kind = "block"
-prefix = " * "
 start = "/*"
+prefix = " * "
+end = " */"
 
 [styles.javadoc_block]
-end = " */"
 kind = "block"
-prefix = " * "
 start = "/**"
+prefix = " * "
+end = " */"
 
 [styles.xml_block]
-end = "-->"
 kind = "block"
-prefix = "    "
 start = "<!--"
+prefix = "    "
+end = "-->"
 
 [styles.lua_block]
-end = "]]"
 kind = "block"
-prefix = "    "
 start = "--[["
+prefix = "    "
+end = "]]"
 
 [styles.brace_star_block]
-end = " *}"
 kind = "block"
-prefix = " * "
 start = "{*"
+prefix = " * "
+end = " *}"
 
 [styles.hash_star_block]
-end = " *#"
 kind = "block"
-prefix = " * "
 start = "#*"
+prefix = " * "
+end = " *#"
 
 [styles.mustache_block]
-end = "}}"
 kind = "block"
-prefix = "    "
 start = "{{!"
+prefix = "    "
+end = "}}"
 
 [styles.mvel_block]
-end = "}"
 kind = "block"
-prefix = "  "
 start = "@comment{"
+prefix = "  "
+end = "}"
 
 [styles.freemarker_block]
-end = "-->"
 kind = "block"
-prefix = "    "
 start = "<#--"
+prefix = "    "
+end = "-->"
 
 [styles.freemarker_alt_block]
-end = "--]"
 kind = "block"
-prefix = "    "
 start = "[#--"
+prefix = "    "
+end = "--]"
 
 [styles.jsp_block]
-end = "--%>"
 kind = "block"
-prefix = "    "
 start = "<%--"
+prefix = "    "
+end = "--%>"
 
 [styles.coldfusion_block]
-end = "--->"
 kind = "block"
-prefix = "    "
 start = "<!---"
+prefix = "    "
+end = "--->"
 
 [styles.asp_block]
-end = "%>"
 kind = "block"
-prefix = "' "
 start = "<%"
+prefix = "' "
+end = "%>"
 
 [styles.swift_banner]
-end = "//===----------------------------------------------------------------------===//"
 kind = "block"
-prefix = "// "
 start = "//===----------------------------------------------------------------------===//"
+prefix = "// "
+end = "//===----------------------------------------------------------------------===//"
 
 [styles.asciidoc_block]
-end = "////"
 kind = "block"
-prefix = "// "
 start = "////"
+prefix = "// "
+end = "////"
