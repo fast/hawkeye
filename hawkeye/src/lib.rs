@@ -20,7 +20,6 @@
 mod attrs;
 mod builtin;
 mod config;
-mod edit;
 mod engine;
 mod error;
 mod git;

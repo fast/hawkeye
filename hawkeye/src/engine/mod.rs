@@ -18,6 +18,7 @@ mod discovery;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::fs;
+use std::ops::Range;
 use std::path::Path;
 use std::path::PathBuf;
 
@@ -31,7 +32,6 @@ use crate::builtin;
 use crate::config::Config;
 use crate::config::GitConfig;
 use crate::config::RuleConfig;
-use crate::edit::Edit;
 use crate::git::GitRepo;
 use crate::report::FileOutcome;
 use crate::report::Mode;
@@ -67,6 +67,28 @@ struct Rule {
 struct Analysis {
     status: Status,
     edit: Option<Edit>,
+}
+
+struct Edit {
+    range: Range<usize>,
+    replacement: String,
+}
+
+impl Edit {
+    fn apply(&self, input: &str) -> String {
+        debug_assert!(self.range.start <= self.range.end);
+        debug_assert!(self.range.end <= input.len());
+        debug_assert!(input.is_char_boundary(self.range.start));
+        debug_assert!(input.is_char_boundary(self.range.end));
+
+        let mut output = String::with_capacity(
+            input.len() - (self.range.end - self.range.start) + self.replacement.len(),
+        );
+        output.push_str(&input[..self.range.start]);
+        output.push_str(&self.replacement);
+        output.push_str(&input[self.range.end..]);
+        output
+    }
 }
 
 impl Engine {
@@ -230,7 +252,6 @@ impl Engine {
                 .edit
                 .as_ref()
                 .map(|edit| edit.apply(input))
-                .transpose()?
                 .filter(|output| output.as_bytes() != original)
                 .map(String::into_bytes);
             let original = updated.as_ref().map(|_| original);

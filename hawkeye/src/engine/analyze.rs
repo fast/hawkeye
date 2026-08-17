@@ -13,9 +13,9 @@
 // limitations under the License.
 
 use super::Analysis;
+use super::Edit;
 use super::Engine;
 use super::Rule;
-use crate::edit::Edit;
 use crate::report::Mode;
 use crate::report::Status;
 use crate::style::Candidate;
@@ -73,7 +73,10 @@ impl Engine {
             if mode == Mode::Remove {
                 return Analysis {
                     status: Status::Replaceable,
-                    edit: Some(Edit::new(range, String::new())),
+                    edit: Some(Edit {
+                        range,
+                        replacement: String::new(),
+                    }),
                 };
             }
             let clean = style_name == rule.style_out
@@ -87,7 +90,10 @@ impl Engine {
             } else {
                 Analysis {
                     status: Status::Replaceable,
-                    edit: (mode == Mode::Format).then(|| Edit::new(range, rendered)),
+                    edit: (mode == Mode::Format).then_some(Edit {
+                        range,
+                        replacement: rendered,
+                    }),
                 }
             }
         } else if self.styles.values().any(|style| {
@@ -103,7 +109,10 @@ impl Engine {
             let leading_end = skip_blank_lines(input, offset);
             Analysis {
                 status: Status::Missing,
-                edit: (mode == Mode::Format).then(|| Edit::new(offset..leading_end, rendered)),
+                edit: (mode == Mode::Format).then_some(Edit {
+                    range: offset..leading_end,
+                    replacement: rendered,
+                }),
             }
         }
     }
