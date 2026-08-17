@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::collections::BTreeMap;
 use std::ops::Range;
 
 use crate::config::StyleConfig;
@@ -137,69 +136,6 @@ impl Style {
             range: offset..range.end,
             body,
         })
-    }
-}
-
-pub fn builtin_styles() -> BTreeMap<String, Style> {
-    let configs = [
-        ("slash_line", line("// ", "", false)),
-        ("triple_slash_line", line("/// ", "", false)),
-        ("hash_line", line("# ", "", false)),
-        ("dash_line", line("-- ", "", false)),
-        ("percent_line", line("% ", "", false)),
-        ("percent3_line", line("%%% ", "", false)),
-        ("semicolon_line", line("; ", "", false)),
-        ("apostrophe_line", line("' ", "", false)),
-        ("bang_line", line("! ", "", false)),
-        ("bang3_line", line("!!! ", "", false)),
-        ("tilde2_line", line("~~ ", "", false)),
-        ("rem_line", line("@REM ", "", false)),
-        ("haml_line", line("-# ", "", false)),
-        ("xml_line", line("<!-- ", " -->", true)),
-        ("slash_block", block("/*", " * ", "", " */")),
-        ("javadoc_block", block("/**", " * ", "", " */")),
-        ("xml_block", block("<!--", "    ", "", "-->")),
-        ("lua_block", block("--[[", "    ", "", "]]")),
-        ("brace_star_block", block("{*", " * ", "", " *}")),
-        ("hash_star_block", block("#*", " * ", "", " *#")),
-        ("mustache_block", block("{{!", "    ", "", "}}")),
-        ("mvel_block", block("@comment{", "  ", "", "}")),
-        ("freemarker_block", block("<#--", "    ", "", "-->")),
-        ("freemarker_alt_block", block("[#--", "    ", "", "--]")),
-        ("jsp_block", block("<%--", "    ", "", "--%>")),
-        ("coldfusion_block", block("<!---", "    ", "", "--->")),
-        ("asp_block", block("<%", "' ", "", "%>")),
-        (
-            "swift_banner",
-            block(
-                "//===----------------------------------------------------------------------===//",
-                "// ",
-                "",
-                "//===----------------------------------------------------------------------===//",
-            ),
-        ),
-        ("asciidoc_block", block("////", "// ", "", "////")),
-    ];
-    configs
-        .into_iter()
-        .map(|(name, config)| (name.to_owned(), Style::new(config)))
-        .collect()
-}
-
-fn line(prefix: &str, suffix: &str, pad_lines: bool) -> StyleConfig {
-    StyleConfig::Line {
-        prefix: prefix.to_owned(),
-        suffix: suffix.to_owned(),
-        pad_lines,
-    }
-}
-
-fn block(start: &str, prefix: &str, suffix: &str, end: &str) -> StyleConfig {
-    StyleConfig::Block {
-        start: start.to_owned(),
-        prefix: prefix.to_owned(),
-        suffix: suffix.to_owned(),
-        end: end.to_owned(),
     }
 }
 

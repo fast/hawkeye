@@ -18,6 +18,7 @@ use std::sync::LazyLock;
 use serde::Deserialize;
 
 use crate::config::RuleConfig;
+use crate::config::StyleConfig;
 
 pub static HEADERS: LazyLock<BTreeMap<&'static str, &'static str>> = LazyLock::new(|| {
     BTreeMap::from([
@@ -33,7 +34,18 @@ pub static RULES: LazyLock<Vec<RuleConfig>> = LazyLock::new(|| {
         rules: Vec<RuleConfig>,
     }
 
-    let default_rules = include_str!("rules.toml");
-    let rules = toml::from_str::<Rules>(default_rules).unwrap();
+    let rules = toml::from_str::<Rules>(include_str!("rules.toml"))
+        .expect("builtin rules must be valid TOML");
     rules.rules
+});
+
+pub static STYLES: LazyLock<BTreeMap<String, StyleConfig>> = LazyLock::new(|| {
+    #[derive(Deserialize)]
+    struct Styles {
+        styles: BTreeMap<String, StyleConfig>,
+    }
+
+    let styles = toml::from_str::<Styles>(include_str!("styles.toml"))
+        .expect("builtin styles must be valid TOML");
+    styles.styles
 });

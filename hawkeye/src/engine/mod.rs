@@ -38,7 +38,6 @@ use crate::report::Mode;
 use crate::report::Report;
 use crate::report::Status;
 use crate::style::Style;
-use crate::style::builtin_styles;
 use crate::template::HeaderTemplate;
 use crate::writer::validate_source;
 use crate::writer::write_atomic;
@@ -138,7 +137,10 @@ impl Engine {
         };
 
         let styles = {
-            let mut styles = builtin_styles();
+            let mut styles = builtin::STYLES
+                .iter()
+                .map(|(name, style)| (name.clone(), Style::new(style.clone())))
+                .collect::<BTreeMap<_, _>>();
             for (name, style) in configured_styles {
                 if styles.contains_key(&name) {
                     log::warn!("custom style {name:?} overrides a built-in style of the same name");
