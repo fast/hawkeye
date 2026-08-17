@@ -92,7 +92,7 @@ end = "-->"
 extensions = ["rs", "d.ts"]
 filenames = ["Cargo.toml"]
 style_out = "slash_line"
-styles_in = ["slash_block"]
+styles_in = ["slash_line", "slash_block"]
 ```
 
 ### Header
@@ -134,7 +134,7 @@ Git-backed capabilities invoke the `git` executable from `PATH`. Standard GitHub
 
 Rules are checked in declaration order, followed by HawkEye's built-in language rules as low-priority fallbacks. `extensions` are exact case-insensitive suffixes without a leading dot, so `d.ts` directly supports a multi-segment extension. `filenames` are complete case-insensitive basenames. Rules do not use path globs.
 
-`style_out` is the one canonical output syntax. `styles_in` adds syntaxes that can be structurally recognized and safely replaced or removed. The output style is always accepted as input and need not be repeated. If the leading text parses as a known comment header and contains all configured keywords but its style is not accepted by the rule, HawkEye reports `conflict` instead of guessing a deletion range.
+`style_out` is the one canonical output syntax. `styles_in` is the complete set of syntaxes that can be structurally recognized and safely replaced or removed. An empty list defaults to `[style_out]`; a non-empty list must include `style_out` so formatted output is accepted on the next run. If the leading text parses as a known comment header and contains all configured keywords but its style is not accepted by the rule, HawkEye reports `conflict` instead of guessing a deletion range.
 
 Custom line styles wrap each logical header line with `prefix` and `suffix`. `pad_lines = true` right-pads shorter lines so suffixes align; it requires a non-empty suffix. Custom block styles write `start` and `end` on their own lines and wrap body lines with `prefix` and `suffix`. A custom style with the same name as a built-in style overrides it and emits a warning; built-in rules then use the custom definition.
 

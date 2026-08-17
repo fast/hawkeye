@@ -414,6 +414,81 @@ prefix = "# "
 }
 
 #[test]
+fn rule_input_styles_default_to_the_output_style() {
+    let project = tempfile::tempdir().expect("create rule project");
+    fs::write(
+        project.path().join("licenserc.toml"),
+        r#"[header]
+text = "Copyright 2026 Acme"
+
+[files]
+includes = ["**/*.widget"]
+
+[[rules]]
+extensions = ["widget"]
+style_out = "hash_line"
+"#,
+    )
+    .expect("write configuration");
+    fs::write(project.path().join("example.widget"), "content\n").expect("write source");
+
+    let formatted = hawkeye(project.path(), ["format"]);
+    assert_exit(&formatted, 0);
+    let checked = hawkeye(project.path(), ["check"]);
+    assert_exit(&checked, 0);
+}
+
+#[test]
+fn explicit_rule_input_styles_are_complete_and_deduplicated() {
+    let project = tempfile::tempdir().expect("create rule project");
+    let config_path = project.path().join("licenserc.toml");
+    fs::write(
+        &config_path,
+        r#"[header]
+text = "Copyright 2026 Acme"
+
+[[rules]]
+extensions = ["widget"]
+style_out = "slash_line"
+styles_in = ["slash_block"]
+"#,
+    )
+    .expect("write incomplete configuration");
+    let config = Config::load(&config_path).expect("load incomplete configuration");
+    let error = config
+        .validate()
+        .expect_err("explicit input styles must include the output style");
+    assert!(
+        error
+            .to_string()
+            .contains("rules[0].styles_in: must include `style_out`")
+    );
+
+    fs::write(
+        &config_path,
+        r#"[header]
+text = "Copyright 2026 Acme"
+
+[files]
+includes = ["**/*.widget"]
+
+[[rules]]
+extensions = ["widget"]
+style_out = "slash_line"
+styles_in = ["slash_line", "slash_block", "slash_block"]
+"#,
+    )
+    .expect("write duplicate configuration");
+    fs::write(project.path().join("example.widget"), "content\n").expect("write source");
+    let formatted = hawkeye(project.path(), ["format"]);
+    assert_exit(&formatted, 0);
+    assert!(
+        stderr(&formatted)
+            .contains("rules[0].styles_in contains duplicate style \"slash_block\"; ignoring it")
+    );
+}
+
+#[test]
 fn rendered_header_must_include_recognition_keywords() {
     let project = tempfile::tempdir().expect("create template validation project");
     fs::write(

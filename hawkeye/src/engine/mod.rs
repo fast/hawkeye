@@ -345,21 +345,32 @@ impl Rule {
             extensions,
             filenames,
             style_out,
-            styles_in,
+            mut styles_in,
         } = config;
-        let mut accepted = Vec::with_capacity(styles_in.len() + 1);
+        let source = source.as_ref();
+        if !styles.contains_key(&style_out) {
+            return Err(Error::new(
+                ErrorKind::ConfigInvalid,
+                format!("{source} references unknown style {style_out:?}"),
+            ));
+        }
+        if styles_in.is_empty() {
+            styles_in.push(style_out.clone());
+        }
+        let mut accepted = Vec::with_capacity(styles_in.len());
         let mut seen = BTreeSet::new();
-        for name in std::iter::once(style_out.as_str()).chain(styles_in.iter().map(String::as_str))
-        {
-            if !styles.contains_key(name) {
+        for name in styles_in {
+            if !styles.contains_key(&name) {
                 return Err(Error::new(
                     ErrorKind::ConfigInvalid,
-                    format!("{} references unknown style {name:?}", source.as_ref()),
+                    format!("{source} references unknown style {name:?}"),
                 ));
             }
-            if seen.insert(name) {
-                accepted.push(name.to_owned());
+            if !seen.insert(name.clone()) {
+                log::warn!("{source}.styles_in contains duplicate style {name:?}; ignoring it");
+                continue;
             }
+            accepted.push(name);
         }
         Ok(Self {
             extension_suffixes: extensions

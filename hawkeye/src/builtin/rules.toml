@@ -43,13 +43,13 @@ extensions = [
   "sv",
 ]
 style_out = "slash_block"
-styles_in = ["slash_line"]
+styles_in = ["slash_block", "slash_line"]
 
 [[rules]]
 extensions = ["mbt", "rs", "zig"]
 filenames = ["go.mod"]
 style_out = "slash_line"
-styles_in = ["slash_block"]
+styles_in = ["slash_line", "slash_block"]
 
 [[rules]]
 extensions = [
@@ -100,7 +100,7 @@ extensions = [
   "xslt",
 ]
 style_out = "xml_block"
-styles_in = ["xml_line"]
+styles_in = ["xml_block", "xml_line"]
 
 [[rules]]
 extensions = ["asm", "clj", "cljs", "el"]
@@ -145,7 +145,7 @@ style_out = "mvel_block"
 [[rules]]
 extensions = ["ftl"]
 style_out = "freemarker_block"
-styles_in = ["freemarker_alt_block"]
+styles_in = ["freemarker_block", "freemarker_alt_block"]
 
 [[rules]]
 extensions = ["jsp"]
@@ -162,7 +162,7 @@ style_out = "asp_block"
 [[rules]]
 extensions = ["php"]
 style_out = "slash_block"
-styles_in = ["slash_line"]
+styles_in = ["slash_block", "slash_line"]
 
 [[rules]]
 extensions = ["lua"]
@@ -176,7 +176,7 @@ style_out = "asciidoc_block"
 extensions = ["pkl"]
 filenames = ["PklProject"]
 style_out = "swift_banner"
-styles_in = ["slash_line"]
+styles_in = ["swift_banner", "slash_line"]
 
 [[rules]]
 extensions = ["haml", "scaml"]

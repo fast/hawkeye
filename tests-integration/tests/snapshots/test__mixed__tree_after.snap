@@ -41,7 +41,7 @@ year = 2026␊
 extensions = ["rs", "d.ts"]␊
 filenames = ["Makefile"]␊
 style_out = "slash_line"␊
-styles_in = ["slash_block"]␊
+styles_in = ["slash_line", "slash_block"]␊
 === not_ignored_without_repository.rs ===
 // Copyright 2026 Acme Labs␊
 // Sequence 1-2-3␊

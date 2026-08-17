@@ -205,7 +205,7 @@ pub struct RuleConfig {
     pub filenames: Vec<String>,
     /// The canonical style used for output.
     pub style_out: String,
-    /// Additional styles accepted as structurally safe input.
+    /// The complete set of structurally safe input styles, or the output style when empty.
     #[serde(default)]
     pub styles_in: Vec<String>,
 }
@@ -398,6 +398,12 @@ impl Validator {
             }
 
             self.non_blank(&format!("{path}.style_out"), &rule.style_out);
+            if !rule.styles_in.is_empty() && !rule.styles_in.contains(&rule.style_out) {
+                self.issue(
+                    format!("{path}.styles_in"),
+                    "must include `style_out` when explicitly configured",
+                );
+            }
             for (item, style) in rule.styles_in.iter().enumerate() {
                 self.non_blank(&format!("{path}.styles_in[{item}]"), style);
             }
