@@ -489,6 +489,44 @@ styles_in = ["slash_line", "slash_block", "slash_block"]
 }
 
 #[test]
+fn duplicate_rule_selectors_are_rejected_case_insensitively() {
+    let project = tempfile::tempdir().expect("create rule project");
+    fs::write(
+        project.path().join("licenserc.toml"),
+        r#"[header]
+text = "Copyright 2026 Acme"
+
+[[rules]]
+extensions = ["RS"]
+filenames = ["Makefile"]
+style_out = "slash_line"
+
+[[rules]]
+extensions = ["rs"]
+filenames = ["makefile"]
+style_out = "hash_line"
+"#,
+    )
+    .expect("write duplicate selectors");
+
+    let checked = hawkeye(project.path(), ["check"]);
+    assert_exit(&checked, 2);
+    let message = stderr(&checked);
+    assert!(
+        message.contains(
+            "rules[1].extensions[0]: duplicates `rules[0].extensions[0]` case-insensitively"
+        ),
+        "{message}"
+    );
+    assert!(
+        message.contains(
+            "rules[1].filenames[0]: duplicates `rules[0].filenames[0]` case-insensitively"
+        ),
+        "{message}"
+    );
+}
+
+#[test]
 fn rendered_header_must_include_recognition_keywords() {
     let project = tempfile::tempdir().expect("create template validation project");
     fs::write(
