@@ -560,12 +560,9 @@ text = "Copyright 2026 Acme"
         Err(error) => error,
     };
     assert_eq!(error.kind(), ErrorKind::ConfigInvalid);
-    let source = std::error::Error::source(&error).expect("validation details must be preserved");
-    assert!(
-        source
-            .to_string()
-            .contains("exactly one of `builtin`, `path`, or `text` must be set")
-    );
+    let message = error.to_string();
+    assert!(message.starts_with("ConfigInvalid => invalid licenserc.toml, source: "));
+    assert!(message.contains("exactly one of `builtin`, `path`, or `text` must be set"));
 }
 
 #[test]

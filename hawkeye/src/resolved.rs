@@ -19,7 +19,7 @@ use std::path::Path;
 use std::path::PathBuf;
 
 use crate::Error;
-use crate::Result;
+use crate::ErrorKind;
 use crate::attrs::FileAttrs;
 use crate::config::Config;
 use crate::config::GitConfig;
@@ -51,7 +51,7 @@ pub(crate) struct Rule {
 
 impl Config {
     /// Resolves paths and built-in resources relative to `config_path`.
-    pub fn resolve(self, config_path: impl AsRef<Path>) -> Result<ResolvedConfig> {
+    pub fn resolve(self, config_path: impl AsRef<Path>) -> Result<ResolvedConfig, Error> {
         self.validate()?;
         let Config {
             header,
@@ -66,45 +66,77 @@ impl Config {
             config_path.to_path_buf()
         } else {
             std::env::current_dir()
-                .map_err(|source| Error::io("read current directory for", config_path, source))?
+                .map_err(|source| {
+                    Error::new(
+                        ErrorKind::Io,
+                        format!(
+                            "cannot read current directory for {}",
+                            config_path.display()
+                        ),
+                    )
+                    .with_source(source)
+                })?
                 .join(config_path)
         };
-        let config_path = config_path
-            .canonicalize()
-            .map_err(|source| Error::io("resolve", &config_path, source))?;
-        let config_dir = config_path
-            .parent()
-            .ok_or_else(|| Error::config("configuration path has no parent directory"))?;
+        let config_path = config_path.canonicalize().map_err(|source| {
+            Error::new(
+                ErrorKind::Io,
+                format!("cannot resolve {}", config_path.display()),
+            )
+            .with_source(source)
+        })?;
+        let config_dir = config_path.parent().ok_or_else(|| {
+            Error::new(
+                ErrorKind::ConfigInvalid,
+                "configuration path has no parent directory",
+            )
+        })?;
 
         let root = resolve_path(config_dir, &files.root);
-        let root = root
-            .canonicalize()
-            .map_err(|source| Error::io("resolve file root", &root, source))?;
+        let root = root.canonicalize().map_err(|source| {
+            Error::new(
+                ErrorKind::Io,
+                format!("cannot resolve file root {}", root.display()),
+            )
+            .with_source(source)
+        })?;
         if !root.is_dir() {
-            return Err(Error::config(format!(
-                "files.root is not a directory: {}",
-                root.display()
-            )));
+            return Err(Error::new(
+                ErrorKind::ConfigInvalid,
+                format!("files.root is not a directory: {}", root.display()),
+            ));
         }
 
         let (source, header_path) = if let Some(key) = header.builtin.as_deref() {
             (
                 builtin_header(key).ok_or_else(|| {
-                    Error::config(format!(
-                        "unknown header.builtin {key:?}; available values are Apache-2.0, Apache-2.0-ASF, and Elastic-2.0"
-                    ))
+                    Error::new(
+                        ErrorKind::ConfigInvalid,
+                        format!(
+                            "unknown header.builtin {key:?}; available values are Apache-2.0, Apache-2.0-ASF, and Elastic-2.0"
+                        ),
+                    )
                 })?
                 .to_owned(),
                 None,
             )
         } else if let Some(path) = header.path.as_deref() {
             let path = resolve_path(config_dir, path);
-            let path = path
-                .canonicalize()
-                .map_err(|source| Error::io("resolve header template", &path, source))?;
+            let path = path.canonicalize().map_err(|source| {
+                Error::new(
+                    ErrorKind::Io,
+                    format!("cannot resolve header template {}", path.display()),
+                )
+                .with_source(source)
+            })?;
             (
-                fs::read_to_string(&path)
-                    .map_err(|source| Error::io("read header template", &path, source))?,
+                fs::read_to_string(&path).map_err(|source| {
+                    Error::new(
+                        ErrorKind::Io,
+                        format!("cannot read header template {}", path.display()),
+                    )
+                    .with_source(source)
+                })?,
                 Some(path),
             )
         } else {
@@ -140,7 +172,7 @@ impl Config {
                     &styles,
                 )
             })
-            .collect::<Result<Vec<_>>>()?;
+            .collect::<Result<Vec<_>, Error>>()?;
         rules.extend(default_rules(&styles)?);
 
         Ok(ResolvedConfig {
@@ -164,10 +196,15 @@ impl Config {
 
 impl ResolvedConfig {
     /// Reads, parses, and resolves one `licenserc.toml` file.
-    pub fn load(path: impl AsRef<Path>) -> Result<Self> {
+    pub fn load(path: impl AsRef<Path>) -> Result<Self, Error> {
         let path = path.as_ref();
-        let source = fs::read_to_string(path)
-            .map_err(|source| Error::io("read configuration", path, source))?;
+        let source = fs::read_to_string(path).map_err(|source| {
+            Error::new(
+                ErrorKind::Io,
+                format!("cannot read configuration {}", path.display()),
+            )
+            .with_source(source)
+        })?;
         Config::from_toml(&source)?.resolve(path)
     }
 
@@ -205,7 +242,7 @@ impl ResolvedConfig {
         self.styles.values()
     }
 
-    pub(crate) fn render_header(&self, attrs: &FileAttrs) -> Result<String> {
+    pub(crate) fn render_header(&self, attrs: &FileAttrs) -> Result<String, Error> {
         let header = self.template.render(&self.props, attrs)?;
         let folded = header.to_lowercase();
         if let Some(keyword) = self
@@ -213,10 +250,13 @@ impl ResolvedConfig {
             .iter()
             .find(|keyword| !folded.contains(keyword.as_str()))
         {
-            return Err(Error::config(format!(
-                "header template output for {:?} does not contain recognition keyword {keyword:?}",
-                attrs.filename
-            )));
+            return Err(Error::new(
+                ErrorKind::ConfigInvalid,
+                format!(
+                    "header template output for {:?} does not contain recognition keyword {keyword:?}",
+                    attrs.filename
+                ),
+            ));
         }
         Ok(header)
     }
@@ -272,7 +312,7 @@ fn resolve_rule(
     style_out: &str,
     styles_in: &[String],
     styles: &BTreeMap<String, Style>,
-) -> Result<Rule> {
+) -> Result<Rule, Error> {
     validate_style(location, style_out, styles)?;
     let mut accepted = Vec::with_capacity(styles_in.len() + 1);
     let mut seen = BTreeSet::new();
@@ -296,17 +336,22 @@ fn resolve_rule(
     })
 }
 
-fn validate_style(location: &str, name: &str, styles: &BTreeMap<String, Style>) -> Result<()> {
+fn validate_style(
+    location: &str,
+    name: &str,
+    styles: &BTreeMap<String, Style>,
+) -> Result<(), Error> {
     if styles.contains_key(name) {
         Ok(())
     } else {
-        Err(Error::config(format!(
-            "{location} references unknown style {name:?}"
-        )))
+        Err(Error::new(
+            ErrorKind::ConfigInvalid,
+            format!("{location} references unknown style {name:?}"),
+        ))
     }
 }
 
-fn default_rules(styles: &BTreeMap<String, Style>) -> Result<Vec<Rule>> {
+fn default_rules(styles: &BTreeMap<String, Style>) -> Result<Vec<Rule>, Error> {
     let definitions: &[(&[&str], &[&str], &str, &[&str])] = &[
         (
             &[

@@ -17,9 +17,9 @@ use std::path::Path;
 use std::path::PathBuf;
 
 use crate::Error;
+use crate::ErrorKind;
 use crate::FileAttrs;
 use crate::ResolvedConfig;
-use crate::Result;
 use crate::analyze::analyze;
 use crate::attrs::FileAttrsResolver;
 use crate::discovery::discover;
@@ -43,12 +43,12 @@ impl Engine {
     }
 
     /// Loads `licenserc.toml` and creates an engine.
-    pub fn load(path: impl AsRef<Path>) -> Result<Self> {
+    pub fn load(path: impl AsRef<Path>) -> Result<Self, Error> {
         ResolvedConfig::load(path).map(Self::new)
     }
 
     /// Discovers and analyzes files without modifying the filesystem.
-    pub fn plan(&self, mode: Mode) -> Result<Plan> {
+    pub fn plan(&self, mode: Mode) -> Result<Plan, Error> {
         let git = self.config.git();
         let repo = GitRepo::discover(self.config.root(), git.ignore.combine(git.file_attrs))?;
         let paths = discover(&self.config, repo.as_ref())?;
@@ -65,7 +65,10 @@ impl Engine {
                 continue;
             }
 
-            let original = fs::read(&path).map_err(|source| Error::io("read", &path, source))?;
+            let original = fs::read(&path).map_err(|source| {
+                Error::new(ErrorKind::Io, format!("cannot read {}", path.display()))
+                    .with_source(source)
+            })?;
             let Ok(input) = std::str::from_utf8(&original) else {
                 files.push(PlannedFile::unsupported(path, relative));
                 continue;
@@ -130,7 +133,7 @@ impl Plan {
     }
 
     /// Atomically applies every planned edit after checking for stale inputs.
-    pub fn apply(&self) -> Result<Report> {
+    pub fn apply(&self) -> Result<Report, Error> {
         for file in &self.files {
             let (Some(original), Some(_)) = (&file.original, &file.updated) else {
                 continue;

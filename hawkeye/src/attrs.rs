@@ -26,7 +26,7 @@ use jiff::tz::TimeZone;
 use serde::Serialize;
 
 use crate::Error;
-use crate::Result;
+use crate::ErrorKind;
 use crate::config::FeatureMode;
 use crate::git::GitRepo;
 use crate::git::git_path;
@@ -85,7 +85,7 @@ impl FileAttrsResolver {
         files: &[PathBuf],
         mode: FeatureMode,
         repo: Option<&GitRepo>,
-    ) -> Result<Self> {
+    ) -> Result<Self, Error> {
         if mode == FeatureMode::Disable {
             return Ok(Self {
                 git_enabled: false,
@@ -123,10 +123,14 @@ impl FileAttrsResolver {
                     git: BTreeMap::new(),
                 });
             }
-            return Err(Error::git(message.to_owned()));
+            return Err(Error::new(ErrorKind::GitUnavailable, message));
         }
-        let current_year = utc_year(SystemTime::now())
-            .ok_or_else(|| Error::git("the current UTC year is out of range".to_owned()))?;
+        let current_year = utc_year(SystemTime::now()).ok_or_else(|| {
+            Error::new(
+                ErrorKind::GitUnavailable,
+                "the current UTC year is out of range",
+            )
+        })?;
         let started = Instant::now();
 
         let author = current_git_author(repo)?;
@@ -154,9 +158,14 @@ impl FileAttrsResolver {
         })
     }
 
-    pub(crate) fn for_file(&self, path: &Path) -> Result<FileAttrs> {
-        let metadata =
-            fs::metadata(path).map_err(|source| Error::io("read metadata for", path, source))?;
+    pub(crate) fn for_file(&self, path: &Path) -> Result<FileAttrs, Error> {
+        let metadata = fs::metadata(path).map_err(|source| {
+            Error::new(
+                ErrorKind::Io,
+                format!("cannot read metadata for {}", path.display()),
+            )
+            .with_source(source)
+        })?;
         let git = self.git.get(path);
         Ok(FileAttrs {
             filename: path
@@ -183,7 +192,7 @@ impl FileAttrsResolver {
 fn read_history(
     repo: &GitRepo,
     selected: &BTreeMap<Vec<u8>, PathBuf>,
-) -> Result<BTreeMap<PathBuf, GitAttrs>> {
+) -> Result<BTreeMap<PathBuf, GitAttrs>, Error> {
     if !repo.has_head()? {
         return Ok(BTreeMap::new());
     }
@@ -228,7 +237,7 @@ fn history_pathspecs(selected: &BTreeMap<Vec<u8>, PathBuf>) -> Option<Vec<u8>> {
 fn parse_history(
     reader: &mut dyn BufRead,
     selected: &BTreeMap<Vec<u8>, PathBuf>,
-) -> Result<BTreeMap<PathBuf, GitAttrs>> {
+) -> Result<BTreeMap<PathBuf, GitAttrs>, Error> {
     const MARKER: u8 = 0x1e;
     let mut current: Option<(i16, String)> = None;
     let mut expecting_author = false;
@@ -237,9 +246,9 @@ fn parse_history(
     let mut record = Vec::new();
     loop {
         record.clear();
-        let read = reader
-            .read_until(0, &mut record)
-            .map_err(|error| Error::git(format!("cannot read Git history: {error}")))?;
+        let read = reader.read_until(0, &mut record).map_err(|source| {
+            Error::new(ErrorKind::GitUnavailable, "cannot read Git history").with_source(source)
+        })?;
         if read == 0 {
             break;
         }
@@ -294,7 +303,7 @@ fn apply_worktree_status(
     year: i16,
     author: Option<&str>,
     attrs: &mut BTreeMap<PathBuf, GitAttrs>,
-) -> Result<()> {
+) -> Result<(), Error> {
     let output = repo.output(["status", "--porcelain=v1", "-z", "--untracked-files=all"])?;
     let records = output.stdout.split(|byte| *byte == 0).collect::<Vec<_>>();
     let mut index = 0;
@@ -319,7 +328,7 @@ fn apply_worktree_status(
     Ok(())
 }
 
-fn current_git_author(repo: &GitRepo) -> Result<Option<String>> {
+fn current_git_author(repo: &GitRepo) -> Result<Option<String>, Error> {
     repo.optional_config("user.name")
 }
 

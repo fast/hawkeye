@@ -19,7 +19,7 @@ use minijinja::Environment;
 use minijinja::UndefinedBehavior;
 
 use crate::Error;
-use crate::Result;
+use crate::ErrorKind;
 use crate::attrs::FileAttrs;
 
 pub(crate) struct HeaderTemplate {
@@ -27,11 +27,16 @@ pub(crate) struct HeaderTemplate {
 }
 
 impl HeaderTemplate {
-    pub(crate) fn new(source: String) -> Result<Self> {
+    pub(crate) fn new(source: String) -> Result<Self, Error> {
         let mut environment = Environment::new();
         environment.set_undefined_behavior(UndefinedBehavior::Strict);
         environment.set_auto_escape_callback(|_| AutoEscape::None);
-        environment.add_template_owned("header", source)?;
+        environment
+            .add_template_owned("header", source)
+            .map_err(|source| {
+                Error::new(ErrorKind::ConfigInvalid, "cannot compile header template")
+                    .with_source(source)
+            })?;
         Ok(Self { environment })
     }
 
@@ -39,18 +44,35 @@ impl HeaderTemplate {
         &self,
         props: &BTreeMap<String, toml::Value>,
         attrs: &FileAttrs,
-    ) -> Result<String> {
+    ) -> Result<String, Error> {
         let rendered = self
             .environment
-            .get_template("header")?
-            .render(minijinja::context! { props, attrs })?;
+            .get_template("header")
+            .map_err(|source| {
+                Error::new(
+                    ErrorKind::Unexpected,
+                    "cannot load compiled header template",
+                )
+                .with_source(source)
+            })?
+            .render(minijinja::context! { props, attrs })
+            .map_err(|source| {
+                Error::new(ErrorKind::ConfigInvalid, "cannot render header template")
+                    .with_source(source)
+            })?;
         let normalized = rendered.replace("\r\n", "\n").replace('\r', "\n");
         let normalized = normalized.trim_matches('\n').to_owned();
         if normalized.trim().is_empty() {
-            return Err(Error::config("the header template rendered an empty value"));
+            return Err(Error::new(
+                ErrorKind::ConfigInvalid,
+                "header template rendered an empty value",
+            ));
         }
         if normalized.contains('\0') {
-            return Err(Error::config("the header template rendered a NUL byte"));
+            return Err(Error::new(
+                ErrorKind::ConfigInvalid,
+                "header template rendered a NUL byte",
+            ));
         }
         Ok(normalized)
     }

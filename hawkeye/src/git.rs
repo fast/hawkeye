@@ -28,7 +28,7 @@ use std::process::Stdio;
 use std::time::Instant;
 
 use crate::Error;
-use crate::Result;
+use crate::ErrorKind;
 use crate::config::FeatureMode;
 
 pub(crate) struct GitRepo {
@@ -36,7 +36,7 @@ pub(crate) struct GitRepo {
 }
 
 impl GitRepo {
-    pub(crate) fn discover(root: &Path, mode: FeatureMode) -> Result<Option<Self>> {
+    pub(crate) fn discover(root: &Path, mode: FeatureMode) -> Result<Option<Self>, Error> {
         if mode == FeatureMode::Disable {
             return Ok(None);
         }
@@ -56,7 +56,11 @@ impl GitRepo {
                 );
                 return Ok(None);
             }
-            Err(error) => return Err(Error::git(format!("cannot start Git: {error}"))),
+            Err(source) => {
+                return Err(
+                    Error::new(ErrorKind::GitUnavailable, "cannot start Git").with_source(source)
+                );
+            }
         };
 
         if !output.status.success() {
@@ -68,7 +72,7 @@ impl GitRepo {
                 );
                 return Ok(None);
             }
-            return Err(Error::git(stderr(&output)));
+            return Err(Error::new(ErrorKind::GitUnavailable, stderr(&output)));
         }
 
         let path = output
@@ -76,13 +80,15 @@ impl GitRepo {
             .strip_suffix(b"\n")
             .unwrap_or(output.stdout.as_slice());
         if path.is_empty() {
-            return Err(Error::git(
-                "Git returned an empty repository root".to_owned(),
+            return Err(Error::new(
+                ErrorKind::GitUnavailable,
+                "Git returned an empty repository root",
             ));
         }
-        let root = path_from_git_bytes(path)
-            .canonicalize()
-            .map_err(|error| Error::git(format!("cannot resolve repository root: {error}")))?;
+        let root = path_from_git_bytes(path).canonicalize().map_err(|source| {
+            Error::new(ErrorKind::GitUnavailable, "cannot resolve repository root")
+                .with_source(source)
+        })?;
         log::debug!(
             "discovered Git repository {} in {:?}",
             root.display(),
@@ -95,13 +101,16 @@ impl GitRepo {
         &self.root
     }
 
-    pub(crate) fn list_files(&self, scan_root: &Path) -> Result<Vec<PathBuf>> {
+    pub(crate) fn list_files(&self, scan_root: &Path) -> Result<Vec<PathBuf>, Error> {
         let relative_root = scan_root.strip_prefix(&self.root).map_err(|_| {
-            Error::git(format!(
-                "files.root {} is outside repository {}",
-                scan_root.display(),
-                self.root.display()
-            ))
+            Error::new(
+                ErrorKind::GitUnavailable,
+                format!(
+                    "files.root {} is outside repository {}",
+                    scan_root.display(),
+                    self.root.display()
+                ),
+            )
         })?;
         let pathspec = if relative_root.as_os_str().is_empty() {
             OsString::from(".")
@@ -127,7 +136,13 @@ impl GitRepo {
             let metadata = match std::fs::symlink_metadata(&path) {
                 Ok(metadata) => metadata,
                 Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
-                Err(source) => return Err(Error::io("read metadata for", &path, source)),
+                Err(source) => {
+                    return Err(Error::new(
+                        ErrorKind::Io,
+                        format!("cannot read metadata for {}", path.display()),
+                    )
+                    .with_source(source));
+                }
             };
             if metadata.file_type().is_file() && path.starts_with(scan_root) {
                 files.push(path);
@@ -136,34 +151,43 @@ impl GitRepo {
         Ok(files)
     }
 
-    pub(crate) fn has_head(&self) -> Result<bool> {
+    pub(crate) fn has_head(&self) -> Result<bool, Error> {
         let output = Command::new("git")
             .args(["-C"])
             .arg(&self.root)
             .args(["rev-parse", "--verify", "HEAD"])
             .output()
-            .map_err(|error| Error::git(format!("cannot inspect Git HEAD: {error}")))?;
+            .map_err(|source| {
+                Error::new(ErrorKind::GitUnavailable, "cannot inspect Git HEAD").with_source(source)
+            })?;
         Ok(output.status.success())
     }
 
-    pub(crate) fn is_shallow(&self) -> Result<bool> {
+    pub(crate) fn is_shallow(&self) -> Result<bool, Error> {
         let output = self.output(["rev-parse", "--is-shallow-repository"])?;
         match String::from_utf8_lossy(&output.stdout).trim() {
             "true" => Ok(true),
             "false" => Ok(false),
-            value => Err(Error::git(format!(
-                "Git returned an invalid shallow-repository value: {value:?}"
-            ))),
+            value => Err(Error::new(
+                ErrorKind::GitUnavailable,
+                format!("Git returned an invalid shallow-repository value: {value:?}"),
+            )),
         }
     }
 
-    pub(crate) fn optional_config(&self, key: &str) -> Result<Option<String>> {
+    pub(crate) fn optional_config(&self, key: &str) -> Result<Option<String>, Error> {
         let output = Command::new("git")
             .args(["-C"])
             .arg(&self.root)
             .args(["config", "--get", key])
             .output()
-            .map_err(|error| Error::git(format!("cannot read {key}: {error}")))?;
+            .map_err(|source| {
+                Error::new(
+                    ErrorKind::GitUnavailable,
+                    format!("cannot read Git configuration key {key}"),
+                )
+                .with_source(source)
+            })?;
         if !output.status.success() {
             return Ok(None);
         }
@@ -171,7 +195,7 @@ impl GitRepo {
         Ok((!value.is_empty()).then_some(value))
     }
 
-    pub(crate) fn output<I, S>(&self, arguments: I) -> Result<Output>
+    pub(crate) fn output<I, S>(&self, arguments: I) -> Result<Output, Error>
     where
         I: IntoIterator<Item = S>,
         S: AsRef<OsStr>,
@@ -186,12 +210,14 @@ impl GitRepo {
             .arg(&self.root)
             .args(&arguments)
             .output()
-            .map_err(|error| Error::git(format!("cannot start Git: {error}")))?;
+            .map_err(|source| {
+                Error::new(ErrorKind::GitUnavailable, "cannot start Git").with_source(source)
+            })?;
         log::debug!("Git {:?} completed in {:?}", arguments, started.elapsed());
         if output.status.success() {
             Ok(output)
         } else {
-            Err(Error::git(stderr(&output)))
+            Err(Error::new(ErrorKind::GitUnavailable, stderr(&output)))
         }
     }
 
@@ -199,8 +225,8 @@ impl GitRepo {
         &self,
         arguments: I,
         input: Option<&[u8]>,
-        read: impl FnOnce(&mut dyn BufRead) -> Result<Value>,
-    ) -> Result<Value>
+        read: impl FnOnce(&mut dyn BufRead) -> Result<Value, Error>,
+    ) -> Result<Value, Error>
     where
         I: IntoIterator<Item = S>,
         S: AsRef<OsStr>,
@@ -209,18 +235,27 @@ impl GitRepo {
             .into_iter()
             .map(|argument| argument.as_ref().to_owned())
             .collect::<Vec<_>>();
-        let mut stderr = tempfile::tempfile()
-            .map_err(|error| Error::git(format!("cannot create Git stderr buffer: {error}")))?;
-        let stderr_writer = stderr
-            .try_clone()
-            .map_err(|error| Error::git(format!("cannot clone Git stderr buffer: {error}")))?;
+        let mut stderr = tempfile::tempfile().map_err(|source| {
+            Error::new(ErrorKind::GitUnavailable, "cannot create Git stderr buffer")
+                .with_source(source)
+        })?;
+        let stderr_writer = stderr.try_clone().map_err(|source| {
+            Error::new(ErrorKind::GitUnavailable, "cannot clone Git stderr buffer")
+                .with_source(source)
+        })?;
         let stdin = if let Some(input) = input {
-            let mut file = tempfile::tempfile()
-                .map_err(|error| Error::git(format!("cannot create Git stdin buffer: {error}")))?;
-            file.write_all(input)
-                .map_err(|error| Error::git(format!("cannot write Git stdin buffer: {error}")))?;
-            file.seek(SeekFrom::Start(0))
-                .map_err(|error| Error::git(format!("cannot rewind Git stdin buffer: {error}")))?;
+            let mut file = tempfile::tempfile().map_err(|source| {
+                Error::new(ErrorKind::GitUnavailable, "cannot create Git stdin buffer")
+                    .with_source(source)
+            })?;
+            file.write_all(input).map_err(|source| {
+                Error::new(ErrorKind::GitUnavailable, "cannot write Git stdin buffer")
+                    .with_source(source)
+            })?;
+            file.seek(SeekFrom::Start(0)).map_err(|source| {
+                Error::new(ErrorKind::GitUnavailable, "cannot rewind Git stdin buffer")
+                    .with_source(source)
+            })?;
             Stdio::from(file)
         } else {
             Stdio::null()
@@ -235,7 +270,9 @@ impl GitRepo {
             .stdout(Stdio::piped())
             .stderr(Stdio::from(stderr_writer))
             .spawn()
-            .map_err(|error| Error::git(format!("cannot start Git: {error}")))?;
+            .map_err(|source| {
+                Error::new(ErrorKind::GitUnavailable, "cannot start Git").with_source(source)
+            })?;
         let stdout = child
             .stdout
             .take()
@@ -244,27 +281,30 @@ impl GitRepo {
         if parsed.is_err() {
             let _ = child.kill();
         }
-        let status = child
-            .wait()
-            .map_err(|error| Error::git(format!("cannot wait for Git: {error}")))?;
+        let status = child.wait().map_err(|source| {
+            Error::new(ErrorKind::GitUnavailable, "cannot wait for Git").with_source(source)
+        })?;
         log::debug!("Git {:?} completed in {:?}", arguments, started.elapsed());
         let value = parsed?;
         if status.success() {
             return Ok(value);
         }
 
-        stderr
-            .seek(SeekFrom::Start(0))
-            .map_err(|error| Error::git(format!("cannot rewind Git stderr: {error}")))?;
+        stderr.seek(SeekFrom::Start(0)).map_err(|source| {
+            Error::new(ErrorKind::GitUnavailable, "cannot rewind Git stderr").with_source(source)
+        })?;
         let mut bytes = Vec::new();
-        stderr
-            .read_to_end(&mut bytes)
-            .map_err(|error| Error::git(format!("cannot read Git stderr: {error}")))?;
+        stderr.read_to_end(&mut bytes).map_err(|source| {
+            Error::new(ErrorKind::GitUnavailable, "cannot read Git stderr").with_source(source)
+        })?;
         let message = String::from_utf8_lossy(&bytes).trim().to_owned();
         if message.is_empty() {
-            Err(Error::git(format!("Git exited with {status}")))
+            Err(Error::new(
+                ErrorKind::GitUnavailable,
+                format!("Git exited with {status}"),
+            ))
         } else {
-            Err(Error::git(message))
+            Err(Error::new(ErrorKind::GitUnavailable, message))
         }
     }
 }

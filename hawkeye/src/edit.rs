@@ -15,8 +15,7 @@
 use std::ops::Range;
 
 use crate::Error;
-use crate::Result;
-use crate::error::ErrorKind;
+use crate::ErrorKind;
 
 /// A single, proven replacement in an original UTF-8 source file.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -31,7 +30,7 @@ impl Edit {
     }
 
     /// Applies the edit after checking its UTF-8 byte boundaries.
-    pub fn apply(&self, input: &str) -> Result<String> {
+    pub fn apply(&self, input: &str) -> Result<String, Error> {
         if self.range.start > self.range.end
             || self.range.end > input.len()
             || !input.is_char_boundary(self.range.start)

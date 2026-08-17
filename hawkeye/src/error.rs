@@ -13,7 +13,6 @@
 // limitations under the License.
 
 use std::fmt;
-use std::path::Path;
 
 /// A stable, actionable category of failures returned by HawkEye.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -50,7 +49,7 @@ impl fmt::Display for ErrorKind {
 pub struct Error {
     kind: ErrorKind,
     message: String,
-    source: Option<Box<dyn std::error::Error + Send + Sync>>,
+    source: Option<String>,
 }
 
 impl Error {
@@ -67,41 +66,9 @@ impl Error {
         }
     }
 
-    pub(crate) fn with_source(
-        mut self,
-        source: impl std::error::Error + Send + Sync + 'static,
-    ) -> Self {
-        self.source = Some(Box::new(source));
+    pub(crate) fn with_source(mut self, source: impl fmt::Display) -> Self {
+        self.source = Some(source.to_string());
         self
-    }
-
-    pub(crate) fn config(message: impl fmt::Display) -> Self {
-        Self::new(
-            ErrorKind::ConfigInvalid,
-            format!("invalid licenserc.toml: {message}"),
-        )
-    }
-
-    pub(crate) fn config_source(
-        message: impl Into<String>,
-        source: impl std::error::Error + Send + Sync + 'static,
-    ) -> Self {
-        Self::new(ErrorKind::ConfigInvalid, message).with_source(source)
-    }
-
-    pub(crate) fn git(message: impl fmt::Display) -> Self {
-        Self::new(
-            ErrorKind::GitUnavailable,
-            format!("Git integration is unavailable: {message}"),
-        )
-    }
-
-    pub(crate) fn io(operation: &'static str, path: &Path, source: std::io::Error) -> Self {
-        Self::new(
-            ErrorKind::Io,
-            format!("cannot {operation} {}", path.display()),
-        )
-        .with_source(source)
     }
 }
 
@@ -126,34 +93,15 @@ impl fmt::Debug for Error {
 
 impl fmt::Display for Error {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(&self.message)
+        write!(formatter, "{}", self.kind)?;
+        if !self.message.is_empty() {
+            write!(formatter, " => {}", self.message)?;
+        }
+        if let Some(source) = &self.source {
+            write!(formatter, ", source: {source}")?;
+        }
+        Ok(())
     }
 }
 
-impl std::error::Error for Error {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        self.source
-            .as_deref()
-            .map(|source| source as &(dyn std::error::Error + 'static))
-    }
-}
-
-impl From<minijinja::Error> for Error {
-    fn from(source: minijinja::Error) -> Self {
-        Self::new(ErrorKind::ConfigInvalid, "cannot render header template").with_source(source)
-    }
-}
-
-impl From<ignore::Error> for Error {
-    fn from(source: ignore::Error) -> Self {
-        let kind = if source.is_io() {
-            ErrorKind::Io
-        } else {
-            ErrorKind::Unexpected
-        };
-        Self::new(kind, "cannot discover files").with_source(source)
-    }
-}
-
-/// A result returned by HawkEye's library API.
-pub type Result<T> = std::result::Result<T, Error>;
+impl std::error::Error for Error {}

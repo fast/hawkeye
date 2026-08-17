@@ -19,12 +19,16 @@ use std::path::Path;
 use tempfile::NamedTempFile;
 
 use crate::Error;
-use crate::Result;
-use crate::error::ErrorKind;
+use crate::ErrorKind;
 
-pub(crate) fn validate_source(path: &Path, expected: &[u8]) -> Result<()> {
-    let metadata = fs::symlink_metadata(path)
-        .map_err(|source| Error::io("read metadata for", path, source))?;
+pub(crate) fn validate_source(path: &Path, expected: &[u8]) -> Result<(), Error> {
+    let metadata = fs::symlink_metadata(path).map_err(|source| {
+        Error::new(
+            ErrorKind::Io,
+            format!("cannot read metadata for {}", path.display()),
+        )
+        .with_source(source)
+    })?;
     if metadata.file_type().is_symlink() {
         return Err(Error::new(
             ErrorKind::Unsupported,
@@ -42,7 +46,9 @@ pub(crate) fn validate_source(path: &Path, expected: &[u8]) -> Result<()> {
         }
     }
 
-    let current = fs::read(path).map_err(|source| Error::io("reread", path, source))?;
+    let current = fs::read(path).map_err(|source| {
+        Error::new(ErrorKind::Io, format!("cannot reread {}", path.display())).with_source(source)
+    })?;
     if current != expected {
         return Err(Error::new(
             ErrorKind::StalePlan,
@@ -52,10 +58,15 @@ pub(crate) fn validate_source(path: &Path, expected: &[u8]) -> Result<()> {
     Ok(())
 }
 
-pub(crate) fn write_atomic(path: &Path, expected: &[u8], updated: &[u8]) -> Result<()> {
+pub(crate) fn write_atomic(path: &Path, expected: &[u8], updated: &[u8]) -> Result<(), Error> {
     validate_source(path, expected)?;
-    let metadata = fs::symlink_metadata(path)
-        .map_err(|source| Error::io("read metadata for", path, source))?;
+    let metadata = fs::symlink_metadata(path).map_err(|source| {
+        Error::new(
+            ErrorKind::Io,
+            format!("cannot read metadata for {}", path.display()),
+        )
+        .with_source(source)
+    })?;
 
     let parent = path.parent().ok_or_else(|| {
         Error::new(
@@ -63,24 +74,47 @@ pub(crate) fn write_atomic(path: &Path, expected: &[u8], updated: &[u8]) -> Resu
             format!("source path has no parent: {}", path.display()),
         )
     })?;
-    let mut temporary = NamedTempFile::new_in(parent)
-        .map_err(|source| Error::io("create temporary file for", path, source))?;
+    let mut temporary = NamedTempFile::new_in(parent).map_err(|source| {
+        Error::new(
+            ErrorKind::Io,
+            format!("cannot create temporary file for {}", path.display()),
+        )
+        .with_source(source)
+    })?;
     temporary
         .as_file_mut()
         .set_permissions(metadata.permissions())
-        .map_err(|source| Error::io("set permissions for", path, source))?;
-    temporary
-        .write_all(updated)
-        .map_err(|source| Error::io("write temporary file for", path, source))?;
-    temporary
-        .flush()
-        .map_err(|source| Error::io("flush temporary file for", path, source))?;
-    temporary
-        .as_file()
-        .sync_all()
-        .map_err(|source| Error::io("sync temporary file for", path, source))?;
-    temporary
-        .persist(path)
-        .map_err(|error| Error::io("replace", path, error.error))?;
+        .map_err(|source| {
+            Error::new(
+                ErrorKind::Io,
+                format!("cannot set permissions for {}", path.display()),
+            )
+            .with_source(source)
+        })?;
+    temporary.write_all(updated).map_err(|source| {
+        Error::new(
+            ErrorKind::Io,
+            format!("cannot write temporary file for {}", path.display()),
+        )
+        .with_source(source)
+    })?;
+    temporary.flush().map_err(|source| {
+        Error::new(
+            ErrorKind::Io,
+            format!("cannot flush temporary file for {}", path.display()),
+        )
+        .with_source(source)
+    })?;
+    temporary.as_file().sync_all().map_err(|source| {
+        Error::new(
+            ErrorKind::Io,
+            format!("cannot sync temporary file for {}", path.display()),
+        )
+        .with_source(source)
+    })?;
+    temporary.persist(path).map_err(|error| {
+        Error::new(ErrorKind::Io, format!("cannot replace {}", path.display()))
+            .with_source(error.error)
+    })?;
     Ok(())
 }

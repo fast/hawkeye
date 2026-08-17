@@ -22,12 +22,15 @@ use ignore::overrides::Override;
 use ignore::overrides::OverrideBuilder;
 
 use crate::Error;
+use crate::ErrorKind;
 use crate::ResolvedConfig;
-use crate::Result;
 use crate::config::FeatureMode;
 use crate::git::GitRepo;
 
-pub(crate) fn discover(config: &ResolvedConfig, repo: Option<&GitRepo>) -> Result<Vec<PathBuf>> {
+pub(crate) fn discover(
+    config: &ResolvedConfig,
+    repo: Option<&GitRepo>,
+) -> Result<Vec<PathBuf>, Error> {
     let started = Instant::now();
     let selection = build_selection(config)?;
     let mut files = BTreeSet::new();
@@ -70,7 +73,7 @@ pub(crate) fn discover(config: &ResolvedConfig, repo: Option<&GitRepo>) -> Resul
     Ok(files.into_iter().collect())
 }
 
-fn build_selection(config: &ResolvedConfig) -> Result<Override> {
+fn build_selection(config: &ResolvedConfig) -> Result<Override, Error> {
     let mut builder = OverrideBuilder::new(config.root());
     if config.includes().is_empty() {
         builder.add("**").map_err(selection_error)?;
@@ -89,7 +92,7 @@ fn build_selection(config: &ResolvedConfig) -> Result<Override> {
     builder.build().map_err(selection_error)
 }
 
-fn build_exclusions(config: &ResolvedConfig) -> Result<Override> {
+fn build_exclusions(config: &ResolvedConfig) -> Result<Override, Error> {
     let mut builder = OverrideBuilder::new(config.root());
     builder.add("!.git").map_err(selection_error)?;
     builder.add("!.git/**").map_err(selection_error)?;
@@ -102,7 +105,11 @@ fn build_exclusions(config: &ResolvedConfig) -> Result<Override> {
 }
 
 fn selection_error(source: ignore::Error) -> Error {
-    Error::config_source("invalid files.includes or files.excludes pattern", source)
+    Error::new(
+        ErrorKind::ConfigInvalid,
+        "invalid files.includes or files.excludes pattern",
+    )
+    .with_source(source)
 }
 
 fn walk(
@@ -111,7 +118,7 @@ fn walk(
     exclusions: &Override,
     git_ignore: FeatureMode,
     files: &mut BTreeSet<PathBuf>,
-) -> Result<()> {
+) -> Result<(), Error> {
     let use_git_ignore = git_ignore != FeatureMode::Disable;
     let walker = WalkBuilder::new(root)
         .hidden(false)
@@ -124,7 +131,14 @@ fn walk(
         .overrides(exclusions.clone())
         .build();
     for entry in walker {
-        let entry = entry?;
+        let entry = entry.map_err(|source| {
+            let kind = if source.is_io() {
+                ErrorKind::Io
+            } else {
+                ErrorKind::Unexpected
+            };
+            Error::new(kind, "cannot discover files").with_source(source)
+        })?;
         if !entry.file_type().is_some_and(|kind| kind.is_file()) {
             continue;
         }

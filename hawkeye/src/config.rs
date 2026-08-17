@@ -27,7 +27,7 @@ use std::str::FromStr;
 use serde::Deserialize;
 
 use crate::Error;
-use crate::Result;
+use crate::ErrorKind;
 
 /// A parsed and locally validated `licenserc.toml` document.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
@@ -54,22 +54,23 @@ pub struct Config {
 
 impl Config {
     /// Parses strict snake-case TOML and validates local invariants.
-    pub fn from_toml(source: &str) -> Result<Self> {
-        let config = toml::from_str::<Self>(source)
-            .map_err(|source| Error::config_source("cannot parse licenserc.toml", source))?;
+    pub fn from_toml(source: &str) -> Result<Self, Error> {
+        let config = toml::from_str::<Self>(source).map_err(|source| {
+            Error::new(ErrorKind::ConfigInvalid, "cannot parse licenserc.toml").with_source(source)
+        })?;
         config.validate()?;
         Ok(config)
     }
 
-    pub(crate) fn validate(&self) -> Result<()> {
+    pub(crate) fn validate(&self) -> Result<(), Error> {
         let issues = validate(self);
         if issues.is_empty() {
             Ok(())
         } else {
-            Err(Error::config_source(
-                "invalid licenserc.toml",
-                ValidationErrors { issues },
-            ))
+            Err(
+                Error::new(ErrorKind::ConfigInvalid, "invalid licenserc.toml")
+                    .with_source(ValidationErrors { issues }),
+            )
         }
     }
 }
@@ -77,7 +78,7 @@ impl Config {
 impl FromStr for Config {
     type Err = Error;
 
-    fn from_str(source: &str) -> Result<Self> {
+    fn from_str(source: &str) -> Result<Self, Error> {
         Self::from_toml(source)
     }
 }
@@ -228,8 +229,6 @@ impl fmt::Display for ValidationErrors {
         Ok(())
     }
 }
-
-impl std::error::Error for ValidationErrors {}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct ValidationIssue {

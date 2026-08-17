@@ -44,7 +44,6 @@ pub use self::engine::Plan;
 pub use self::engine::PlannedFile;
 pub use self::error::Error;
 pub use self::error::ErrorKind;
-pub use self::error::Result;
 pub use self::report::FileOutcome;
 pub use self::report::Mode;
 pub use self::report::Report;
