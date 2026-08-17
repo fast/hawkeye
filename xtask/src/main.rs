@@ -97,12 +97,9 @@ fn make_build_cmd(locked: bool) -> StdCommand {
     cmd
 }
 
-fn make_test_cmd(no_capture: bool, features: &[&str]) -> StdCommand {
+fn make_test_cmd(no_capture: bool) -> StdCommand {
     let mut cmd = find_command("cargo");
     cmd.args(["test", "--workspace", "--no-default-features"]);
-    if !features.is_empty() {
-        cmd.args(["--features", features.join(",").as_str()]);
-    }
     if no_capture {
         cmd.args(["--", "--nocapture"]);
     }
@@ -187,7 +184,7 @@ fn make_taplo_cmd(fix: bool) -> StdCommand {
 fn main() {
     match Command::parse().sub {
         SubCommand::Build(cmd) => run_command(make_build_cmd(cmd.locked)),
-        SubCommand::Test(cmd) => run_command(make_test_cmd(cmd.no_capture, &[])),
+        SubCommand::Test(cmd) => run_command(make_test_cmd(cmd.no_capture)),
         SubCommand::Lint(cmd) => {
             run_command(make_clippy_cmd(cmd.fix));
             run_command(make_format_cmd(cmd.fix));
