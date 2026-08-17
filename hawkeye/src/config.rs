@@ -101,15 +101,16 @@ impl Config {
         validator.files(&self.files);
         validator.styles(&self.styles);
         validator.rules(&self.rules);
-        let issues = validator.issues;
-        if issues.is_empty() {
-            Ok(())
-        } else {
-            Err(Error::new(
-                ErrorKind::ConfigInvalid,
-                format!("config validation failed:\n- {}", issues.join("\n- ")),
-            ))
+        if validator.issues.is_empty() {
+            return Ok(());
         }
+
+        let mut message = String::from("config validation failed:");
+        for issue in validator.issues {
+            message.push_str("\n- ");
+            message.push_str(&issue);
+        }
+        Err(Error::new(ErrorKind::ConfigInvalid, message))
     }
 }
 
