@@ -52,34 +52,34 @@ pub struct Config {
 }
 
 impl Config {
-    /// Reads a configuration file and anchors its relative paths to that file.
+    /// Reads a config file and anchors its relative paths to that file.
     pub fn load<P: AsRef<Path>>(path: P) -> Result<Self, Error> {
         let path = path.as_ref();
         let source = fs::read_to_string(path).map_err(|err| {
             Error::new(
                 ErrorKind::Unexpected,
-                format!("cannot read configuration file {}", path.display()),
+                format!("cannot read config file {}", path.display()),
             )
             .with_source(err)
         })?;
         let mut config = toml::from_str::<Self>(&source).map_err(|source| {
             Error::new(
                 ErrorKind::ConfigInvalid,
-                format!("cannot parse configuration file {}", path.display()),
+                format!("cannot parse config file {}", path.display()),
             )
             .with_source(source)
         })?;
         let path = path.canonicalize().map_err(|err| {
             Error::new(
                 ErrorKind::Unexpected,
-                format!("cannot resolve configuration file {}", path.display()),
+                format!("cannot resolve config file {}", path.display()),
             )
             .with_source(err)
         })?;
         let directory = path.parent().ok_or_else(|| {
             Error::new(
                 ErrorKind::ConfigInvalid,
-                "configuration file has no parent directory",
+                "config file has no parent directory",
             )
         })?;
 
@@ -107,7 +107,7 @@ impl Config {
         } else {
             Err(Error::new(
                 ErrorKind::ConfigInvalid,
-                format!("invalid configuration:\n- {}", issues.join("\n- ")),
+                format!("config validation failed:\n- {}", issues.join("\n- ")),
             ))
         }
     }
@@ -119,7 +119,7 @@ impl Config {
 pub struct HeaderConfig {
     /// A built-in header resource key.
     pub builtin: Option<String>,
-    /// A template path anchored by [`Config::load`] when relative.
+    /// A template path anchored to the config file by [`Config::load`] when relative.
     pub path: Option<PathBuf>,
     /// An inline header template.
     pub text: Option<String>,
@@ -132,7 +132,7 @@ pub struct HeaderConfig {
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct FilesConfig {
-    /// The root scanned by HawkEye, anchored by [`Config::load`] when relative.
+    /// The root scanned by HawkEye, anchored to the config file by [`Config::load`] when relative.
     pub root: PathBuf,
     /// Git-ignore-style inclusion patterns; an empty list selects all files.
     pub includes: Vec<String>,

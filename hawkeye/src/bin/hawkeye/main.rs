@@ -35,7 +35,7 @@ use logforth::filter::rustlog::RustLogFilterBuilder;
 #[derive(Debug, Parser)]
 #[command(version, about)]
 struct Command {
-    #[arg(long, global = true, help = "path to the configuration file")]
+    #[arg(long, global = true, help = "path to the config file")]
     config: Option<PathBuf>,
 
     #[arg(
@@ -106,9 +106,9 @@ fn do_main() -> Result<ExitCode, Error> {
         Some(path) => path,
         None => default_config()?,
     };
-    log::debug!("loading configuration from {}", config.display());
+    log::debug!("loading config from {}", config.display());
 
-    let config = Config::load(config).or_raise(|| Error::new("cannot load configuration"))?;
+    let config = Config::load(config).or_raise(|| Error::new("cannot load config"))?;
     let engine = Engine::new(config).or_raise(|| Error::new("cannot initialize HawkEye"))?;
 
     match cmd.subcommand {
@@ -219,7 +219,7 @@ fn default_config() -> Result<PathBuf, Error> {
     }
 
     bail!(Error::new(format!(
-        "cannot find a configuration file in any of the default locations: {:?}",
+        "cannot find a config file in any of the default locations: {:?}",
         candidates.iter().map(|p| p.display()).collect::<Vec<_>>()
     )));
 }

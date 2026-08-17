@@ -375,7 +375,7 @@ useDefaultRules = true
     let invalid = hawkeye(&child, ["--config", "bad.toml", "check"]);
     assert_exit(&invalid, 2);
     let invalid_stderr = stderr(&invalid);
-    assert!(invalid_stderr.contains("cannot parse configuration file bad.toml"));
+    assert!(invalid_stderr.contains("cannot parse config file bad.toml"));
     assert!(invalid_stderr.contains("useDefaultRules"));
     assert!(!invalid_stderr.contains("cannot parse licenserc.toml"));
 }
@@ -577,7 +577,7 @@ text = "Copyright 2026 Acme"
     assert_eq!(engine_error.kind(), ErrorKind::ConfigInvalid);
     assert_eq!(validation_error.to_string(), engine_error.to_string());
     let message = validation_error.to_string();
-    assert!(message.starts_with("ConfigInvalid => invalid configuration:\n- "));
+    assert!(message.starts_with("ConfigInvalid => config validation failed:\n- "));
     assert!(message.contains("exactly one of `builtin`, `path`, or `text` must be set"));
     assert!(!message.contains("source:"));
 }
