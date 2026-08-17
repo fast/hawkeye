@@ -42,15 +42,15 @@ impl Engine {
 
     /// Discovers and analyzes files without modifying the filesystem.
     pub fn plan(&self, mode: Mode) -> Result<Plan, Error> {
-        let git = self.config.git();
-        let repo = GitRepo::discover(self.config.root(), git.ignore.combine(git.file_attrs))?;
+        let git = self.config.git;
+        let repo = GitRepo::discover(&self.config.root, git.ignore.combine(git.file_attrs))?;
         let paths = discover(&self.config, repo.as_ref())?;
         let attrs = FileAttrsResolver::new(&paths, git.file_attrs, repo.as_ref())?;
         let mut files = Vec::with_capacity(paths.len());
 
         for path in paths {
             let relative = path
-                .strip_prefix(self.config.root())
+                .strip_prefix(&self.config.root)
                 .expect("discovery only returns paths inside files.root")
                 .to_path_buf();
             if self.config.rule_for(&relative).is_none() {

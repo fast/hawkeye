@@ -96,7 +96,7 @@ impl FileAttrsResolver {
         let selected = files
             .iter()
             .filter_map(|path| {
-                path.strip_prefix(repo.root())
+                path.strip_prefix(&repo.root)
                     .ok()
                     .map(|relative| (git_path(relative), path.clone()))
             })
@@ -126,7 +126,7 @@ impl FileAttrsResolver {
         })?;
         let started = Instant::now();
 
-        let author = current_git_author(repo)?;
+        let author = repo.optional_config("user.name")?;
         let mut git = read_history(repo, &selected)?;
         apply_worktree_status(repo, &selected, current_year, author.as_deref(), &mut git)?;
 
@@ -319,10 +319,6 @@ fn apply_worktree_status(
         }
     }
     Ok(())
-}
-
-fn current_git_author(repo: &GitRepo) -> Result<Option<String>, Error> {
-    repo.optional_config("user.name")
 }
 
 fn utc_year(time: SystemTime) -> Option<i16> {

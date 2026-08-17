@@ -78,7 +78,7 @@ pub struct FileOutcome {
 }
 
 /// A path-sorted operation report.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Report {
     pub(crate) files: Vec<FileOutcome>,
 }

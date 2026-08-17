@@ -29,15 +29,15 @@ use crate::template::HeaderTemplate;
 
 /// A configuration whose paths, resources, styles, and rules are ready to run.
 pub struct ResolvedConfig {
-    root: PathBuf,
-    header_path: Option<PathBuf>,
-    includes: Vec<String>,
-    excludes: Vec<String>,
+    pub(crate) root: PathBuf,
+    pub(crate) header_path: Option<PathBuf>,
+    pub(crate) includes: Vec<String>,
+    pub(crate) excludes: Vec<String>,
     props: BTreeMap<String, toml::Value>,
-    git: GitConfig,
-    keywords: Vec<String>,
+    pub(crate) git: GitConfig,
+    pub(crate) keywords: Vec<String>,
     template: HeaderTemplate,
-    styles: BTreeMap<String, Style>,
+    pub(crate) styles: BTreeMap<String, Style>,
     rules: Vec<Rule>,
 }
 
@@ -45,8 +45,8 @@ pub struct ResolvedConfig {
 pub(crate) struct Rule {
     extensions: BTreeSet<String>,
     filenames: BTreeSet<String>,
-    style_out: String,
-    styles_in: Vec<String>,
+    pub(crate) style_out: String,
+    pub(crate) styles_in: Vec<String>,
 }
 
 impl Config {
@@ -92,7 +92,7 @@ impl Config {
             )
         })?;
 
-        let root = resolve_path(config_dir, &files.root);
+        let root = config_dir.join(&files.root);
         let root = root.canonicalize().map_err(|source| {
             Error::new(
                 ErrorKind::Unexpected,
@@ -121,7 +121,7 @@ impl Config {
                 None,
             )
         } else if let Some(path) = header.path.as_deref() {
-            let path = resolve_path(config_dir, path);
+            let path = config_dir.join(path);
             let path = path.canonicalize().map_err(|source| {
                 Error::new(
                     ErrorKind::Unexpected,
@@ -208,38 +208,14 @@ impl ResolvedConfig {
         Config::from_toml(&source)?.resolve(path)
     }
 
-    pub(crate) fn root(&self) -> &Path {
-        &self.root
-    }
-
-    pub(crate) fn includes(&self) -> &[String] {
-        &self.includes
-    }
-
-    pub(crate) fn excludes(&self) -> &[String] {
-        &self.excludes
-    }
-
-    pub(crate) fn git(&self) -> GitConfig {
-        self.git
-    }
-
     pub(crate) fn rule_for(&self, path: &Path) -> Option<&Rule> {
         self.rules.iter().find(|rule| rule.matches(path))
-    }
-
-    pub(crate) fn header_path(&self) -> Option<&Path> {
-        self.header_path.as_deref()
     }
 
     pub(crate) fn style(&self, name: &str) -> &Style {
         self.styles
             .get(name)
             .expect("resolved rules only refer to known styles")
-    }
-
-    pub(crate) fn styles(&self) -> impl Iterator<Item = &Style> {
-        self.styles.values()
     }
 
     pub(crate) fn render_header(&self, attrs: &FileAttrs) -> Result<String, Error> {
@@ -260,10 +236,6 @@ impl ResolvedConfig {
         }
         Ok(header)
     }
-
-    pub(crate) fn keywords(&self) -> &[String] {
-        &self.keywords
-    }
 }
 
 impl Rule {
@@ -277,22 +249,6 @@ impl Rule {
                 .extensions
                 .iter()
                 .any(|extension| filename.ends_with(&format!(".{extension}")))
-    }
-
-    pub(crate) fn style_out(&self) -> &str {
-        &self.style_out
-    }
-
-    pub(crate) fn styles_in(&self) -> &[String] {
-        &self.styles_in
-    }
-}
-
-fn resolve_path(base: &Path, path: &Path) -> PathBuf {
-    if path.is_absolute() {
-        path.to_path_buf()
-    } else {
-        base.join(path)
     }
 }
 

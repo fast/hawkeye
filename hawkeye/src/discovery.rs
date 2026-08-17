@@ -35,12 +35,12 @@ pub(crate) fn discover(
     let selection = build_selection(config)?;
     let mut files = BTreeSet::new();
 
-    if config.git().ignore != FeatureMode::Disable
+    if config.git.ignore != FeatureMode::Disable
         && let Some(repo) = repo
     {
-        for path in repo.list_files(config.root())? {
+        for path in repo.list_files(&config.root)? {
             let relative = path
-                .strip_prefix(config.root())
+                .strip_prefix(&config.root)
                 .expect("Git discovery only returns paths inside files.root");
             if selection.matched(relative, false).is_whitelist() {
                 files.insert(path);
@@ -54,10 +54,10 @@ pub(crate) fn discover(
     } else {
         let exclusions = build_exclusions(config)?;
         walk(
-            config.root(),
+            &config.root,
             &selection,
             &exclusions,
-            config.git().ignore,
+            config.git.ignore,
             &mut files,
         )?;
         log::debug!(
@@ -67,24 +67,24 @@ pub(crate) fn discover(
         );
     }
 
-    if let Some(header_path) = config.header_path() {
+    if let Some(header_path) = &config.header_path {
         files.remove(header_path);
     }
     Ok(files.into_iter().collect())
 }
 
 fn build_selection(config: &ResolvedConfig) -> Result<Override, Error> {
-    let mut builder = OverrideBuilder::new(config.root());
-    if config.includes().is_empty() {
+    let mut builder = OverrideBuilder::new(&config.root);
+    if config.includes.is_empty() {
         builder.add("**").map_err(selection_error)?;
     } else {
-        for pattern in config.includes() {
+        for pattern in &config.includes {
             builder.add(pattern).map_err(selection_error)?;
         }
     }
     builder.add("!.git").map_err(selection_error)?;
     builder.add("!.git/**").map_err(selection_error)?;
-    for pattern in config.excludes() {
+    for pattern in &config.excludes {
         builder
             .add(&format!("!{pattern}"))
             .map_err(selection_error)?;
@@ -93,10 +93,10 @@ fn build_selection(config: &ResolvedConfig) -> Result<Override, Error> {
 }
 
 fn build_exclusions(config: &ResolvedConfig) -> Result<Override, Error> {
-    let mut builder = OverrideBuilder::new(config.root());
+    let mut builder = OverrideBuilder::new(&config.root);
     builder.add("!.git").map_err(selection_error)?;
     builder.add("!.git/**").map_err(selection_error)?;
-    for pattern in config.excludes() {
+    for pattern in &config.excludes {
         builder
             .add(&format!("!{pattern}"))
             .map_err(selection_error)?;

@@ -22,7 +22,6 @@ use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::fmt;
 use std::path::PathBuf;
-use std::str::FromStr;
 
 use serde::Deserialize;
 
@@ -63,7 +62,12 @@ impl Config {
     }
 
     pub(crate) fn validate(&self) -> Result<(), Error> {
-        let issues = validate(self);
+        let mut validator = Validator::default();
+        validator.header(&self.header);
+        validator.files(&self.files);
+        validator.styles(&self.styles);
+        validator.rules(&self.rules);
+        let issues = validator.issues;
         if issues.is_empty() {
             Ok(())
         } else {
@@ -72,14 +76,6 @@ impl Config {
                     .with_source(ValidationErrors { issues }),
             )
         }
-    }
-}
-
-impl FromStr for Config {
-    type Err = Error;
-
-    fn from_str(source: &str) -> Result<Self, Error> {
-        Self::from_toml(source)
     }
 }
 
@@ -238,15 +234,6 @@ struct ValidationIssue {
 
 fn default_keywords() -> Vec<String> {
     vec!["copyright".to_owned()]
-}
-
-fn validate(config: &Config) -> Vec<ValidationIssue> {
-    let mut validator = Validator::default();
-    validator.header(&config.header);
-    validator.files(&config.files);
-    validator.styles(&config.styles);
-    validator.rules(&config.rules);
-    validator.issues
 }
 
 #[derive(Default)]

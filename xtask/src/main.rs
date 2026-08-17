@@ -14,31 +14,16 @@
 
 //! An xtask binary for managing workspace tasks.
 
-use std::path::Path;
 use std::process::Command as StdCommand;
 
 use clap::Parser;
 use clap::Subcommand;
-
-fn workspace_dir() -> &'static Path {
-    Path::new(env!("CARGO_WORKSPACE_DIR"))
-}
 
 #[derive(Parser)]
 #[clap(about = "Run repository tasks.")]
 struct Command {
     #[clap(subcommand)]
     sub: SubCommand,
-}
-
-impl Command {
-    fn run(self) {
-        match self.sub {
-            SubCommand::Build(cmd) => cmd.run(),
-            SubCommand::Lint(cmd) => cmd.run(),
-            SubCommand::Test(cmd) => cmd.run(),
-        }
-    }
 }
 
 #[derive(Subcommand)]
@@ -57,22 +42,10 @@ struct CommandBuild {
     locked: bool,
 }
 
-impl CommandBuild {
-    fn run(self) {
-        run_command(make_build_cmd(self.locked));
-    }
-}
-
 #[derive(Parser)]
 struct CommandTest {
     #[arg(long, help = "Run tests serially and do not capture output.")]
     no_capture: bool,
-}
-
-impl CommandTest {
-    fn run(self) {
-        run_command(make_test_cmd(self.no_capture, &[]));
-    }
 }
 
 #[derive(Parser)]
@@ -82,22 +55,11 @@ struct CommandLint {
     fix: bool,
 }
 
-impl CommandLint {
-    fn run(self) {
-        run_command(make_clippy_cmd(self.fix));
-        run_command(make_format_cmd(self.fix));
-        run_command(make_taplo_cmd(self.fix));
-        run_command(make_typos_cmd());
-        run_command(make_hawkeye_cmd(self.fix));
-        run_command(make_doc_cmd());
-    }
-}
-
 fn find_command(cmd: &str) -> StdCommand {
     match which::which(cmd) {
         Ok(exe) => {
             let mut cmd = StdCommand::new(exe);
-            cmd.current_dir(workspace_dir());
+            cmd.current_dir(env!("CARGO_WORKSPACE_DIR"));
             cmd
         }
         Err(err) => {
@@ -225,6 +187,16 @@ fn make_taplo_cmd(fix: bool) -> StdCommand {
 }
 
 fn main() {
-    let cmd = Command::parse();
-    cmd.run()
+    match Command::parse().sub {
+        SubCommand::Build(cmd) => run_command(make_build_cmd(cmd.locked)),
+        SubCommand::Test(cmd) => run_command(make_test_cmd(cmd.no_capture, &[])),
+        SubCommand::Lint(cmd) => {
+            run_command(make_clippy_cmd(cmd.fix));
+            run_command(make_format_cmd(cmd.fix));
+            run_command(make_taplo_cmd(cmd.fix));
+            run_command(make_typos_cmd());
+            run_command(make_hawkeye_cmd(cmd.fix));
+            run_command(make_doc_cmd());
+        }
+    }
 }

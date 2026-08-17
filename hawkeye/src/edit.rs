@@ -17,9 +17,8 @@ use std::ops::Range;
 use crate::Error;
 use crate::ErrorKind;
 
-/// A single, proven replacement in an original UTF-8 source file.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Edit {
+pub(crate) struct Edit {
     range: Range<usize>,
     replacement: String,
 }
@@ -29,8 +28,7 @@ impl Edit {
         Self { range, replacement }
     }
 
-    /// Applies the edit after checking its UTF-8 byte boundaries.
-    pub fn apply(&self, input: &str) -> Result<String, Error> {
+    pub(crate) fn apply(&self, input: &str) -> Result<String, Error> {
         if self.range.start > self.range.end
             || self.range.end > input.len()
             || !input.is_char_boundary(self.range.start)

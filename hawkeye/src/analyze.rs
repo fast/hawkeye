@@ -44,16 +44,16 @@ pub(crate) fn analyze(
     let offset = preamble_offset(input);
     let eol = detect_eol(input);
     let rendered = {
-        let mut value = config.style(rule.style_out()).render(header, eol);
+        let mut value = config.style(&rule.style_out).render(header, eol);
         value.push_str(eol);
         value
     };
 
     let candidates = rule
-        .styles_in()
+        .styles_in
         .iter()
         .filter_map(|name| config.style(name).extract(input, offset))
-        .filter(|candidate| has_keywords(&candidate.body, config.keywords()))
+        .filter(|candidate| has_keywords(&candidate.body, &config.keywords))
         .collect::<Vec<_>>();
 
     let candidate = match unique_candidate(candidates) {
@@ -72,7 +72,8 @@ pub(crate) fn analyze(
         if candidate_lines > header_lines
             || (candidate_lines < header_lines
                 && config
-                    .styles()
+                    .styles
+                    .values()
                     .any(|style| style.extract(input, candidate.range.end).is_some()))
         {
             return Analysis {
@@ -88,7 +89,7 @@ pub(crate) fn analyze(
                 edit: Some(Edit::new(range, String::new())),
             };
         }
-        let clean = candidate.style == rule.style_out()
+        let clean = candidate.style == rule.style_out
             && candidate.body == header
             && input.get(range.clone()) == Some(rendered.as_str());
         if clean {
@@ -102,10 +103,10 @@ pub(crate) fn analyze(
                 edit: (mode == Mode::Format).then(|| Edit::new(range, rendered)),
             }
         }
-    } else if config.styles().any(|style| {
+    } else if config.styles.values().any(|style| {
         style
             .extract(input, offset)
-            .is_some_and(|candidate| has_keywords(&candidate.body, config.keywords()))
+            .is_some_and(|candidate| has_keywords(&candidate.body, &config.keywords))
     }) {
         Analysis {
             status: Status::Conflict,

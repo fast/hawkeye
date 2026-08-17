@@ -32,7 +32,7 @@ use crate::ErrorKind;
 use crate::config::FeatureMode;
 
 pub(crate) struct GitRepo {
-    root: PathBuf,
+    pub(crate) root: PathBuf,
 }
 
 impl GitRepo {
@@ -104,10 +104,6 @@ impl GitRepo {
             started.elapsed()
         );
         Ok(Some(Self { root }))
-    }
-
-    pub(crate) fn root(&self) -> &Path {
-        &self.root
     }
 
     pub(crate) fn list_files(&self, scan_root: &Path) -> Result<Vec<PathBuf>, Error> {
