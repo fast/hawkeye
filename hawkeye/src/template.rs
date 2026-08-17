@@ -33,9 +33,9 @@ impl HeaderTemplate {
         environment.set_auto_escape_callback(|_| AutoEscape::None);
         environment
             .add_template_owned("header", source)
-            .map_err(|source| {
+            .map_err(|err| {
                 Error::new(ErrorKind::ConfigInvalid, "cannot compile header template")
-                    .with_source(source)
+                    .with_source(err)
             })?;
         Ok(Self { environment })
     }
@@ -48,17 +48,17 @@ impl HeaderTemplate {
         let rendered = self
             .environment
             .get_template("header")
-            .map_err(|source| {
+            .map_err(|err| {
                 Error::new(
                     ErrorKind::Unexpected,
                     "cannot load compiled header template",
                 )
-                .with_source(source)
+                .with_source(err)
             })?
             .render(minijinja::context! { props, attrs })
-            .map_err(|source| {
+            .map_err(|err| {
                 Error::new(ErrorKind::ConfigInvalid, "cannot render header template")
-                    .with_source(source)
+                    .with_source(err)
             })?;
         let normalized = rendered.replace("\r\n", "\n").replace('\r', "\n");
         let normalized = normalized.trim_matches('\n').to_owned();

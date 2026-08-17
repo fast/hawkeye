@@ -79,12 +79,12 @@ impl Engine {
             rules: configured_rules,
         } = config;
 
-        let root = files.root.canonicalize().map_err(|source| {
+        let root = files.root.canonicalize().map_err(|err| {
             Error::new(
                 ErrorKind::Unexpected,
                 format!("cannot resolve file root {}", files.root.display()),
             )
-            .with_source(source)
+            .with_source(err)
         })?;
         if !root.is_dir() {
             return Err(Error::new(
@@ -96,20 +96,20 @@ impl Engine {
         let (source, header_path) = if let Some(source) = header.text {
             (source, None)
         } else if let Some(path) = header.path {
-            let path = path.canonicalize().map_err(|source| {
+            let path = path.canonicalize().map_err(|err| {
                 Error::new(
                     ErrorKind::Unexpected,
                     format!("cannot resolve header template {}", path.display()),
                 )
-                .with_source(source)
+                .with_source(err)
             })?;
             (
-                fs::read_to_string(&path).map_err(|source| {
+                fs::read_to_string(&path).map_err(|err| {
                     Error::new(
                         ErrorKind::Unexpected,
                         format!("cannot read header template {}", path.display()),
                     )
-                    .with_source(source)
+                    .with_source(err)
                 })?,
                 Some(path),
             )
@@ -194,12 +194,12 @@ impl Engine {
                 continue;
             }
 
-            let original = fs::read(&path).map_err(|source| {
+            let original = fs::read(&path).map_err(|err| {
                 Error::new(
                     ErrorKind::Unexpected,
                     format!("cannot read {}", path.display()),
                 )
-                .with_source(source)
+                .with_source(err)
             })?;
             let Ok(input) = std::str::from_utf8(&original) else {
                 files.push(PlannedFile::unsupported(path, relative));

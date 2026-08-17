@@ -62,12 +62,12 @@ impl Config {
             )
             .with_source(err)
         })?;
-        let mut config = toml::from_str::<Self>(&source).map_err(|source| {
+        let mut config = toml::from_str::<Self>(&source).map_err(|err| {
             Error::new(
                 ErrorKind::ConfigInvalid,
                 format!("cannot parse config file {}", path.display()),
             )
-            .with_source(source)
+            .with_source(err)
         })?;
         let path = path.canonicalize().map_err(|err| {
             Error::new(

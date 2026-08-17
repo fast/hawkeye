@@ -95,8 +95,8 @@ impl GitRepo {
                 "Git returned an empty repository root",
             ));
         }
-        let root = path_from_git_bytes(path).canonicalize().map_err(|source| {
-            Error::new(ErrorKind::Unexpected, "cannot resolve repository root").with_source(source)
+        let root = path_from_git_bytes(path).canonicalize().map_err(|err| {
+            Error::new(ErrorKind::Unexpected, "cannot resolve repository root").with_source(err)
         })?;
         log::debug!(
             "discovered Git repository {} in {:?}",
@@ -222,12 +222,12 @@ impl GitRepo {
         let output = git_command(&self.root)
             .args(&arguments)
             .output()
-            .map_err(|source| {
+            .map_err(|err| {
                 Error::new(
                     ErrorKind::Unexpected,
                     format!("cannot execute Git {arguments:?}"),
                 )
-                .with_source(source)
+                .with_source(err)
             })?;
         log::debug!("Git {:?} completed in {:?}", arguments, started.elapsed());
         Ok(output)
@@ -247,24 +247,21 @@ impl GitRepo {
             .into_iter()
             .map(|argument| argument.as_ref().to_owned())
             .collect::<Vec<_>>();
-        let mut stderr = tempfile::tempfile().map_err(|source| {
-            Error::new(ErrorKind::Unexpected, "cannot create Git stderr buffer").with_source(source)
+        let mut stderr = tempfile::tempfile().map_err(|err| {
+            Error::new(ErrorKind::Unexpected, "cannot create Git stderr buffer").with_source(err)
         })?;
-        let stderr_writer = stderr.try_clone().map_err(|source| {
-            Error::new(ErrorKind::Unexpected, "cannot clone Git stderr buffer").with_source(source)
+        let stderr_writer = stderr.try_clone().map_err(|err| {
+            Error::new(ErrorKind::Unexpected, "cannot clone Git stderr buffer").with_source(err)
         })?;
         let stdin = if let Some(input) = input {
-            let mut file = tempfile::tempfile().map_err(|source| {
-                Error::new(ErrorKind::Unexpected, "cannot create Git stdin buffer")
-                    .with_source(source)
+            let mut file = tempfile::tempfile().map_err(|err| {
+                Error::new(ErrorKind::Unexpected, "cannot create Git stdin buffer").with_source(err)
             })?;
-            file.write_all(input).map_err(|source| {
-                Error::new(ErrorKind::Unexpected, "cannot write Git stdin buffer")
-                    .with_source(source)
+            file.write_all(input).map_err(|err| {
+                Error::new(ErrorKind::Unexpected, "cannot write Git stdin buffer").with_source(err)
             })?;
-            file.seek(SeekFrom::Start(0)).map_err(|source| {
-                Error::new(ErrorKind::Unexpected, "cannot rewind Git stdin buffer")
-                    .with_source(source)
+            file.seek(SeekFrom::Start(0)).map_err(|err| {
+                Error::new(ErrorKind::Unexpected, "cannot rewind Git stdin buffer").with_source(err)
             })?;
             Stdio::from(file)
         } else {
@@ -277,12 +274,12 @@ impl GitRepo {
             .stdout(Stdio::piped())
             .stderr(Stdio::from(stderr_writer))
             .spawn()
-            .map_err(|source| {
+            .map_err(|err| {
                 Error::new(
                     ErrorKind::Unexpected,
                     format!("cannot execute Git {arguments:?}"),
                 )
-                .with_source(source)
+                .with_source(err)
             })?;
         let stdout = child
             .stdout
@@ -292,8 +289,8 @@ impl GitRepo {
         if parsed.is_err() {
             let _ = child.kill();
         }
-        let status = child.wait().map_err(|source| {
-            Error::new(ErrorKind::Unexpected, "cannot wait for Git").with_source(source)
+        let status = child.wait().map_err(|err| {
+            Error::new(ErrorKind::Unexpected, "cannot wait for Git").with_source(err)
         })?;
         log::debug!("Git {:?} completed in {:?}", arguments, started.elapsed());
         let value = parsed?;
@@ -301,12 +298,12 @@ impl GitRepo {
             return Ok(value);
         }
 
-        stderr.seek(SeekFrom::Start(0)).map_err(|source| {
-            Error::new(ErrorKind::Unexpected, "cannot rewind Git stderr").with_source(source)
+        stderr.seek(SeekFrom::Start(0)).map_err(|err| {
+            Error::new(ErrorKind::Unexpected, "cannot rewind Git stderr").with_source(err)
         })?;
         let mut bytes = Vec::new();
-        stderr.read_to_end(&mut bytes).map_err(|source| {
-            Error::new(ErrorKind::Unexpected, "cannot read Git stderr").with_source(source)
+        stderr.read_to_end(&mut bytes).map_err(|err| {
+            Error::new(ErrorKind::Unexpected, "cannot read Git stderr").with_source(err)
         })?;
         let message = String::from_utf8_lossy(&bytes).trim().to_owned();
         if message.is_empty() {

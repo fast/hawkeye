@@ -130,8 +130,8 @@ fn walk(
         .overrides(exclusions.clone())
         .build();
     for entry in walker {
-        let entry = entry.map_err(|source| {
-            Error::new(ErrorKind::Unexpected, "cannot discover files").with_source(source)
+        let entry = entry.map_err(|err| {
+            Error::new(ErrorKind::Unexpected, "cannot discover files").with_source(err)
         })?;
         if !entry.file_type().is_some_and(|kind| kind.is_file()) {
             continue;

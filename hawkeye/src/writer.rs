@@ -22,12 +22,12 @@ use crate::Error;
 use crate::ErrorKind;
 
 pub(crate) fn validate_source(path: &Path, expected: &[u8]) -> Result<(), Error> {
-    let metadata = fs::symlink_metadata(path).map_err(|source| {
+    let metadata = fs::symlink_metadata(path).map_err(|err| {
         Error::new(
             ErrorKind::Unexpected,
             format!("cannot read metadata for {}", path.display()),
         )
-        .with_source(source)
+        .with_source(err)
     })?;
     if metadata.file_type().is_symlink() {
         return Err(Error::new(
@@ -46,12 +46,12 @@ pub(crate) fn validate_source(path: &Path, expected: &[u8]) -> Result<(), Error>
         }
     }
 
-    let current = fs::read(path).map_err(|source| {
+    let current = fs::read(path).map_err(|err| {
         Error::new(
             ErrorKind::Unexpected,
             format!("cannot reread {}", path.display()),
         )
-        .with_source(source)
+        .with_source(err)
     })?;
     if current != expected {
         return Err(Error::new(
@@ -64,12 +64,12 @@ pub(crate) fn validate_source(path: &Path, expected: &[u8]) -> Result<(), Error>
 
 pub(crate) fn write_atomic(path: &Path, expected: &[u8], updated: &[u8]) -> Result<(), Error> {
     validate_source(path, expected)?;
-    let metadata = fs::symlink_metadata(path).map_err(|source| {
+    let metadata = fs::symlink_metadata(path).map_err(|err| {
         Error::new(
             ErrorKind::Unexpected,
             format!("cannot read metadata for {}", path.display()),
         )
-        .with_source(source)
+        .with_source(err)
     })?;
 
     let parent = path.parent().ok_or_else(|| {
@@ -78,50 +78,50 @@ pub(crate) fn write_atomic(path: &Path, expected: &[u8], updated: &[u8]) -> Resu
             format!("source path has no parent: {}", path.display()),
         )
     })?;
-    let mut temporary = NamedTempFile::new_in(parent).map_err(|source| {
+    let mut temporary = NamedTempFile::new_in(parent).map_err(|err| {
         Error::new(
             ErrorKind::Unexpected,
             format!("cannot create temporary file for {}", path.display()),
         )
-        .with_source(source)
+        .with_source(err)
     })?;
     temporary
         .as_file_mut()
         .set_permissions(metadata.permissions())
-        .map_err(|source| {
+        .map_err(|err| {
             Error::new(
                 ErrorKind::Unexpected,
                 format!("cannot set permissions for {}", path.display()),
             )
-            .with_source(source)
+            .with_source(err)
         })?;
-    temporary.write_all(updated).map_err(|source| {
+    temporary.write_all(updated).map_err(|err| {
         Error::new(
             ErrorKind::Unexpected,
             format!("cannot write temporary file for {}", path.display()),
         )
-        .with_source(source)
+        .with_source(err)
     })?;
-    temporary.flush().map_err(|source| {
+    temporary.flush().map_err(|err| {
         Error::new(
             ErrorKind::Unexpected,
             format!("cannot flush temporary file for {}", path.display()),
         )
-        .with_source(source)
+        .with_source(err)
     })?;
-    temporary.as_file().sync_all().map_err(|source| {
+    temporary.as_file().sync_all().map_err(|err| {
         Error::new(
             ErrorKind::Unexpected,
             format!("cannot sync temporary file for {}", path.display()),
         )
-        .with_source(source)
+        .with_source(err)
     })?;
-    temporary.persist(path).map_err(|error| {
+    temporary.persist(path).map_err(|err| {
         Error::new(
             ErrorKind::Unexpected,
             format!("cannot replace {}", path.display()),
         )
-        .with_source(error.error)
+        .with_source(err.error)
     })?;
     Ok(())
 }

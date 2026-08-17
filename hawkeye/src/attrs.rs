@@ -152,12 +152,12 @@ impl FileAttrsResolver {
     }
 
     pub(crate) fn for_file(&self, path: &Path) -> Result<FileAttrs, Error> {
-        let metadata = fs::metadata(path).map_err(|source| {
+        let metadata = fs::metadata(path).map_err(|err| {
             Error::new(
                 ErrorKind::Unexpected,
                 format!("cannot read metadata for {}", path.display()),
             )
-            .with_source(source)
+            .with_source(err)
         })?;
         let git = self.git.get(path);
         Ok(FileAttrs {
@@ -239,8 +239,8 @@ fn parse_history(
     let mut record = Vec::new();
     loop {
         record.clear();
-        let read = reader.read_until(0, &mut record).map_err(|source| {
-            Error::new(ErrorKind::Unexpected, "cannot read Git history").with_source(source)
+        let read = reader.read_until(0, &mut record).map_err(|err| {
+            Error::new(ErrorKind::Unexpected, "cannot read Git history").with_source(err)
         })?;
         if read == 0 {
             break;
