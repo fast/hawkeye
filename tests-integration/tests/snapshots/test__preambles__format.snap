@@ -16,6 +16,11 @@ expression: "&report"
     },
     {
       "changed": true,
+      "path": "document.yaml",
+      "status": "missing"
+    },
+    {
+      "changed": true,
       "path": "script.py",
       "status": "missing"
     },

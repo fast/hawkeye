@@ -8,13 +8,18 @@ expression: tree_snapshot(root)
 <?xml version="1.0" encoding="UTF-8"?>␊
 ␊
 <project />␊
+=== document.yaml ===
+%YAML 1.2␊
+%TAG !example! tag:example.com,2026:␊
+---␊
+value: !example!value content␊
 === licenserc.toml ===
 [header]␊
 text = "Copyright 2026 Acme Labs"␊
 ␊
 [files]␊
 excludes = ["licenserc.toml"]␊
-includes = ["**/*.cs", "**/*.py", "**/*.rs", "**/*.xml"]␊
+includes = ["**/*.cs", "**/*.py", "**/*.rs", "**/*.xml", "**/*.yaml"]␊
 === script.py ===
 #!/usr/bin/env python3␊
 # -*- coding: utf-8 -*-␊

@@ -3,4 +3,4 @@ text = "Copyright 2026 Acme Labs"
 
 [files]
 excludes = ["licenserc.toml"]
-includes = ["**/*.cs", "**/*.py", "**/*.rs", "**/*.xml"]
+includes = ["**/*.cs", "**/*.py", "**/*.rs", "**/*.xml", "**/*.yaml"]

@@ -182,6 +182,13 @@ fn preamble_offset(input: &str) -> usize {
         position = first.end;
     }
 
+    while let Some(line) = next_line(input, position) {
+        if !line.content.starts_with("%YAML") && !line.content.starts_with("%TAG") {
+            break;
+        }
+        position = line.end;
+    }
+
     for _ in 0..2 {
         let Some(line) = next_line(input, position) else {
             break;

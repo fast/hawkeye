@@ -1,0 +1,4 @@
+%YAML 1.2
+%TAG !example! tag:example.com,2026:
+---
+value: !example!value content

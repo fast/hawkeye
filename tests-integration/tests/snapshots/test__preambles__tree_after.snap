@@ -15,13 +15,20 @@ public class Example {}␊
 -->␊
 ␊
 <project />␊
+=== document.yaml ===
+%YAML 1.2␊
+%TAG !example! tag:example.com,2026:␊
+# Copyright 2026 Acme Labs␊
+␊
+---␊
+value: !example!value content␊
 === licenserc.toml ===
 [header]␊
 text = "Copyright 2026 Acme Labs"␊
 ␊
 [files]␊
 excludes = ["licenserc.toml"]␊
-includes = ["**/*.cs", "**/*.py", "**/*.rs", "**/*.xml"]␊
+includes = ["**/*.cs", "**/*.py", "**/*.rs", "**/*.xml", "**/*.yaml"]␊
 === script.py ===
 #!/usr/bin/env python3␊
 # -*- coding: utf-8 -*-␊
