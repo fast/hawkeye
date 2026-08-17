@@ -33,18 +33,18 @@ pub struct ResolvedConfig {
     pub(crate) header_path: Option<PathBuf>,
     pub(crate) includes: Vec<String>,
     pub(crate) excludes: Vec<String>,
-    props: BTreeMap<String, toml::Value>,
+    pub(crate) props: BTreeMap<String, toml::Value>,
     pub(crate) git: GitConfig,
     pub(crate) keywords: Vec<String>,
-    template: HeaderTemplate,
+    pub(crate) template: HeaderTemplate,
     pub(crate) styles: BTreeMap<String, Style>,
-    rules: Vec<Rule>,
+    pub(crate) rules: Vec<Rule>,
 }
 
 #[derive(Debug, Clone)]
 pub(crate) struct Rule {
-    extensions: BTreeSet<String>,
-    filenames: BTreeSet<String>,
+    pub(crate) extensions: BTreeSet<String>,
+    pub(crate) filenames: BTreeSet<String>,
     pub(crate) style_out: String,
     pub(crate) styles_in: Vec<String>,
 }
