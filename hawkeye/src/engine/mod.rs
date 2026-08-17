@@ -93,8 +93,8 @@ impl Engine {
             ));
         }
 
-        let (source, header_path) = if let Some(source) = header.text {
-            (source, None)
+        let (template, header_path) = if let Some(content) = header.text {
+            (HeaderTemplate::new(content)?, None)
         } else if let Some(path) = header.path {
             let path = path.canonicalize().map_err(|err| {
                 Error::new(
@@ -103,36 +103,30 @@ impl Engine {
                 )
                 .with_source(err)
             })?;
-            (
-                fs::read_to_string(&path).map_err(|err| {
-                    Error::new(
-                        ErrorKind::Unexpected,
-                        format!("cannot read header template {}", path.display()),
-                    )
-                    .with_source(err)
-                })?,
-                Some(path),
-            )
+            let content = fs::read_to_string(&path).map_err(|err| {
+                Error::new(
+                    ErrorKind::Unexpected,
+                    format!("cannot read header template {}", path.display()),
+                )
+                .with_source(err)
+            })?;
+            (HeaderTemplate::new(content)?, Some(path))
         } else if let Some(key) = header.builtin {
-            (
-                builtin_header(&key).ok_or_else(|| {
-                    Error::new(
-                        ErrorKind::ConfigInvalid,
-                        format!(
-                            "unknown header.builtin {key:?}; available values are Apache-2.0, Apache-2.0-ASF, and Elastic-2.0"
-                        ),
-                    )
-                })?
-                .to_owned(),
-                None,
-            )
+            let content = builtin_header(&key).ok_or_else(|| {
+                Error::new(
+                    ErrorKind::ConfigInvalid,
+                    format!(
+                        "unknown header.builtin {key:?}; available values are Apache-2.0, Apache-2.0-ASF, and Elastic-2.0"
+                    ),
+                )
+            })?;
+            (HeaderTemplate::new(content)?, None)
         } else {
             return Err(Error::new(
                 ErrorKind::ConfigInvalid,
                 "header source is missing",
             ));
         };
-        let template = HeaderTemplate::new(source)?;
 
         let mut styles = builtin_styles();
         for (name, style) in configured_styles {

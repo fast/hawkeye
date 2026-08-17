@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::borrow::Cow;
 use std::collections::BTreeMap;
 
 use minijinja::AutoEscape;
@@ -27,7 +28,7 @@ pub(crate) struct HeaderTemplate {
 }
 
 impl HeaderTemplate {
-    pub(crate) fn new(source: String) -> Result<Self, Error> {
+    pub(crate) fn new<S: Into<Cow<'static, str>>>(source: S) -> Result<Self, Error> {
         let mut environment = Environment::new();
         environment.set_undefined_behavior(UndefinedBehavior::Strict);
         environment.set_auto_escape_callback(|_| AutoEscape::None);
