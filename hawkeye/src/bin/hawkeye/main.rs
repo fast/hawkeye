@@ -109,7 +109,7 @@ fn do_main() -> Result<ExitCode, Error> {
     log::debug!("loading config from {}", config.display());
 
     let config = Config::load(config).or_raise(|| Error::new("cannot load config"))?;
-    let engine = Engine::new(config).or_raise(|| Error::new("cannot initialize engine"))?;
+    let engine = Engine::new(config).or_raise(|| Error::new("cannot build engine"))?;
 
     match cmd.subcommand {
         SubcommandOptions::Check(options) => {
