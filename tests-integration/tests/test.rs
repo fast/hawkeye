@@ -329,6 +329,8 @@ includes = ["**/*.rs"]
     );
 
     let fallback = tempfile::tempdir().expect("create fallback config project");
+    fs::create_dir(fallback.path().join("licenserc.toml"))
+        .expect("create directory at the primary config location");
     fs::write(
         fallback.path().join(".licenserc.toml"),
         r#"[header]
@@ -348,6 +350,8 @@ includes = ["**/*.rs"]
         "// Copyright 2026 Fallback\n\nfn fallback() {}\n"
     );
 
+    fs::remove_dir(fallback.path().join("licenserc.toml"))
+        .expect("remove primary config directory");
     fs::write(
         fallback.path().join("licenserc.toml"),
         r#"[header]

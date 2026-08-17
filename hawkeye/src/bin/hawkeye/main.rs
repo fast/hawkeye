@@ -213,7 +213,7 @@ fn default_config() -> Result<PathBuf, Error> {
     ];
 
     for path in &candidates {
-        if path.exists() {
+        if path.is_file() {
             return Ok(path.clone());
         }
     }
