@@ -268,7 +268,7 @@ impl Validator {
         }
 
         if let Some(value) = &header.builtin {
-            self.non_blank("header.builtin", value, "built-in header key");
+            self.non_blank("header.builtin", value);
             self.no_nul("header.builtin", value);
         }
         if let Some(value) = &header.path
@@ -277,7 +277,7 @@ impl Validator {
             self.issue("header.path", "header path must not be empty");
         }
         if let Some(value) = &header.text {
-            self.non_blank("header.text", value, "inline header template");
+            self.non_blank("header.text", value);
             self.no_nul("header.text", value);
         }
 
@@ -290,7 +290,7 @@ impl Validator {
         let mut seen = HashMap::<String, usize>::new();
         for (index, keyword) in header.keywords.iter().enumerate() {
             let path = format!("header.keywords[{index}]");
-            self.non_blank(&path, keyword, "keyword");
+            self.non_blank(&path, keyword);
             let folded = keyword.to_lowercase();
             if let Some(first) = seen.get(&folded) {
                 self.issue(
@@ -314,7 +314,7 @@ impl Validator {
     fn patterns(&mut self, path: &str, patterns: &[String]) {
         for (index, pattern) in patterns.iter().enumerate() {
             let path = format!("{path}[{index}]");
-            self.non_blank(&path, pattern, "pattern");
+            self.non_blank(&path, pattern);
             self.no_nul(&path, pattern);
             if pattern.starts_with('!') {
                 self.issue(
@@ -328,7 +328,7 @@ impl Validator {
     fn styles(&mut self, styles: &BTreeMap<String, StyleConfig>) {
         for (name, style) in styles {
             let path = format!("styles.{name}");
-            self.non_blank(&path, name, "style key");
+            self.non_blank(&path, name);
             self.no_nul(&path, name);
             match style {
                 StyleConfig::Line {
@@ -381,7 +381,7 @@ impl Validator {
 
             for (item, extension) in rule.extensions.iter().enumerate() {
                 let item_path = format!("{path}.extensions[{item}]");
-                self.non_blank(&item_path, extension, "extension");
+                self.non_blank(&item_path, extension);
                 if extension.starts_with('.') {
                     self.issue(&item_path, "extension must not start with `.`");
                 }
@@ -391,26 +391,22 @@ impl Validator {
             }
             for (item, filename) in rule.filenames.iter().enumerate() {
                 let item_path = format!("{path}.filenames[{item}]");
-                self.non_blank(&item_path, filename, "filename");
+                self.non_blank(&item_path, filename);
                 if filename.contains(['/', '\\']) {
                     self.issue(&item_path, "filename must not contain a path separator");
                 }
             }
 
-            self.non_blank(
-                &format!("{path}.style_out"),
-                &rule.style_out,
-                "output style",
-            );
+            self.non_blank(&format!("{path}.style_out"), &rule.style_out);
             for (item, style) in rule.styles_in.iter().enumerate() {
-                self.non_blank(&format!("{path}.styles_in[{item}]"), style, "input style");
+                self.non_blank(&format!("{path}.styles_in[{item}]"), style);
             }
         }
     }
 
-    fn non_blank(&mut self, path: &str, value: &str, kind: &str) {
+    fn non_blank(&mut self, path: &str, value: &str) {
         if value.trim().is_empty() {
-            self.issue(path, format!("{kind} must not be empty"));
+            self.issue(path, "must not be blank");
         }
     }
 
