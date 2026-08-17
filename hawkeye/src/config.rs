@@ -19,7 +19,6 @@
 
 use std::collections::BTreeMap;
 use std::collections::HashMap;
-use std::fmt;
 use std::fs;
 use std::path::Path;
 use std::path::PathBuf;
@@ -102,10 +101,10 @@ impl Config {
         if issues.is_empty() {
             Ok(())
         } else {
-            Err(
-                Error::new(ErrorKind::ConfigInvalid, "invalid licenserc.toml")
-                    .with_source(ValidationErrors { issues }),
-            )
+            Err(Error::new(
+                ErrorKind::ConfigInvalid,
+                format!("invalid configuration:\n- {}", issues.join("\n- ")),
+            ))
         }
     }
 }
@@ -237,47 +236,19 @@ pub enum StyleConfig {
     },
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct ValidationErrors {
-    issues: Vec<ValidationIssue>,
-}
-
-impl fmt::Display for ValidationErrors {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            formatter,
-            "licenserc.toml has {} validation error{}",
-            self.issues.len(),
-            if self.issues.len() == 1 { "" } else { "s" }
-        )?;
-        for issue in &self.issues {
-            write!(formatter, "\n- {}: {}", issue.path, issue.message)?;
-        }
-        Ok(())
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct ValidationIssue {
-    path: String,
-    message: String,
-}
-
 fn default_keywords() -> Vec<String> {
     vec!["copyright".to_owned()]
 }
 
 #[derive(Default)]
 struct Validator {
-    issues: Vec<ValidationIssue>,
+    issues: Vec<String>,
 }
 
 impl Validator {
     fn issue(&mut self, path: impl Into<String>, message: impl Into<String>) {
-        self.issues.push(ValidationIssue {
-            path: path.into(),
-            message: message.into(),
-        });
+        self.issues
+            .push(format!("{}: {}", path.into(), message.into()));
     }
 
     fn header(&mut self, header: &HeaderConfig) {

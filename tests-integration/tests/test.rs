@@ -574,8 +574,9 @@ text = "Copyright 2026 Acme"
     assert_eq!(engine_error.kind(), ErrorKind::ConfigInvalid);
     assert_eq!(validation_error.to_string(), engine_error.to_string());
     let message = validation_error.to_string();
-    assert!(message.starts_with("ConfigInvalid => invalid licenserc.toml, source: "));
+    assert!(message.starts_with("ConfigInvalid => invalid configuration:\n- "));
     assert!(message.contains("exactly one of `builtin`, `path`, or `text` must be set"));
+    assert!(!message.contains("source:"));
 }
 
 #[test]
