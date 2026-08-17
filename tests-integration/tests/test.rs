@@ -20,6 +20,7 @@ use std::process::Command;
 use std::process::Output;
 use std::sync::OnceLock;
 
+use hawkeye::Config;
 use hawkeye::Engine;
 use hawkeye::Mode;
 use hawkeye::Status;
@@ -565,6 +566,29 @@ includes = ["**/*.rs"]
     assert_eq!(missing.status(), Status::Missing);
     assert!(missing.original().is_some());
     assert!(missing.updated().is_some());
+}
+
+#[test]
+fn programmatic_config_is_revalidated_before_resolution() {
+    let project = tempfile::tempdir().expect("create configuration project");
+    let path = project.path().join("licenserc.toml");
+    let source = r#"[header]
+text = "Copyright 2026 Acme"
+"#;
+    fs::write(&path, source).expect("write configuration");
+
+    let mut config = Config::from_toml(source).expect("parse configuration");
+    config.header.text = None;
+
+    let error = match config.resolve(&path) {
+        Ok(_) => panic!("mutated configuration must be validated again"),
+        Err(error) => error,
+    };
+    assert!(
+        error
+            .to_string()
+            .contains("exactly one of `builtin`, `path`, or `text` must be set")
+    );
 }
 
 #[test]

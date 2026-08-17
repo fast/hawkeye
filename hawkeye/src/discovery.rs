@@ -31,7 +31,7 @@ pub(crate) fn discover(config: &ResolvedConfig, repo: Option<&GitRepo>) -> Resul
     let selection = build_selection(config)?;
     let mut files = BTreeSet::new();
 
-    if config.git().ignore() != FeatureMode::Disable
+    if config.git().ignore != FeatureMode::Disable
         && let Some(repo) = repo
     {
         for path in repo.list_files(config.root())? {
@@ -53,7 +53,7 @@ pub(crate) fn discover(config: &ResolvedConfig, repo: Option<&GitRepo>) -> Resul
             config.root(),
             &selection,
             &exclusions,
-            config.git().ignore(),
+            config.git().ignore,
             &mut files,
         )?;
         log::debug!(

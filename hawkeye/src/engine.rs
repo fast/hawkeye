@@ -47,17 +47,12 @@ impl Engine {
         ResolvedConfig::load(path).map(Self::new)
     }
 
-    /// Returns the resolved configuration used by this engine.
-    pub fn config(&self) -> &ResolvedConfig {
-        &self.config
-    }
-
     /// Discovers and analyzes files without modifying the filesystem.
     pub fn plan(&self, mode: Mode) -> Result<Plan> {
         let git = self.config.git();
-        let repo = GitRepo::discover(self.config.root(), git.ignore().combine(git.file_attrs()))?;
+        let repo = GitRepo::discover(self.config.root(), git.ignore.combine(git.file_attrs))?;
         let paths = discover(&self.config, repo.as_ref())?;
-        let attrs = FileAttrsResolver::new(&paths, git.file_attrs(), repo.as_ref())?;
+        let attrs = FileAttrsResolver::new(&paths, git.file_attrs, repo.as_ref())?;
         let mut files = Vec::with_capacity(paths.len());
 
         for path in paths {

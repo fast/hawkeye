@@ -21,7 +21,6 @@
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::fmt;
-use std::path::Path;
 use std::path::PathBuf;
 use std::str::FromStr;
 
@@ -31,59 +30,40 @@ use serde::Deserialize;
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
-    header: HeaderConfig,
+    /// The header template source and recognition keywords.
+    pub header: HeaderConfig,
+    /// File discovery settings.
     #[serde(default)]
-    files: FilesConfig,
+    pub files: FilesConfig,
+    /// User values exposed to MiniJinja as the `props` object.
     #[serde(default)]
-    props: BTreeMap<String, toml::Value>,
+    pub props: BTreeMap<String, toml::Value>,
+    /// Git integration settings.
     #[serde(default)]
-    git: GitConfig,
+    pub git: GitConfig,
+    /// Custom comment styles keyed by name.
     #[serde(default)]
-    styles: BTreeMap<String, StyleConfig>,
+    pub styles: BTreeMap<String, StyleConfig>,
+    /// Filename and extension rules in declaration order.
     #[serde(default)]
-    rules: Vec<RuleConfig>,
+    pub rules: Vec<RuleConfig>,
 }
 
 impl Config {
     /// Parses strict snake-case TOML and validates local invariants.
     pub fn from_toml(source: &str) -> Result<Self, ConfigError> {
         let config = toml::from_str::<Self>(source)?;
-        let issues = validate(&config);
+        config.validate()?;
+        Ok(config)
+    }
+
+    pub(crate) fn validate(&self) -> Result<(), ConfigError> {
+        let issues = validate(self);
         if issues.is_empty() {
-            Ok(config)
+            Ok(())
         } else {
             Err(ConfigError::Validation(ValidationErrors { issues }))
         }
-    }
-
-    /// Returns the configured header source and recognition keywords.
-    pub fn header(&self) -> &HeaderConfig {
-        &self.header
-    }
-
-    /// Returns file discovery settings.
-    pub fn files(&self) -> &FilesConfig {
-        &self.files
-    }
-
-    /// Returns user values passed to MiniJinja as the `props` object.
-    pub fn props(&self) -> &BTreeMap<String, toml::Value> {
-        &self.props
-    }
-
-    /// Returns Git integration settings.
-    pub fn git(&self) -> GitConfig {
-        self.git
-    }
-
-    /// Returns custom style definitions.
-    pub fn styles(&self) -> &BTreeMap<String, StyleConfig> {
-        &self.styles
-    }
-
-    /// Returns user rules in declaration order.
-    pub fn rules(&self) -> &[RuleConfig] {
-        &self.rules
     }
 }
 
@@ -99,42 +79,27 @@ impl FromStr for Config {
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct HeaderConfig {
-    builtin: Option<String>,
-    path: Option<PathBuf>,
-    text: Option<String>,
+    /// A built-in header resource key.
+    pub builtin: Option<String>,
+    /// A template path relative to `licenserc.toml`.
+    pub path: Option<PathBuf>,
+    /// An inline header template.
+    pub text: Option<String>,
+    /// Words that must occur in a structurally recognized header.
     #[serde(default = "default_keywords")]
-    keywords: Vec<String>,
-}
-
-impl HeaderConfig {
-    /// Returns the built-in resource key, if selected.
-    pub fn builtin(&self) -> Option<&str> {
-        self.builtin.as_deref()
-    }
-
-    /// Returns the configured template path, if selected.
-    pub fn path(&self) -> Option<&Path> {
-        self.path.as_deref()
-    }
-
-    /// Returns the inline template, if selected.
-    pub fn text(&self) -> Option<&str> {
-        self.text.as_deref()
-    }
-
-    /// Returns words that must all occur in a structurally recognized header.
-    pub fn keywords(&self) -> &[String] {
-        &self.keywords
-    }
+    pub keywords: Vec<String>,
 }
 
 /// File discovery settings.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct FilesConfig {
-    root: PathBuf,
-    includes: Vec<String>,
-    excludes: Vec<String>,
+    /// The root scanned by HawkEye, relative to `licenserc.toml`.
+    pub root: PathBuf,
+    /// Git-ignore-style inclusion patterns; an empty list selects all files.
+    pub includes: Vec<String>,
+    /// Git-ignore-style exclusion patterns.
+    pub excludes: Vec<String>,
 }
 
 impl Default for FilesConfig {
@@ -144,23 +109,6 @@ impl Default for FilesConfig {
             includes: Vec::new(),
             excludes: Vec::new(),
         }
-    }
-}
-
-impl FilesConfig {
-    /// Returns the root scanned by HawkEye, relative to `licenserc.toml`.
-    pub fn root(&self) -> &Path {
-        &self.root
-    }
-
-    /// Returns Git-ignore-style inclusion patterns; an empty list selects all files.
-    pub fn includes(&self) -> &[String] {
-        &self.includes
-    }
-
-    /// Returns Git-ignore-style exclusion patterns.
-    pub fn excludes(&self) -> &[String] {
-        &self.excludes
     }
 }
 
@@ -191,8 +139,10 @@ impl FeatureMode {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct GitConfig {
-    ignore: FeatureMode,
-    file_attrs: FeatureMode,
+    /// How Git ignore files participate in discovery.
+    pub ignore: FeatureMode,
+    /// How per-file Git attributes are populated for templates.
+    pub file_attrs: FeatureMode,
 }
 
 impl Default for GitConfig {
@@ -204,51 +154,21 @@ impl Default for GitConfig {
     }
 }
 
-impl GitConfig {
-    /// Returns how Git ignore files participate in discovery.
-    pub fn ignore(self) -> FeatureMode {
-        self.ignore
-    }
-
-    /// Returns how per-file Git attributes are populated for templates.
-    pub fn file_attrs(self) -> FeatureMode {
-        self.file_attrs
-    }
-}
-
 /// A filename/extension rule and its accepted/output comment styles.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct RuleConfig {
+    /// Suffixes matched after the final filename separator, without a leading dot.
     #[serde(default)]
-    extensions: Vec<String>,
+    pub extensions: Vec<String>,
+    /// Complete filenames matched case-insensitively.
     #[serde(default)]
-    filenames: Vec<String>,
-    style_out: String,
+    pub filenames: Vec<String>,
+    /// The canonical style used for output.
+    pub style_out: String,
+    /// Additional styles accepted as structurally safe input.
     #[serde(default)]
-    styles_in: Vec<String>,
-}
-
-impl RuleConfig {
-    /// Returns suffixes matched after the final filename separator, without a leading dot.
-    pub fn extensions(&self) -> &[String] {
-        &self.extensions
-    }
-
-    /// Returns complete filenames matched case-insensitively.
-    pub fn filenames(&self) -> &[String] {
-        &self.filenames
-    }
-
-    /// Returns the canonical style used for output.
-    pub fn style_out(&self) -> &str {
-        &self.style_out
-    }
-
-    /// Returns additional styles accepted as structurally safe input.
-    pub fn styles_in(&self) -> &[String] {
-        &self.styles_in
-    }
+    pub styles_in: Vec<String>,
 }
 
 /// A syntax-only custom comment style.

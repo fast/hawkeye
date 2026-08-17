@@ -68,10 +68,13 @@ impl fmt::Display for Status {
 /// The deterministic outcome for one path.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct FileOutcome {
+    /// The path relative to `files.root`.
     #[serde(serialize_with = "serialize_path")]
-    path: PathBuf,
-    status: Status,
-    changed: bool,
+    pub path: PathBuf,
+    /// The analysis status.
+    pub status: Status,
+    /// Whether the requested operation planned a modification.
+    pub changed: bool,
 }
 
 impl FileOutcome {
@@ -81,21 +84,6 @@ impl FileOutcome {
             status,
             changed,
         }
-    }
-
-    /// Returns the path relative to `files.root`.
-    pub fn path(&self) -> &Path {
-        &self.path
-    }
-
-    /// Returns the analysis status.
-    pub fn status(&self) -> Status {
-        self.status
-    }
-
-    /// Returns whether the requested operation planned a modification.
-    pub fn changed(&self) -> bool {
-        self.changed
     }
 }
 
@@ -111,7 +99,7 @@ impl Report {
         Self { files }
     }
 
-    /// Returns all selected file outcomes.
+    /// Returns all selected file outcomes in path order.
     pub fn files(&self) -> &[FileOutcome] {
         &self.files
     }

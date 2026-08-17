@@ -29,7 +29,6 @@ use crate::template::HeaderTemplate;
 
 /// A configuration whose paths, resources, styles, and rules are ready to run.
 pub struct ResolvedConfig {
-    config_path: PathBuf,
     root: PathBuf,
     header_path: Option<PathBuf>,
     includes: Vec<String>,
@@ -53,6 +52,15 @@ pub(crate) struct Rule {
 impl Config {
     /// Resolves paths and built-in resources relative to `config_path`.
     pub fn resolve(self, config_path: impl AsRef<Path>) -> Result<ResolvedConfig> {
+        self.validate()?;
+        let Config {
+            header,
+            files,
+            props,
+            git,
+            styles: configured_styles,
+            rules: configured_rules,
+        } = self;
         let config_path = config_path.as_ref();
         let config_path = if config_path.is_absolute() {
             config_path.to_path_buf()
@@ -68,7 +76,7 @@ impl Config {
             Error::InvalidConfig("configuration path has no parent directory".to_owned())
         })?;
 
-        let root = resolve_path(config_dir, self.files().root());
+        let root = resolve_path(config_dir, &files.root);
         let root = root
             .canonicalize()
             .map_err(|source| Error::io("resolve file root", &root, source))?;
@@ -79,7 +87,7 @@ impl Config {
             )));
         }
 
-        let (source, header_path) = if let Some(key) = self.header().builtin() {
+        let (source, header_path) = if let Some(key) = header.builtin.as_deref() {
             (
                 builtin_header(key).ok_or_else(|| {
                     Error::InvalidConfig(format!(
@@ -89,7 +97,7 @@ impl Config {
                 .to_owned(),
                 None,
             )
-        } else if let Some(path) = self.header().path() {
+        } else if let Some(path) = header.path.as_deref() {
             let path = resolve_path(config_dir, path);
             let path = path
                 .canonicalize()
@@ -101,8 +109,9 @@ impl Config {
             )
         } else {
             (
-                self.header()
-                    .text()
+                header
+                    .text
+                    .as_deref()
                     .expect("Config validation guarantees exactly one header source")
                     .to_owned(),
                 None,
@@ -111,27 +120,23 @@ impl Config {
         let template = HeaderTemplate::new(source)?;
 
         let mut styles = builtin_styles();
-        for (name, style) in self.styles() {
-            if styles.contains_key(name) {
+        for (name, style) in configured_styles {
+            if styles.contains_key(&name) {
                 log::warn!("custom style {name:?} overrides a built-in style of the same name");
             }
-            styles.insert(
-                name.clone(),
-                Style::from_config(name.clone(), style.clone()),
-            );
+            styles.insert(name.clone(), Style::from_config(name, style));
         }
 
-        let mut rules = self
-            .rules()
+        let mut rules = configured_rules
             .iter()
             .enumerate()
             .map(|(index, rule)| {
                 resolve_rule(
                     &format!("rules[{index}]"),
-                    rule.extensions(),
-                    rule.filenames(),
-                    rule.style_out(),
-                    rule.styles_in(),
+                    &rule.extensions,
+                    &rule.filenames,
+                    &rule.style_out,
+                    &rule.styles_in,
                     &styles,
                 )
             })
@@ -139,16 +144,14 @@ impl Config {
         rules.extend(default_rules(&styles)?);
 
         Ok(ResolvedConfig {
-            config_path,
             root,
             header_path,
-            includes: self.files().includes().to_vec(),
-            excludes: self.files().excludes().to_vec(),
-            props: self.props().clone(),
-            git: self.git(),
-            keywords: self
-                .header()
-                .keywords()
+            includes: files.includes,
+            excludes: files.excludes,
+            props,
+            git,
+            keywords: header
+                .keywords
                 .iter()
                 .map(|keyword| keyword.to_lowercase())
                 .collect(),
@@ -168,28 +171,19 @@ impl ResolvedConfig {
         Config::from_toml(&source)?.resolve(path)
     }
 
-    /// Returns the canonical configuration path.
-    pub fn config_path(&self) -> &Path {
-        &self.config_path
-    }
-
-    /// Returns the canonical discovery root.
-    pub fn root(&self) -> &Path {
+    pub(crate) fn root(&self) -> &Path {
         &self.root
     }
 
-    /// Returns configured inclusion patterns.
-    pub fn includes(&self) -> &[String] {
+    pub(crate) fn includes(&self) -> &[String] {
         &self.includes
     }
 
-    /// Returns configured exclusion patterns.
-    pub fn excludes(&self) -> &[String] {
+    pub(crate) fn excludes(&self) -> &[String] {
         &self.excludes
     }
 
-    /// Returns Git integration settings.
-    pub fn git(&self) -> GitConfig {
+    pub(crate) fn git(&self) -> GitConfig {
         self.git
     }
 
