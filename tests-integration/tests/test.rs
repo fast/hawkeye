@@ -163,8 +163,8 @@ ignore = "auto"
         .plan(Mode::Check)
         .expect("fall back to filesystem discovery");
     let report = plan.report();
-    assert_eq!(report.files().len(), 1);
-    assert_eq!(report.files()[0].status, Status::Missing);
+    assert_eq!(report.files.len(), 1);
+    assert_eq!(report.files[0].status, Status::Missing);
 }
 
 #[cfg(target_os = "linux")]

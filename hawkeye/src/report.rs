@@ -80,15 +80,11 @@ pub struct FileOutcome {
 /// A path-sorted operation report.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Report {
-    pub(crate) files: Vec<FileOutcome>,
+    /// All selected file outcomes in path order.
+    pub files: Vec<FileOutcome>,
 }
 
 impl Report {
-    /// Returns all selected file outcomes in path order.
-    pub fn files(&self) -> &[FileOutcome] {
-        &self.files
-    }
-
     /// Returns the number of planned or applied changes.
     pub fn changed(&self) -> usize {
         self.files.iter().filter(|file| file.changed).count()

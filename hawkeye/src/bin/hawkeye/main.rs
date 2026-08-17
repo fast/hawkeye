@@ -168,7 +168,7 @@ fn emit(mode: Mode, report: &Report, output_format: OutputFormat) -> Result<(), 
 
 fn emit_human(mode: Mode, report: &Report) -> io::Result<()> {
     let mut stdout = io::stdout().lock();
-    for file in report.files() {
+    for file in &report.files {
         let label = if file.changed {
             match (mode, file.status) {
                 (Mode::Remove, _) => "remove",
@@ -191,7 +191,7 @@ fn emit_human(mode: Mode, report: &Report) -> io::Result<()> {
     writeln!(
         stdout,
         "{} files, {} changed, {} conflicts, {} unsupported",
-        report.files().len(),
+        report.files.len(),
         report.changed(),
         report.count(Status::Conflict),
         report.count(Status::Unsupported),
