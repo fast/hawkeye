@@ -162,7 +162,7 @@ let report = plan.report();
 # Ok::<(), hawkeye::Error>(())
 ```
 
-`Config` is the Serde-facing TOML model, and `Config::load` anchors relative paths to the configuration file. `Engine::new` validates the config and directly owns the resolved paths, compiled template, styles, and ordered rules. `Engine::plan` performs discovery and analysis without writes; unchanged source contents are discarded instead of being retained for the lifetime of the plan. Before writing anything, `Plan::apply` validates every edited input, then performs atomic same-directory replacements while checking each input again for concurrent changes. Symbolic links and multiply linked files are not replaced.
+`Config` is the Serde-facing TOML model, and `Config::load` anchors relative paths to the configuration file. `Config::validate` is available to callers that need to inspect a configuration before use; `Engine::new` always invokes it before building the resolved paths, compiled template, styles, and ordered rules. `Engine::plan` performs discovery and analysis without writes; unchanged source contents are discarded instead of being retained for the lifetime of the plan. Before writing anything, `Plan::apply` validates every edited input, then performs atomic same-directory replacements while checking each input again for concurrent changes. Symbolic links and multiply linked files are not replaced.
 
 ## Development
 

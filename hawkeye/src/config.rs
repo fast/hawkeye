@@ -29,7 +29,7 @@ use serde::Deserialize;
 use crate::Error;
 use crate::ErrorKind;
 
-/// A parsed and locally validated `licenserc.toml` document.
+/// A `licenserc.toml` configuration model.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
@@ -63,7 +63,9 @@ impl Config {
             )
             .with_source(err)
         })?;
-        let mut config = Self::from_toml(&source)?;
+        let mut config = toml::from_str::<Self>(&source).map_err(|source| {
+            Error::new(ErrorKind::ConfigInvalid, "cannot parse licenserc.toml").with_source(source)
+        })?;
         let path = path.canonicalize().map_err(|err| {
             Error::new(
                 ErrorKind::Unexpected,
@@ -89,16 +91,8 @@ impl Config {
         Ok(config)
     }
 
-    /// Parses strict snake-case TOML and validates local invariants.
-    pub fn from_toml(source: &str) -> Result<Self, Error> {
-        let config = toml::from_str::<Self>(source).map_err(|source| {
-            Error::new(ErrorKind::ConfigInvalid, "cannot parse licenserc.toml").with_source(source)
-        })?;
-        config.validate()?;
-        Ok(config)
-    }
-
-    pub(crate) fn validate(&self) -> Result<(), Error> {
+    /// Validates configuration invariants that do not require runtime resources.
+    pub fn validate(&self) -> Result<(), Error> {
         let mut validator = Validator::default();
         validator.header(&self.header);
         validator.files(&self.files);

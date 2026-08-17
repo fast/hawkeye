@@ -552,20 +552,28 @@ includes = ["**/*.rs"]
 }
 
 #[test]
-fn programmatic_config_is_revalidated_before_engine_initialization() {
+fn public_config_validation_matches_engine_initialization() {
+    let project = tempfile::tempdir().expect("create configuration project");
+    let path = project.path().join("licenserc.toml");
     let source = r#"[header]
 text = "Copyright 2026 Acme"
 "#;
+    fs::write(&path, source).expect("write configuration");
 
-    let mut config = Config::from_toml(source).expect("parse configuration");
+    let mut config = Config::load(&path).expect("load configuration");
     config.header.text = None;
 
-    let error = match Engine::new(config) {
+    let validation_error = config
+        .validate()
+        .expect_err("public validation must reject a mutated configuration");
+    let engine_error = match Engine::new(config) {
         Ok(_) => panic!("mutated configuration must be validated again"),
         Err(error) => error,
     };
-    assert_eq!(error.kind(), ErrorKind::ConfigInvalid);
-    let message = error.to_string();
+    assert_eq!(validation_error.kind(), ErrorKind::ConfigInvalid);
+    assert_eq!(engine_error.kind(), ErrorKind::ConfigInvalid);
+    assert_eq!(validation_error.to_string(), engine_error.to_string());
+    let message = validation_error.to_string();
     assert!(message.starts_with("ConfigInvalid => invalid licenserc.toml, source: "));
     assert!(message.contains("exactly one of `builtin`, `path`, or `text` must be set"));
 }
