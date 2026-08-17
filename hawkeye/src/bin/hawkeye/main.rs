@@ -84,9 +84,9 @@ struct EditOptions {
     #[arg(long)]
     fail_if_unknown: bool,
 
-    /// Exit successfully after changing files.
+    /// Exit unsuccessfully if this command changes any files.
     #[arg(long)]
-    no_fail_if_updated: bool,
+    fail_on_change: bool,
 }
 
 fn main() -> ExitCode {
@@ -148,7 +148,7 @@ fn edit(
     emit(&plan, output_format)?;
     let failed = report.count(Status::Conflict) > 0
         || (options.fail_if_unknown && report.count(Status::Unsupported) > 0)
-        || (!options.no_fail_if_updated && report.changed() > 0);
+        || (options.fail_on_change && report.changed() > 0);
     Ok(policy_exit(failed))
 }
 

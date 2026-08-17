@@ -35,10 +35,7 @@ fn mixed_repository_lifecycle() {
     let project = case("mixed");
     assert_format_lifecycle("mixed", project.path(), false);
 
-    let removed = hawkeye(
-        project.path(),
-        ["remove", "--no-fail-if-updated", "--output-format=json"],
-    );
+    let removed = hawkeye(project.path(), ["remove", "--output-format=json"]);
     assert_exit(&removed, 0);
     assert_json_snapshot("mixed__remove", &removed);
     assert_tree_snapshot("mixed__tree_removed", project.path());
@@ -46,13 +43,22 @@ fn mixed_repository_lifecycle() {
     let strict_unknown = hawkeye(project.path(), ["check", "--fail-if-unknown"]);
     assert_exit(&strict_unknown, 1);
 
-    let default_failure = case("mixed");
-    let formatted = hawkeye(default_failure.path(), ["format"]);
+    let default_success = case("mixed");
+    let formatted = hawkeye(default_success.path(), ["format"]);
+    assert_exit(&formatted, 0);
+    assert!(
+        read_normalized(default_success.path().join("app.rs"))
+            .starts_with("// Copyright 2026 Acme Labs\n// Sequence 1-2-3\n\n"),
+        "format must apply changes before returning success"
+    );
+
+    let opt_in_failure = case("mixed");
+    let formatted = hawkeye(opt_in_failure.path(), ["format", "--fail-on-change"]);
     assert_exit(&formatted, 1);
     assert!(
-        read_normalized(default_failure.path().join("app.rs"))
+        read_normalized(opt_in_failure.path().join("app.rs"))
             .starts_with("// Copyright 2026 Acme Labs\n// Sequence 1-2-3\n\n"),
-        "format must write before applying the fail-if-updated policy"
+        "fail-on-change must report the applied change rather than suppressing it"
     );
 }
 
@@ -156,10 +162,7 @@ fn git_history_branches_dirty_files_and_untracked_directories() {
     assert_exit(&checked, 1);
     assert_json_snapshot("git_history__check_before", &checked);
 
-    let formatted = hawkeye(
-        project.path(),
-        ["format", "--no-fail-if-updated", "--output-format=json"],
-    );
+    let formatted = hawkeye(project.path(), ["format", "--output-format=json"]);
     assert_exit(&formatted, 0);
     assert_json_snapshot("git_history__format", &formatted);
     insta::assert_snapshot!(
@@ -171,10 +174,7 @@ fn git_history_branches_dirty_files_and_untracked_directories() {
     assert_exit(&checked, 0);
     assert_json_snapshot("git_history__check_after", &checked);
 
-    let idempotent = hawkeye(
-        project.path(),
-        ["format", "--no-fail-if-updated", "--output-format=json"],
-    );
+    let idempotent = hawkeye(project.path(), ["format", "--output-format=json"]);
     assert_exit(&idempotent, 0);
     let report = assert_json_snapshot("git_history__format_idempotent", &idempotent);
     assert_eq!(changed_files(&report), 0);
@@ -220,10 +220,7 @@ fn shallow_repository_does_not_produce_git_years() {
         git_attrs_config("auto"),
     )
     .expect("write automatic Git attributes configuration");
-    let automatic = hawkeye(
-        project.path(),
-        ["format", "--no-fail-if-updated", "--output-format=json"],
-    );
+    let automatic = hawkeye(project.path(), ["format", "--output-format=json"]);
     assert_exit(&automatic, 0);
     assert!(stderr(&automatic).contains("repository is shallow"));
     assert!(
@@ -270,15 +267,7 @@ includes = ["**/*.rs"]
     assert_exit(&implicit, 2);
     assert!(stderr(&implicit).contains("licenserc.toml"));
 
-    let configured = hawkeye(
-        &child,
-        [
-            "--config",
-            "../licenserc.toml",
-            "format",
-            "--no-fail-if-updated",
-        ],
-    );
+    let configured = hawkeye(&child, ["--config", "../licenserc.toml", "format"]);
     assert_exit(&configured, 0);
     assert_eq!(
         read_normalized(child.join("source.rs")),
@@ -298,7 +287,7 @@ includes = ["**/*.rs"]
     .expect("write fallback config");
     fs::write(fallback.path().join("fallback.rs"), "fn fallback() {}\n")
         .expect("write fallback source");
-    let fallback_result = hawkeye(fallback.path(), ["format", "--no-fail-if-updated"]);
+    let fallback_result = hawkeye(fallback.path(), ["format"]);
     assert_exit(&fallback_result, 0);
     assert_eq!(
         read_normalized(fallback.path().join("fallback.rs")),
@@ -315,7 +304,7 @@ includes = ["**/*.rs"]
 "#,
     )
     .expect("write primary config");
-    let primary_result = hawkeye(fallback.path(), ["format", "--no-fail-if-updated"]);
+    let primary_result = hawkeye(fallback.path(), ["format"]);
     assert_exit(&primary_result, 0);
     assert_eq!(
         read_normalized(fallback.path().join("fallback.rs")),
@@ -353,7 +342,7 @@ prefix = "# "
     .expect("write configuration");
     fs::write(project.path().join("main.rs"), "fn main() {}\n").expect("write source");
 
-    let formatted = hawkeye(project.path(), ["format", "--no-fail-if-updated"]);
+    let formatted = hawkeye(project.path(), ["format"]);
     assert_exit(&formatted, 0);
     assert!(
         stderr(&formatted)
@@ -382,10 +371,7 @@ includes = ["**/*.rs"]
     .expect("write configuration");
     fs::write(project.path().join("main.rs"), "fn main() {}\n").expect("write source");
 
-    let formatted = hawkeye(
-        project.path(),
-        ["format", "--no-fail-if-updated", "--output-format=json"],
-    );
+    let formatted = hawkeye(project.path(), ["format", "--output-format=json"]);
     assert_exit(&formatted, 2);
     assert!(
         stderr(&formatted).contains("does not contain recognition keyword \"copyright\""),
@@ -417,10 +403,7 @@ includes = ["**/*.rs"]
     let source = "// Copyright 2025 Acme\n\n// Licensed under Example\n\nfn main() {}\n";
     fs::write(project.path().join("main.rs"), source).expect("write malformed header");
 
-    let formatted = hawkeye(
-        project.path(),
-        ["format", "--no-fail-if-updated", "--output-format=json"],
-    );
+    let formatted = hawkeye(project.path(), ["format", "--output-format=json"]);
     assert_exit(&formatted, 1);
     let report = json(&formatted);
     assert_eq!(report["files"][0]["status"], "conflict");
@@ -451,10 +434,7 @@ includes = ["**/*.rs"]
         .expect("write configuration");
         fs::write(project.path().join("main.rs"), source).expect("write source");
 
-        let result = hawkeye(
-            project.path(),
-            [command, "--no-fail-if-updated", "--output-format=json"],
-        );
+        let result = hawkeye(project.path(), [command, "--output-format=json"]);
         assert_exit(&result, 1);
         let report = json(&result);
         assert_eq!(report["files"][0]["status"], "conflict");
@@ -482,10 +462,7 @@ includes = ["**/*.php"]
     )
     .expect("write PHP source");
 
-    let formatted = hawkeye(
-        project.path(),
-        ["format", "--no-fail-if-updated", "--output-format=json"],
-    );
+    let formatted = hawkeye(project.path(), ["format", "--output-format=json"]);
     assert_exit(&formatted, 0);
     assert_eq!(
         read_normalized(project.path().join("main.php")),
@@ -512,10 +489,7 @@ includes = ["**/*.rs"]
         .expect("write header template");
     fs::write(project.path().join("main.rs"), "fn main() {}\n").expect("write source");
 
-    let formatted = hawkeye(
-        project.path(),
-        ["format", "--no-fail-if-updated", "--output-format=json"],
-    );
+    let formatted = hawkeye(project.path(), ["format", "--output-format=json"]);
     assert_exit(&formatted, 0);
     let report = json(&formatted);
     assert_eq!(report["files"].as_array().map(Vec::len), Some(1));
@@ -655,10 +629,7 @@ fn assert_format_lifecycle(name: &str, project: &Path, conflict: bool) {
     assert_exit(&checked, 1);
     assert_json_snapshot(&format!("{name}__check_before"), &checked);
 
-    let formatted = hawkeye(
-        project,
-        ["format", "--no-fail-if-updated", "--output-format=json"],
-    );
+    let formatted = hawkeye(project, ["format", "--output-format=json"]);
     assert_exit(&formatted, i32::from(conflict));
     let formatted_report = assert_json_snapshot(&format!("{name}__format"), &formatted);
     assert!(changed_files(&formatted_report) > 0);
@@ -668,10 +639,7 @@ fn assert_format_lifecycle(name: &str, project: &Path, conflict: bool) {
     assert_exit(&checked, i32::from(conflict));
     assert_json_snapshot(&format!("{name}__check_after"), &checked);
 
-    let idempotent = hawkeye(
-        project,
-        ["format", "--no-fail-if-updated", "--output-format=json"],
-    );
+    let idempotent = hawkeye(project, ["format", "--output-format=json"]);
     assert_exit(&idempotent, i32::from(conflict));
     let idempotent_report =
         assert_json_snapshot(&format!("{name}__format_idempotent"), &idempotent);
