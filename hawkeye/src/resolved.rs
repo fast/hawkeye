@@ -196,16 +196,20 @@ impl Config {
 
 impl ResolvedConfig {
     /// Reads, parses, and resolves one `licenserc.toml` file.
-    pub fn load(path: impl AsRef<Path>) -> Result<Self, Error> {
+    pub fn load<P: AsRef<Path>>(path: P) -> Result<Self, Error> {
         let path = path.as_ref();
-        let source = fs::read_to_string(path).map_err(|source| {
-            Error::new(
+
+        match fs::read_to_string(path) {
+            Ok(content) => {
+                let config = Config::from_toml(&content)?;
+                config.resolve(path)
+            }
+            Err(err) => Err(Error::new(
                 ErrorKind::Unexpected,
-                format!("cannot read configuration {}", path.display()),
+                format!("cannot read config from {}", path.display()),
             )
-            .with_source(source)
-        })?;
-        Config::from_toml(&source)?.resolve(path)
+            .with_source(err)),
+        }
     }
 
     pub(crate) fn rule_for(&self, path: &Path) -> Option<&Rule> {

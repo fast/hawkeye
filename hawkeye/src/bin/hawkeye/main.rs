@@ -102,19 +102,15 @@ fn main() -> ExitCode {
 
 fn do_main() -> Result<ExitCode, Error> {
     let cmd = Command::parse();
-    let config_path = match cmd.config {
+    let config = match cmd.config {
         Some(path) => path,
         None => default_config()?,
     };
-    log::debug!("loading config from {}", config_path.display());
+    log::debug!("loading config from {}", config.display());
 
-    let config = ResolvedConfig::load(&config_path).or_raise(|| {
-        Error::new(format!(
-            "cannot load configuration {}",
-            config_path.display()
-        ))
-    })?;
+    let config = ResolvedConfig::load(config).or_raise(|| Error::new("cannot load config"))?;
     let engine = Engine::new(config);
+
     match cmd.subcommand {
         SubcommandOptions::Check(options) => {
             let plan = engine

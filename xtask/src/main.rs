@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! An xtask binary for managing workspace tasks.
-
 use std::process::Command as StdCommand;
 
 use clap::Parser;
@@ -78,7 +76,7 @@ fn ensure_installed(bin: &str, crate_name: &str) {
 
 fn run_command(mut cmd: StdCommand) {
     println!("{cmd:?}");
-    let status = cmd.status().expect("failed to execute process");
+    let status = cmd.status().unwrap();
     assert!(status.success(), "command failed: {status}");
 }
 
