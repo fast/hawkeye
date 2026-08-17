@@ -71,7 +71,7 @@ enum SubcommandOptions {
 struct CheckOptions {
     /// Fail when selected files have no rule or are not UTF-8 text.
     #[arg(long)]
-    fail_if_unknown: bool,
+    fail_on_unknown: bool,
 }
 
 #[derive(Debug, Args)]
@@ -82,7 +82,7 @@ struct EditOptions {
 
     /// Fail when selected files have no rule or are not UTF-8 text.
     #[arg(long)]
-    fail_if_unknown: bool,
+    fail_on_unknown: bool,
 
     /// Exit unsuccessfully if this command changes any files.
     #[arg(long)]
@@ -119,7 +119,7 @@ fn do_main() -> Result<ExitCode, Error> {
             let report = plan.report();
             emit(Mode::Check, &report, cmd.output_format)?;
             let failed = report.has_violations()
-                || (options.fail_if_unknown && report.count(Status::Unsupported) > 0);
+                || (options.fail_on_unknown && report.count(Status::Unsupported) > 0);
             Ok(policy_exit(failed))
         }
         SubcommandOptions::Format(options) => {
@@ -147,7 +147,7 @@ fn edit(
     let report = plan.report();
     emit(mode, &report, output_format)?;
     let failed = report.count(Status::Conflict) > 0
-        || (options.fail_if_unknown && report.count(Status::Unsupported) > 0)
+        || (options.fail_on_unknown && report.count(Status::Unsupported) > 0)
         || (options.fail_on_change && report.changed() > 0);
     Ok(policy_exit(failed))
 }

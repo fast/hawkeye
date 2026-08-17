@@ -49,7 +49,7 @@ hawkeye check --output-format json
 RUST_LOG=hawkeye=debug hawkeye check
 ```
 
-`check` exits with code 1 for a missing, non-canonical, or conflicting header. `format` and `remove` return 0 after applying safe changes unless conflicts remain; pass `--fail-on-change` to return 1 whenever files changed. All commands accept `--fail-if-unknown` to treat files without a rule and non-UTF-8 files as policy failures. Configuration, I/O, template, and Git failures use exit code 2.
+`check` exits with code 1 for a missing, non-canonical, or conflicting header. `format` and `remove` return 0 after applying safe changes unless conflicts remain; pass `--fail-on-change` to return 1 whenever files changed. All commands accept `--fail-on-unknown` to treat files without a rule and non-UTF-8 files as policy failures. Configuration, I/O, template, and Git failures use exit code 2.
 
 `--dry-run` suppresses writes. Reports are written to stdout; logs and errors are written to stderr.
 

@@ -40,7 +40,7 @@ fn mixed_repository_lifecycle() {
     assert_json_snapshot("mixed__remove", &removed);
     assert_tree_snapshot("mixed__tree_removed", project.path());
 
-    let strict_unknown = hawkeye(project.path(), ["check", "--fail-if-unknown"]);
+    let strict_unknown = hawkeye(project.path(), ["check", "--fail-on-unknown"]);
     assert_exit(&strict_unknown, 1);
 
     let default_success = case("mixed");
