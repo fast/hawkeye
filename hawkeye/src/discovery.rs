@@ -132,12 +132,7 @@ fn walk(
         .build();
     for entry in walker {
         let entry = entry.map_err(|source| {
-            let kind = if source.is_io() {
-                ErrorKind::Io
-            } else {
-                ErrorKind::Unexpected
-            };
-            Error::new(kind, "cannot discover files").with_source(source)
+            Error::new(ErrorKind::Unexpected, "cannot discover files").with_source(source)
         })?;
         if !entry.file_type().is_some_and(|kind| kind.is_file()) {
             continue;

@@ -42,9 +42,7 @@ impl GitRepo {
         }
 
         let started = Instant::now();
-        let output = match Command::new("git")
-            .args(["-C"])
-            .arg(root)
+        let output = match git_command(root)
             .args(["rev-parse", "--show-toplevel"])
             .output()
         {
@@ -57,9 +55,14 @@ impl GitRepo {
                 return Ok(None);
             }
             Err(source) => {
-                return Err(
-                    Error::new(ErrorKind::GitUnavailable, "cannot start Git").with_source(source)
-                );
+                return Err(Error::new(
+                    ErrorKind::Unsupported,
+                    format!(
+                        "Git is required for {} but cannot be started",
+                        root.display()
+                    ),
+                )
+                .with_source(source));
             }
         };
 
@@ -72,7 +75,14 @@ impl GitRepo {
                 );
                 return Ok(None);
             }
-            return Err(Error::new(ErrorKind::GitUnavailable, stderr(&output)));
+            return Err(Error::new(
+                ErrorKind::Unsupported,
+                format!(
+                    "Git is required but {} is not a usable Git worktree",
+                    root.display()
+                ),
+            )
+            .with_source(stderr(&output)));
         }
 
         let path = output
@@ -81,13 +91,12 @@ impl GitRepo {
             .unwrap_or(output.stdout.as_slice());
         if path.is_empty() {
             return Err(Error::new(
-                ErrorKind::GitUnavailable,
+                ErrorKind::Unexpected,
                 "Git returned an empty repository root",
             ));
         }
         let root = path_from_git_bytes(path).canonicalize().map_err(|source| {
-            Error::new(ErrorKind::GitUnavailable, "cannot resolve repository root")
-                .with_source(source)
+            Error::new(ErrorKind::Unexpected, "cannot resolve repository root").with_source(source)
         })?;
         log::debug!(
             "discovered Git repository {} in {:?}",
@@ -104,7 +113,7 @@ impl GitRepo {
     pub(crate) fn list_files(&self, scan_root: &Path) -> Result<Vec<PathBuf>, Error> {
         let relative_root = scan_root.strip_prefix(&self.root).map_err(|_| {
             Error::new(
-                ErrorKind::GitUnavailable,
+                ErrorKind::Unexpected,
                 format!(
                     "files.root {} is outside repository {}",
                     scan_root.display(),
@@ -138,7 +147,7 @@ impl GitRepo {
                 Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
                 Err(source) => {
                     return Err(Error::new(
-                        ErrorKind::Io,
+                        ErrorKind::Unexpected,
                         format!("cannot read metadata for {}", path.display()),
                     )
                     .with_source(source));
@@ -152,15 +161,15 @@ impl GitRepo {
     }
 
     pub(crate) fn has_head(&self) -> Result<bool, Error> {
-        let output = Command::new("git")
-            .args(["-C"])
-            .arg(&self.root)
-            .args(["rev-parse", "--verify", "HEAD"])
-            .output()
-            .map_err(|source| {
-                Error::new(ErrorKind::GitUnavailable, "cannot inspect Git HEAD").with_source(source)
-            })?;
-        Ok(output.status.success())
+        let output = self.output_unchecked(["rev-parse", "--verify", "--quiet", "HEAD"])?;
+        if output.status.success() {
+            Ok(true)
+        } else if output.status.code() == Some(1) {
+            Ok(false)
+        } else {
+            Err(Error::new(ErrorKind::Unexpected, "cannot inspect Git HEAD")
+                .with_source(stderr(&output)))
+        }
     }
 
     pub(crate) fn is_shallow(&self) -> Result<bool, Error> {
@@ -169,27 +178,23 @@ impl GitRepo {
             "true" => Ok(true),
             "false" => Ok(false),
             value => Err(Error::new(
-                ErrorKind::GitUnavailable,
+                ErrorKind::Unexpected,
                 format!("Git returned an invalid shallow-repository value: {value:?}"),
             )),
         }
     }
 
     pub(crate) fn optional_config(&self, key: &str) -> Result<Option<String>, Error> {
-        let output = Command::new("git")
-            .args(["-C"])
-            .arg(&self.root)
-            .args(["config", "--get", key])
-            .output()
-            .map_err(|source| {
-                Error::new(
-                    ErrorKind::GitUnavailable,
-                    format!("cannot read Git configuration key {key}"),
-                )
-                .with_source(source)
-            })?;
-        if !output.status.success() {
+        let output = self.output_unchecked(["config", "--get", key])?;
+        if output.status.code() == Some(1) {
             return Ok(None);
+        }
+        if !output.status.success() {
+            return Err(Error::new(
+                ErrorKind::Unexpected,
+                format!("cannot read Git configuration key {key}"),
+            )
+            .with_source(stderr(&output)));
         }
         let value = String::from_utf8_lossy(&output.stdout).trim().to_owned();
         Ok((!value.is_empty()).then_some(value))
@@ -200,25 +205,36 @@ impl GitRepo {
         I: IntoIterator<Item = S>,
         S: AsRef<OsStr>,
     {
+        let output = self.output_unchecked(arguments)?;
+        if output.status.success() {
+            Ok(output)
+        } else {
+            Err(Error::new(ErrorKind::Unexpected, stderr(&output)))
+        }
+    }
+
+    fn output_unchecked<I, S>(&self, arguments: I) -> Result<Output, Error>
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<OsStr>,
+    {
         let arguments = arguments
             .into_iter()
             .map(|argument| argument.as_ref().to_owned())
             .collect::<Vec<_>>();
         let started = Instant::now();
-        let output = Command::new("git")
-            .args(["-C"])
-            .arg(&self.root)
+        let output = git_command(&self.root)
             .args(&arguments)
             .output()
             .map_err(|source| {
-                Error::new(ErrorKind::GitUnavailable, "cannot start Git").with_source(source)
+                Error::new(
+                    ErrorKind::Unexpected,
+                    format!("cannot execute Git {arguments:?}"),
+                )
+                .with_source(source)
             })?;
         log::debug!("Git {:?} completed in {:?}", arguments, started.elapsed());
-        if output.status.success() {
-            Ok(output)
-        } else {
-            Err(Error::new(ErrorKind::GitUnavailable, stderr(&output)))
-        }
+        Ok(output)
     }
 
     pub(crate) fn read_stdout<I, S, Value>(
@@ -236,24 +252,22 @@ impl GitRepo {
             .map(|argument| argument.as_ref().to_owned())
             .collect::<Vec<_>>();
         let mut stderr = tempfile::tempfile().map_err(|source| {
-            Error::new(ErrorKind::GitUnavailable, "cannot create Git stderr buffer")
-                .with_source(source)
+            Error::new(ErrorKind::Unexpected, "cannot create Git stderr buffer").with_source(source)
         })?;
         let stderr_writer = stderr.try_clone().map_err(|source| {
-            Error::new(ErrorKind::GitUnavailable, "cannot clone Git stderr buffer")
-                .with_source(source)
+            Error::new(ErrorKind::Unexpected, "cannot clone Git stderr buffer").with_source(source)
         })?;
         let stdin = if let Some(input) = input {
             let mut file = tempfile::tempfile().map_err(|source| {
-                Error::new(ErrorKind::GitUnavailable, "cannot create Git stdin buffer")
+                Error::new(ErrorKind::Unexpected, "cannot create Git stdin buffer")
                     .with_source(source)
             })?;
             file.write_all(input).map_err(|source| {
-                Error::new(ErrorKind::GitUnavailable, "cannot write Git stdin buffer")
+                Error::new(ErrorKind::Unexpected, "cannot write Git stdin buffer")
                     .with_source(source)
             })?;
             file.seek(SeekFrom::Start(0)).map_err(|source| {
-                Error::new(ErrorKind::GitUnavailable, "cannot rewind Git stdin buffer")
+                Error::new(ErrorKind::Unexpected, "cannot rewind Git stdin buffer")
                     .with_source(source)
             })?;
             Stdio::from(file)
@@ -261,17 +275,18 @@ impl GitRepo {
             Stdio::null()
         };
         let started = Instant::now();
-        let mut child = Command::new("git")
-            .args(["-C"])
-            .arg(&self.root)
-            .env("GIT_LITERAL_PATHSPECS", "1")
+        let mut child = git_command(&self.root)
             .args(&arguments)
             .stdin(stdin)
             .stdout(Stdio::piped())
             .stderr(Stdio::from(stderr_writer))
             .spawn()
             .map_err(|source| {
-                Error::new(ErrorKind::GitUnavailable, "cannot start Git").with_source(source)
+                Error::new(
+                    ErrorKind::Unexpected,
+                    format!("cannot execute Git {arguments:?}"),
+                )
+                .with_source(source)
             })?;
         let stdout = child
             .stdout
@@ -282,7 +297,7 @@ impl GitRepo {
             let _ = child.kill();
         }
         let status = child.wait().map_err(|source| {
-            Error::new(ErrorKind::GitUnavailable, "cannot wait for Git").with_source(source)
+            Error::new(ErrorKind::Unexpected, "cannot wait for Git").with_source(source)
         })?;
         log::debug!("Git {:?} completed in {:?}", arguments, started.elapsed());
         let value = parsed?;
@@ -291,22 +306,31 @@ impl GitRepo {
         }
 
         stderr.seek(SeekFrom::Start(0)).map_err(|source| {
-            Error::new(ErrorKind::GitUnavailable, "cannot rewind Git stderr").with_source(source)
+            Error::new(ErrorKind::Unexpected, "cannot rewind Git stderr").with_source(source)
         })?;
         let mut bytes = Vec::new();
         stderr.read_to_end(&mut bytes).map_err(|source| {
-            Error::new(ErrorKind::GitUnavailable, "cannot read Git stderr").with_source(source)
+            Error::new(ErrorKind::Unexpected, "cannot read Git stderr").with_source(source)
         })?;
         let message = String::from_utf8_lossy(&bytes).trim().to_owned();
         if message.is_empty() {
             Err(Error::new(
-                ErrorKind::GitUnavailable,
+                ErrorKind::Unexpected,
                 format!("Git exited with {status}"),
             ))
         } else {
-            Err(Error::new(ErrorKind::GitUnavailable, message))
+            Err(Error::new(ErrorKind::Unexpected, message))
         }
     }
+}
+
+fn git_command(root: &Path) -> Command {
+    let mut command = Command::new("git");
+    command
+        .arg("-C")
+        .arg(root)
+        .env("GIT_LITERAL_PATHSPECS", "1");
+    command
 }
 
 #[cfg(unix)]

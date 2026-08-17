@@ -68,7 +68,7 @@ impl Config {
             std::env::current_dir()
                 .map_err(|source| {
                     Error::new(
-                        ErrorKind::Io,
+                        ErrorKind::Unexpected,
                         format!(
                             "cannot read current directory for {}",
                             config_path.display()
@@ -80,7 +80,7 @@ impl Config {
         };
         let config_path = config_path.canonicalize().map_err(|source| {
             Error::new(
-                ErrorKind::Io,
+                ErrorKind::Unexpected,
                 format!("cannot resolve {}", config_path.display()),
             )
             .with_source(source)
@@ -95,7 +95,7 @@ impl Config {
         let root = resolve_path(config_dir, &files.root);
         let root = root.canonicalize().map_err(|source| {
             Error::new(
-                ErrorKind::Io,
+                ErrorKind::Unexpected,
                 format!("cannot resolve file root {}", root.display()),
             )
             .with_source(source)
@@ -124,7 +124,7 @@ impl Config {
             let path = resolve_path(config_dir, path);
             let path = path.canonicalize().map_err(|source| {
                 Error::new(
-                    ErrorKind::Io,
+                    ErrorKind::Unexpected,
                     format!("cannot resolve header template {}", path.display()),
                 )
                 .with_source(source)
@@ -132,7 +132,7 @@ impl Config {
             (
                 fs::read_to_string(&path).map_err(|source| {
                     Error::new(
-                        ErrorKind::Io,
+                        ErrorKind::Unexpected,
                         format!("cannot read header template {}", path.display()),
                     )
                     .with_source(source)
@@ -200,7 +200,7 @@ impl ResolvedConfig {
         let path = path.as_ref();
         let source = fs::read_to_string(path).map_err(|source| {
             Error::new(
-                ErrorKind::Io,
+                ErrorKind::Unexpected,
                 format!("cannot read configuration {}", path.display()),
             )
             .with_source(source)

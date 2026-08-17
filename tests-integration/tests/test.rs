@@ -116,6 +116,54 @@ fn git_repository_with_nested_files_root_lifecycle() {
     assert_format_lifecycle("nested_root", project.path(), false);
 }
 
+#[test]
+fn required_git_capability_is_distinct_from_automatic_discovery() {
+    let project = tempfile::tempdir().expect("create non-Git project");
+    let config_path = project.path().join("licenserc.toml");
+    fs::write(project.path().join("main.rs"), "fn main() {}\n").expect("write source");
+
+    fs::write(
+        &config_path,
+        r#"[header]
+text = "Copyright 2026 Acme"
+
+[files]
+includes = ["**/*.rs"]
+
+[git]
+ignore = "enable"
+"#,
+    )
+    .expect("write required Git configuration");
+    let engine = Engine::load(&config_path).expect("load required Git configuration");
+    let error = match engine.plan(Mode::Check) {
+        Ok(_) => panic!("required Git discovery must reject a non-Git directory"),
+        Err(error) => error,
+    };
+    assert_eq!(error.kind(), ErrorKind::Unsupported);
+    assert!(error.to_string().contains("is not a usable Git worktree"));
+
+    fs::write(
+        &config_path,
+        r#"[header]
+text = "Copyright 2026 Acme"
+
+[files]
+includes = ["**/*.rs"]
+
+[git]
+ignore = "auto"
+"#,
+    )
+    .expect("write automatic Git configuration");
+    let plan = Engine::load(&config_path)
+        .expect("load automatic Git configuration")
+        .plan(Mode::Check)
+        .expect("fall back to filesystem discovery");
+    assert_eq!(plan.files().len(), 1);
+    assert_eq!(plan.files()[0].status(), Status::Missing);
+}
+
 #[cfg(target_os = "linux")]
 #[test]
 fn git_discovery_preserves_non_utf8_repository_roots() {

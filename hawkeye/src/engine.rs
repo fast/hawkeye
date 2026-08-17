@@ -66,8 +66,11 @@ impl Engine {
             }
 
             let original = fs::read(&path).map_err(|source| {
-                Error::new(ErrorKind::Io, format!("cannot read {}", path.display()))
-                    .with_source(source)
+                Error::new(
+                    ErrorKind::Unexpected,
+                    format!("cannot read {}", path.display()),
+                )
+                .with_source(source)
             })?;
             let Ok(input) = std::str::from_utf8(&original) else {
                 files.push(PlannedFile::unsupported(path, relative));

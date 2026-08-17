@@ -20,15 +20,11 @@ use std::fmt;
 pub enum ErrorKind {
     /// The configuration or header template must be corrected.
     ConfigInvalid,
-    /// A filesystem operation failed.
-    Io,
-    /// A required Git operation or repository capability is unavailable.
-    GitUnavailable,
-    /// HawkEye deliberately refuses an operation that it cannot perform safely.
+    /// The requested operation cannot be performed for the current input or environment.
     Unsupported,
     /// A file changed after the operation was planned; callers may create a new plan and retry.
     StalePlan,
-    /// An internal invariant failed and the operation cannot be recovered by the caller.
+    /// The operation failed in a way that callers cannot reliably recover from.
     Unexpected,
 }
 
@@ -36,8 +32,6 @@ impl fmt::Display for ErrorKind {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(match self {
             Self::ConfigInvalid => "ConfigInvalid",
-            Self::Io => "Io",
-            Self::GitUnavailable => "GitUnavailable",
             Self::Unsupported => "Unsupported",
             Self::StalePlan => "StalePlan",
             Self::Unexpected => "Unexpected",

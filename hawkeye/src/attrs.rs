@@ -123,11 +123,11 @@ impl FileAttrsResolver {
                     git: BTreeMap::new(),
                 });
             }
-            return Err(Error::new(ErrorKind::GitUnavailable, message));
+            return Err(Error::new(ErrorKind::Unsupported, message));
         }
         let current_year = utc_year(SystemTime::now()).ok_or_else(|| {
             Error::new(
-                ErrorKind::GitUnavailable,
+                ErrorKind::Unexpected,
                 "the current UTC year is out of range",
             )
         })?;
@@ -161,7 +161,7 @@ impl FileAttrsResolver {
     pub(crate) fn for_file(&self, path: &Path) -> Result<FileAttrs, Error> {
         let metadata = fs::metadata(path).map_err(|source| {
             Error::new(
-                ErrorKind::Io,
+                ErrorKind::Unexpected,
                 format!("cannot read metadata for {}", path.display()),
             )
             .with_source(source)
@@ -247,7 +247,7 @@ fn parse_history(
     loop {
         record.clear();
         let read = reader.read_until(0, &mut record).map_err(|source| {
-            Error::new(ErrorKind::GitUnavailable, "cannot read Git history").with_source(source)
+            Error::new(ErrorKind::Unexpected, "cannot read Git history").with_source(source)
         })?;
         if read == 0 {
             break;
