@@ -42,11 +42,6 @@ impl Engine {
         Self { config }
     }
 
-    /// Loads `licenserc.toml` and creates an engine.
-    pub fn load(path: impl AsRef<Path>) -> Result<Self, Error> {
-        ResolvedConfig::load(path).map(Self::new)
-    }
-
     /// Discovers and analyzes files without modifying the filesystem.
     pub fn plan(&self, mode: Mode) -> Result<Plan, Error> {
         let git = self.config.git();

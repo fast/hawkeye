@@ -24,6 +24,7 @@ use hawkeye::Config;
 use hawkeye::Engine;
 use hawkeye::ErrorKind;
 use hawkeye::Mode;
+use hawkeye::ResolvedConfig;
 use hawkeye::Status;
 use jiff::Timestamp;
 use jiff::tz::TimeZone;
@@ -135,7 +136,8 @@ ignore = "enable"
 "#,
     )
     .expect("write required Git configuration");
-    let engine = Engine::load(&config_path).expect("load required Git configuration");
+    let config = ResolvedConfig::load(&config_path).expect("load required Git configuration");
+    let engine = Engine::new(config);
     let error = match engine.plan(Mode::Check) {
         Ok(_) => panic!("required Git discovery must reject a non-Git directory"),
         Err(error) => error,
@@ -156,8 +158,8 @@ ignore = "auto"
 "#,
     )
     .expect("write automatic Git configuration");
-    let plan = Engine::load(&config_path)
-        .expect("load automatic Git configuration")
+    let config = ResolvedConfig::load(&config_path).expect("load automatic Git configuration");
+    let plan = Engine::new(config)
         .plan(Mode::Check)
         .expect("fall back to filesystem discovery");
     assert_eq!(plan.files().len(), 1);
@@ -570,7 +572,9 @@ includes = ["**/*.rs"]
     fs::write(project.path().join("missing.rs"), "fn missing() {}\n")
         .expect("write missing source");
 
-    let engine = Engine::load(project.path().join("licenserc.toml")).expect("load engine");
+    let config = ResolvedConfig::load(project.path().join("licenserc.toml"))
+        .expect("load resolved configuration");
+    let engine = Engine::new(config);
     let plan = engine.plan(Mode::Format).expect("plan format");
     let clean = plan
         .files()
@@ -628,7 +632,8 @@ includes = ["["]
     )
     .expect("write configuration");
 
-    let engine = Engine::load(&path).expect("load configuration before file discovery");
+    let config = ResolvedConfig::load(&path).expect("load configuration before file discovery");
+    let engine = Engine::new(config);
     let error = match engine.plan(Mode::Check) {
         Ok(_) => panic!("invalid discovery pattern must fail"),
         Err(error) => error,
@@ -652,7 +657,9 @@ includes = ["**/*.rs"]
     fs::write(project.path().join("a.rs"), "fn a() {}\n").expect("write first source");
     fs::write(project.path().join("b.rs"), "fn b() {}\n").expect("write second source");
 
-    let engine = Engine::load(project.path().join("licenserc.toml")).expect("load engine");
+    let config = ResolvedConfig::load(project.path().join("licenserc.toml"))
+        .expect("load resolved configuration");
+    let engine = Engine::new(config);
     let plan = engine.plan(Mode::Format).expect("plan format");
     fs::write(project.path().join("b.rs"), "fn b_changed() {}\n")
         .expect("change second source after planning");

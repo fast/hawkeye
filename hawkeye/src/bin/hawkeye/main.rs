@@ -29,6 +29,7 @@ use hawkeye::Engine;
 use hawkeye::Mode;
 use hawkeye::Plan;
 use hawkeye::Report;
+use hawkeye::ResolvedConfig;
 use hawkeye::Status;
 use logforth::filter::rustlog::RustLogFilterBuilder;
 
@@ -102,14 +103,19 @@ fn main() -> ExitCode {
 
 fn do_main() -> Result<ExitCode, Error> {
     let cmd = Command::parse();
-    let config = match cmd.config {
+    let config_path = match cmd.config {
         Some(path) => path,
         None => default_config()?,
     };
-    log::debug!("loading config from {}", config.display());
+    log::debug!("loading config from {}", config_path.display());
 
-    let engine = Engine::load(&config)
-        .or_raise(|| Error::new(format!("cannot load configuration {}", config.display())))?;
+    let config = ResolvedConfig::load(&config_path).or_raise(|| {
+        Error::new(format!(
+            "cannot load configuration {}",
+            config_path.display()
+        ))
+    })?;
+    let engine = Engine::new(config);
     match cmd.subcommand {
         SubcommandOptions::Check(options) => {
             let plan = engine
