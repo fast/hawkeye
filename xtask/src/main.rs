@@ -201,7 +201,7 @@ fn make_hawkeye_cmd(fix: bool) -> StdCommand {
         "--",
     ]);
     if fix {
-        cmd.args(["format", "--fail-if-updated=false"]);
+        cmd.args(["format", "--no-fail-if-updated"]);
     } else {
         cmd.args(["check"]);
     }

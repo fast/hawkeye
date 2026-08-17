@@ -37,10 +37,10 @@ Unless `--config` is passed, HawkEye tries `licenserc.toml` and then `.licenserc
 hawkeye check
 
 # Apply safe additions and replacements.
-hawkeye format --fail-if-updated=false
+hawkeye format --no-fail-if-updated
 
 # Remove structurally recognized headers.
-hawkeye remove --fail-if-updated=false
+hawkeye remove --no-fail-if-updated
 
 # Emit the stable data shape without a separate report version.
 hawkeye check --output-format json
@@ -49,7 +49,7 @@ hawkeye check --output-format json
 RUST_LOG=hawkeye=debug hawkeye check
 ```
 
-`check` exits with code 1 for a missing, non-canonical, or conflicting header. `format` and `remove` write safe changes first and then exit with code 1 by default if anything changed; pass `--fail-if-updated=false` for auto-fix workflows. All commands accept `--fail-if-unknown` to treat files without a rule and non-UTF-8 files as policy failures. Configuration, I/O, template, and Git failures use exit code 2.
+`check` exits with code 1 for a missing, non-canonical, or conflicting header. `format` and `remove` write safe changes first and then exit with code 1 by default if anything changed; pass `--no-fail-if-updated` for auto-fix workflows. All commands accept `--fail-if-unknown` to treat files without a rule and non-UTF-8 files as policy failures. Configuration, I/O, template, and Git failures use exit code 2.
 
 `--dry-run` suppresses writes. Reports are written to stdout; logs and errors are written to stderr.
 

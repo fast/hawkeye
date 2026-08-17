@@ -18,7 +18,6 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use clap::ArgAction;
 use clap::Args;
 use clap::Parser;
 use clap::Subcommand;
@@ -71,23 +70,23 @@ enum SubcommandOptions {
 #[derive(Debug, Args)]
 struct CheckOptions {
     /// Fail when selected files have no rule or are not UTF-8 text.
-    #[arg(long, action = ArgAction::Set, default_value_t = false)]
+    #[arg(long)]
     fail_if_unknown: bool,
 }
 
 #[derive(Debug, Args)]
 struct EditOptions {
     /// Plan changes without writing them.
-    #[arg(long, action = ArgAction::Set, default_value_t = false)]
+    #[arg(long)]
     dry_run: bool,
 
     /// Fail when selected files have no rule or are not UTF-8 text.
-    #[arg(long, action = ArgAction::Set, default_value_t = false)]
+    #[arg(long)]
     fail_if_unknown: bool,
 
-    /// Exit unsuccessfully when files needed changes.
-    #[arg(long, action = ArgAction::Set, default_value_t = true)]
-    fail_if_updated: bool,
+    /// Exit successfully after changing files.
+    #[arg(long)]
+    no_fail_if_updated: bool,
 }
 
 fn main() -> ExitCode {
@@ -149,7 +148,7 @@ fn edit(
     emit(&plan, output_format)?;
     let failed = report.count(Status::Conflict) > 0
         || (options.fail_if_unknown && report.count(Status::Unsupported) > 0)
-        || (options.fail_if_updated && report.changed() > 0);
+        || (!options.no_fail_if_updated && report.changed() > 0);
     Ok(policy_exit(failed))
 }
 
