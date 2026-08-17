@@ -2,7 +2,7 @@
 
 [![Crates.io][crates-badge]][crates-url]
 [![Documentation][docs-badge]][docs-url]
-[![MSRV 1.88][msrv-badge]](https://www.whatrustisit.com)
+[![MSRV 1.89][msrv-badge]](https://www.whatrustisit.com)
 [![Apache 2.0 licensed][license-badge]][license-url]
 [![Build Status][actions-badge]][actions-url]
 
@@ -10,7 +10,7 @@
 [crates-url]: https://crates.io/crates/hawkeye
 [docs-badge]: https://img.shields.io/docsrs/hawkeye
 [docs-url]: https://docs.rs/hawkeye
-[msrv-badge]: https://img.shields.io/badge/MSRV-1.88-green?logo=rust
+[msrv-badge]: https://img.shields.io/badge/MSRV-1.89-green?logo=rust
 [license-badge]: https://img.shields.io/crates/l/hawkeye
 [license-url]: https://www.apache.org/licenses/LICENSE-2.0
 [actions-badge]: https://github.com/korandoru/hawkeye/actions/workflows/ci.yml/badge.svg
@@ -185,7 +185,7 @@ Integration tests copy each corpus to a temporary directory, optionally create a
 
 ## Minimum Rust version policy
 
-The minimum supported Rust version is 1.88.0.
+The minimum supported Rust version is 1.89.0.
 
 The minimum supported Rust version may be increased in a minor release. Patch releases will preserve the minimum supported Rust version of their corresponding minor release.
 

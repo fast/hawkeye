@@ -22,7 +22,7 @@ homepage = "https://github.com/korandoru/hawkeye"
 license = "Apache-2.0"
 readme = "README.md"
 repository = "https://github.com/korandoru/hawkeye"
-rust-version = "1.88.0"
+rust-version = "1.89.0"
 
 [workspace.dependencies]
 # Workspace dependencies
@@ -35,7 +35,7 @@ ignore = { version = "0.4.33" }
 insta = { version = "1.48.0", features = ["json"] }
 jiff = { version = "0.2.35", default-features = false, features = ["std"] }
 log = { version = "0.4.28", features = ["kv_serde", "serde"] }
-logforth = { version = "0.29.1", features = ["starter-log"] }
+logforth = { version = "0.30.1", features = ["starter-log"] }
 minijinja = { version = "2.23.0" }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = { version = "1.0.151" }

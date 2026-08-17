@@ -29,7 +29,7 @@ use hawkeye::Mode;
 use hawkeye::Plan;
 use hawkeye::Report;
 use hawkeye::Status;
-use logforth::filter::env_filter::EnvFilterBuilder;
+use logforth::filter::rustlog::RustLogFilterBuilder;
 
 const DEFAULT_CONFIG_FILES: [&str; 2] = ["licenserc.toml", ".licenserc.toml"];
 
@@ -92,7 +92,7 @@ struct EditOptions {
 
 fn main() -> ExitCode {
     logforth::starter_log::stderr()
-        .filter(EnvFilterBuilder::from_default_env_or("info").build())
+        .filter(RustLogFilterBuilder::from_default_env_or("info").build())
         .apply();
 
     match run(Command::parse()) {
