@@ -74,8 +74,8 @@ pub struct FileAttrsResolver {
 }
 
 impl FileAttrsResolver {
-    pub fn new(
-        files: &[PathBuf],
+    pub fn new<'a>(
+        files: impl IntoIterator<Item = &'a Path>,
         mode: FeatureMode,
         repo: Option<&GitRepo>,
     ) -> Result<Self, Error> {
@@ -94,11 +94,11 @@ impl FileAttrsResolver {
         };
 
         let selected = files
-            .iter()
+            .into_iter()
             .filter_map(|path| {
                 path.strip_prefix(&repo.root)
                     .ok()
-                    .map(|relative| (git_path(relative), path.clone()))
+                    .map(|relative| (git_path(relative), path.to_path_buf()))
             })
             .collect::<BTreeMap<_, _>>();
         if selected.is_empty() {

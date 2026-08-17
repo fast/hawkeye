@@ -59,7 +59,7 @@ pub struct Engine {
 
 #[derive(Debug, Clone)]
 struct Rule {
-    extensions: BTreeSet<String>,
+    extension_suffixes: BTreeSet<String>,
     filenames: BTreeSet<String>,
     style_out: String,
     styles_in: Vec<String>,
@@ -184,18 +184,31 @@ impl Engine {
         let git = self.git;
         let repo = GitRepo::discover(&self.root, git.ignore.combine(git.file_attrs))?;
         let paths = self.discover(repo.as_ref())?;
-        let attrs = FileAttrsResolver::new(&paths, git.file_attrs, repo.as_ref())?;
-        let mut files = Vec::with_capacity(paths.len());
+        let discovered = paths
+            .into_iter()
+            .map(|path| {
+                let relative = path
+                    .strip_prefix(&self.root)
+                    .expect("discovery only returns paths inside files.root")
+                    .to_path_buf();
+                let rule = self.rule_for(&relative);
+                (path, relative, rule)
+            })
+            .collect::<Vec<_>>();
+        let attrs = FileAttrsResolver::new(
+            discovered
+                .iter()
+                .filter_map(|(path, _, rule)| rule.is_some().then_some(path.as_path())),
+            git.file_attrs,
+            repo.as_ref(),
+        )?;
+        let mut files = Vec::with_capacity(discovered.len());
 
-        for path in paths {
-            let relative = path
-                .strip_prefix(&self.root)
-                .expect("discovery only returns paths inside files.root")
-                .to_path_buf();
-            if self.rule_for(&relative).is_none() {
+        for (path, relative, rule) in discovered {
+            let Some(rule) = rule else {
                 files.push(PlannedFile::unsupported(path, relative));
                 continue;
-            }
+            };
 
             let original = fs::read(&path).map_err(|err| {
                 Error::new(
@@ -210,7 +223,7 @@ impl Engine {
             };
             let file_attrs = attrs.for_file(&path)?;
             let header = self.render_header(&file_attrs)?;
-            let analysis = self.analyze(&relative, input, &header, mode);
+            let analysis = self.analyze(rule, input, &header, mode);
             let updated = analysis
                 .edit
                 .as_ref()
@@ -349,9 +362,9 @@ impl Rule {
             }
         }
         Ok(Self {
-            extensions: extensions
+            extension_suffixes: extensions
                 .into_iter()
-                .map(|extension| extension.to_lowercase())
+                .map(|extension| format!(".{}", extension.to_lowercase()))
                 .collect(),
             filenames: filenames
                 .into_iter()
@@ -369,8 +382,8 @@ impl Rule {
         let filename = filename.to_string_lossy().to_lowercase();
         self.filenames.contains(&filename)
             || self
-                .extensions
+                .extension_suffixes
                 .iter()
-                .any(|extension| filename.ends_with(&format!(".{extension}")))
+                .any(|extension| filename.ends_with(extension))
     }
 }

@@ -12,10 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::path::Path;
-
 use super::Analysis;
 use super::Engine;
+use super::Rule;
 use crate::edit::Edit;
 use crate::report::Mode;
 use crate::report::Status;
@@ -24,14 +23,7 @@ use crate::style::next_line;
 use crate::style::skip_blank_lines;
 
 impl Engine {
-    pub(super) fn analyze(&self, path: &Path, input: &str, header: &str, mode: Mode) -> Analysis {
-        let Some(rule) = self.rule_for(path) else {
-            return Analysis {
-                status: Status::Unsupported,
-                edit: None,
-            };
-        };
-
+    pub(super) fn analyze(&self, rule: &Rule, input: &str, header: &str, mode: Mode) -> Analysis {
         let offset = preamble_offset(input);
         let eol = detect_eol(input);
         let rendered = {
