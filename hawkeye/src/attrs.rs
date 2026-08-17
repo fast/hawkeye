@@ -32,8 +32,8 @@ use crate::git::GitRepo;
 use crate::git::git_path;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub(crate) struct FileAttrs {
-    pub(crate) filename: String,
+pub struct FileAttrs {
+    pub filename: String,
     disk_file_created_year: Option<i16>,
     disk_file_modified_year: Option<i16>,
     git_file_created_year: Option<i16>,
@@ -68,13 +68,13 @@ impl GitAttrs {
     }
 }
 
-pub(crate) struct FileAttrsResolver {
+pub struct FileAttrsResolver {
     git_enabled: bool,
     git: BTreeMap<PathBuf, GitAttrs>,
 }
 
 impl FileAttrsResolver {
-    pub(crate) fn new(
+    pub fn new(
         files: &[PathBuf],
         mode: FeatureMode,
         repo: Option<&GitRepo>,
@@ -151,7 +151,7 @@ impl FileAttrsResolver {
         })
     }
 
-    pub(crate) fn for_file(&self, path: &Path) -> Result<FileAttrs, Error> {
+    pub fn for_file(&self, path: &Path) -> Result<FileAttrs, Error> {
         let metadata = fs::metadata(path).map_err(|err| {
             Error::new(
                 ErrorKind::Unexpected,

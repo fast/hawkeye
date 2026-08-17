@@ -15,7 +15,7 @@
 use std::collections::BTreeMap;
 use std::sync::LazyLock;
 
-pub(crate) static HEADERS: LazyLock<BTreeMap<&'static str, &'static str>> = LazyLock::new(|| {
+pub static HEADERS: LazyLock<BTreeMap<&'static str, &'static str>> = LazyLock::new(|| {
     BTreeMap::from([
         ("Apache-2.0", include_str!("Apache-2.0.txt")),
         ("Apache-2.0-ASF", include_str!("Apache-2.0-ASF.txt")),

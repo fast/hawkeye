@@ -31,12 +31,12 @@ use crate::Error;
 use crate::ErrorKind;
 use crate::config::FeatureMode;
 
-pub(crate) struct GitRepo {
-    pub(crate) root: PathBuf,
+pub struct GitRepo {
+    pub root: PathBuf,
 }
 
 impl GitRepo {
-    pub(crate) fn discover(root: &Path, mode: FeatureMode) -> Result<Option<Self>, Error> {
+    pub fn discover(root: &Path, mode: FeatureMode) -> Result<Option<Self>, Error> {
         if mode == FeatureMode::Disable {
             return Ok(None);
         }
@@ -106,7 +106,7 @@ impl GitRepo {
         Ok(Some(Self { root }))
     }
 
-    pub(crate) fn list_files(&self, scan_root: &Path) -> Result<Vec<PathBuf>, Error> {
+    pub fn list_files(&self, scan_root: &Path) -> Result<Vec<PathBuf>, Error> {
         let relative_root = scan_root.strip_prefix(&self.root).map_err(|_| {
             Error::new(
                 ErrorKind::Unexpected,
@@ -156,7 +156,7 @@ impl GitRepo {
         Ok(files)
     }
 
-    pub(crate) fn has_head(&self) -> Result<bool, Error> {
+    pub fn has_head(&self) -> Result<bool, Error> {
         let output = self.output_unchecked(["rev-parse", "--verify", "--quiet", "HEAD"])?;
         if output.status.success() {
             Ok(true)
@@ -168,7 +168,7 @@ impl GitRepo {
         }
     }
 
-    pub(crate) fn is_shallow(&self) -> Result<bool, Error> {
+    pub fn is_shallow(&self) -> Result<bool, Error> {
         let output = self.output(["rev-parse", "--is-shallow-repository"])?;
         match String::from_utf8_lossy(&output.stdout).trim() {
             "true" => Ok(true),
@@ -180,7 +180,7 @@ impl GitRepo {
         }
     }
 
-    pub(crate) fn optional_config(&self, key: &str) -> Result<Option<String>, Error> {
+    pub fn optional_config(&self, key: &str) -> Result<Option<String>, Error> {
         let output = self.output_unchecked(["config", "--get", key])?;
         if output.status.code() == Some(1) {
             return Ok(None);
@@ -196,7 +196,7 @@ impl GitRepo {
         Ok((!value.is_empty()).then_some(value))
     }
 
-    pub(crate) fn output<I, S>(&self, arguments: I) -> Result<Output, Error>
+    pub fn output<I, S>(&self, arguments: I) -> Result<Output, Error>
     where
         I: IntoIterator<Item = S>,
         S: AsRef<OsStr>,
@@ -233,7 +233,7 @@ impl GitRepo {
         Ok(output)
     }
 
-    pub(crate) fn read_stdout<I, S, Value>(
+    pub fn read_stdout<I, S, Value>(
         &self,
         arguments: I,
         input: Option<&[u8]>,
@@ -327,14 +327,14 @@ fn git_command(root: &Path) -> Command {
 }
 
 #[cfg(unix)]
-pub(crate) fn git_path(path: &Path) -> Vec<u8> {
+pub fn git_path(path: &Path) -> Vec<u8> {
     use std::os::unix::ffi::OsStrExt;
 
     path.as_os_str().as_bytes().to_vec()
 }
 
 #[cfg(not(unix))]
-pub(crate) fn git_path(path: &Path) -> Vec<u8> {
+pub fn git_path(path: &Path) -> Vec<u8> {
     path.to_string_lossy().replace('\\', "/").into_bytes()
 }
 

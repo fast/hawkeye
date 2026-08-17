@@ -21,7 +21,7 @@ use tempfile::NamedTempFile;
 use crate::Error;
 use crate::ErrorKind;
 
-pub(crate) fn validate_source(path: &Path, expected: &[u8]) -> Result<(), Error> {
+pub fn validate_source(path: &Path, expected: &[u8]) -> Result<(), Error> {
     let metadata = fs::symlink_metadata(path).map_err(|err| {
         Error::new(
             ErrorKind::Unexpected,
@@ -62,7 +62,7 @@ pub(crate) fn validate_source(path: &Path, expected: &[u8]) -> Result<(), Error>
     Ok(())
 }
 
-pub(crate) fn write_atomic(path: &Path, expected: &[u8], updated: &[u8]) -> Result<(), Error> {
+pub fn write_atomic(path: &Path, expected: &[u8], updated: &[u8]) -> Result<(), Error> {
     validate_source(path, expected)?;
     let metadata = fs::symlink_metadata(path).map_err(|err| {
         Error::new(

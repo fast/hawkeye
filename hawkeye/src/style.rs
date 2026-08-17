@@ -18,7 +18,7 @@ use std::ops::Range;
 use crate::config::StyleConfig;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum Style {
+pub enum Style {
     Line {
         prefix: String,
         suffix: String,
@@ -33,13 +33,13 @@ pub(crate) enum Style {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct Candidate {
-    pub(crate) range: Range<usize>,
-    pub(crate) body: String,
+pub struct Candidate {
+    pub range: Range<usize>,
+    pub body: String,
 }
 
 impl Style {
-    pub(crate) fn new(config: StyleConfig) -> Self {
+    pub fn new(config: StyleConfig) -> Self {
         match config {
             StyleConfig::Line {
                 prefix,
@@ -64,7 +64,7 @@ impl Style {
         }
     }
 
-    pub(crate) fn render(&self, body: &str, eol: &str) -> String {
+    pub fn render(&self, body: &str, eol: &str) -> String {
         let lines = body.split('\n').collect::<Vec<_>>();
         let mut output = String::new();
         match self {
@@ -118,7 +118,7 @@ impl Style {
         output
     }
 
-    pub(crate) fn extract(&self, input: &str, offset: usize) -> Option<Candidate> {
+    pub fn extract(&self, input: &str, offset: usize) -> Option<Candidate> {
         let start = skip_blank_lines(input, offset);
         let (range, body) = match self {
             Self::Line {
@@ -140,7 +140,7 @@ impl Style {
     }
 }
 
-pub(crate) fn builtin_styles() -> BTreeMap<String, Style> {
+pub fn builtin_styles() -> BTreeMap<String, Style> {
     let configs = [
         ("slash_line", line("// ", "", false)),
         ("triple_slash_line", line("/// ", "", false)),
@@ -276,7 +276,7 @@ fn unwrap_line(line: &str, prefix: &str, suffix: &str, pad_lines: bool) -> Optio
     })
 }
 
-pub(crate) fn skip_blank_lines(input: &str, mut position: usize) -> usize {
+pub fn skip_blank_lines(input: &str, mut position: usize) -> usize {
     while let Some(line) = next_line(input, position) {
         if !line.content.trim().is_empty() {
             break;
@@ -295,12 +295,12 @@ fn truncate_trailing_spaces(output: &mut String) {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub(crate) struct Line<'input> {
-    pub(crate) content: &'input str,
-    pub(crate) end: usize,
+pub struct Line<'input> {
+    pub content: &'input str,
+    pub end: usize,
 }
 
-pub(crate) fn next_line(input: &str, position: usize) -> Option<Line<'_>> {
+pub fn next_line(input: &str, position: usize) -> Option<Line<'_>> {
     let tail = input.get(position..)?;
     let line = tail.split_inclusive('\n').next()?;
     let content = if let Some(content) = line.strip_suffix('\n') {

@@ -18,17 +18,17 @@ use crate::Error;
 use crate::ErrorKind;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct Edit {
+pub struct Edit {
     range: Range<usize>,
     replacement: String,
 }
 
 impl Edit {
-    pub(crate) fn new(range: Range<usize>, replacement: String) -> Self {
+    pub fn new(range: Range<usize>, replacement: String) -> Self {
         Self { range, replacement }
     }
 
-    pub(crate) fn apply(&self, input: &str) -> Result<String, Error> {
+    pub fn apply(&self, input: &str) -> Result<String, Error> {
         if self.range.start > self.range.end
             || self.range.end > input.len()
             || !input.is_char_boundary(self.range.start)

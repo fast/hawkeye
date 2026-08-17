@@ -23,12 +23,12 @@ use crate::Error;
 use crate::ErrorKind;
 use crate::attrs::FileAttrs;
 
-pub(crate) struct HeaderTemplate {
+pub struct HeaderTemplate {
     environment: Environment<'static>,
 }
 
 impl HeaderTemplate {
-    pub(crate) fn new<S: Into<Cow<'static, str>>>(source: S) -> Result<Self, Error> {
+    pub fn new<S: Into<Cow<'static, str>>>(source: S) -> Result<Self, Error> {
         let mut environment = Environment::new();
         environment.set_undefined_behavior(UndefinedBehavior::Strict);
         environment.set_auto_escape_callback(|_| AutoEscape::None);
@@ -41,7 +41,7 @@ impl HeaderTemplate {
         Ok(Self { environment })
     }
 
-    pub(crate) fn render(
+    pub fn render(
         &self,
         props: &BTreeMap<String, toml::Value>,
         attrs: &FileAttrs,
