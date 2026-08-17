@@ -25,6 +25,7 @@ use crate::Error;
 use crate::ErrorKind;
 use crate::attrs::FileAttrs;
 use crate::attrs::FileAttrsResolver;
+use crate::builtin;
 use crate::config::Config;
 use crate::config::GitConfig;
 use crate::edit::Edit;
@@ -112,12 +113,15 @@ impl Engine {
             })?;
             (HeaderTemplate::new(content)?, Some(path))
         } else if let Some(key) = header.builtin {
-            let content = builtin_header(&key).ok_or_else(|| {
+            let content = builtin::HEADERS.get(key.as_str()).copied().ok_or_else(|| {
+                let available = builtin::HEADERS
+                    .keys()
+                    .copied()
+                    .collect::<Vec<_>>()
+                    .join(", ");
                 Error::new(
                     ErrorKind::ConfigInvalid,
-                    format!(
-                        "unknown header.builtin {key:?}; available values are Apache-2.0, Apache-2.0-ASF, and Elastic-2.0"
-                    ),
+                    format!("unknown header.builtin {key:?}; available values are {available}"),
                 )
             })?;
             (HeaderTemplate::new(content)?, None)
@@ -324,15 +328,6 @@ impl Rule {
                 .extensions
                 .iter()
                 .any(|extension| filename.ends_with(&format!(".{extension}")))
-    }
-}
-
-fn builtin_header(key: &str) -> Option<&'static str> {
-    match key {
-        "Apache-2.0" => Some(include_str!("../builtin/Apache-2.0.txt")),
-        "Apache-2.0-ASF" => Some(include_str!("../builtin/Apache-2.0-ASF.txt")),
-        "Elastic-2.0" => Some(include_str!("../builtin/Elastic-2.0.txt")),
-        _ => None,
     }
 }
 

@@ -18,6 +18,7 @@
 #![deny(missing_docs)]
 
 mod attrs;
+mod builtin;
 mod config;
 mod edit;
 mod engine;
