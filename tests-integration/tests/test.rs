@@ -468,8 +468,8 @@ includes = ["**/*.rs"]
 #[test]
 fn additional_comment_text_is_not_consumed_as_header_text() {
     let sources = [
-        "// Copyright 2026 Acme\n// SAFETY: this comment belongs to the code.\nfn main() {}\n",
-        "/*\n * Copyright 2026 Acme\n * SAFETY: this comment belongs to the code.\n */\nfn main() {}\n",
+        "// Copyright 2025 Acme\n// SAFETY: this comment belongs to the code.\nfn main() {}\n",
+        "/*\n * Copyright 2025 Acme\n * SAFETY: this comment belongs to the code.\n */\nfn main() {}\n",
     ];
     for (source, command) in sources
         .into_iter()
@@ -479,7 +479,10 @@ fn additional_comment_text_is_not_consumed_as_header_text() {
         fs::write(
             project.path().join("licenserc.toml"),
             r#"[header]
-text = "Copyright 2026 Acme"
+text = """
+Copyright 2026 Acme
+Licensed under Example
+"""
 
 [files]
 includes = ["**/*.rs"]

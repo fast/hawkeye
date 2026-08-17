@@ -64,7 +64,7 @@ impl Engine {
         if let Some((style_name, candidate)) = candidate {
             let candidate_lines = candidate.body.lines().count();
             let header_lines = header.lines().count();
-            if candidate_lines > header_lines
+            if !safe_to_replace(&candidate.body, header, &self.keywords)
                 || (candidate_lines < header_lines
                     && self
                         .styles
@@ -133,6 +133,24 @@ fn unique_candidate(candidates: Vec<(&str, Candidate)>) -> Result<Option<(&str, 
 fn has_keywords(body: &str, keywords: &[String]) -> bool {
     let folded = body.to_lowercase();
     keywords.iter().all(|keyword| folded.contains(keyword))
+}
+
+fn safe_to_replace(candidate: &str, header: &str, keywords: &[String]) -> bool {
+    let candidate_lines = candidate.lines().collect::<Vec<_>>();
+    let header_lines = header.lines().collect::<Vec<_>>();
+    candidate_lines.len() <= header_lines.len()
+        && candidate_lines
+            .iter()
+            .zip(header_lines)
+            .all(|(candidate, header)| {
+                if candidate == &header {
+                    return true;
+                }
+                let folded = candidate.to_lowercase();
+                keywords
+                    .iter()
+                    .any(|keyword| folded.contains(keyword.as_str()))
+            })
 }
 
 fn detect_eol(input: &str) -> &'static str {
