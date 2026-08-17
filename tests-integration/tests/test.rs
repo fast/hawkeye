@@ -374,7 +374,10 @@ useDefaultRules = true
     .expect("write invalid config");
     let invalid = hawkeye(&child, ["--config", "bad.toml", "check"]);
     assert_exit(&invalid, 2);
-    assert!(stderr(&invalid).contains("useDefaultRules"));
+    let invalid_stderr = stderr(&invalid);
+    assert!(invalid_stderr.contains("cannot parse configuration file bad.toml"));
+    assert!(invalid_stderr.contains("useDefaultRules"));
+    assert!(!invalid_stderr.contains("cannot parse licenserc.toml"));
 }
 
 #[test]

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! The strict `licenserc.toml` model.
+//! The strict HawkEye configuration model.
 //!
 //! [`Config`] contains every value represented directly by TOML. [`Config::load`]
 //! also anchors relative paths to the directory containing the loaded file.
@@ -28,7 +28,7 @@ use serde::Deserialize;
 use crate::Error;
 use crate::ErrorKind;
 
-/// A `licenserc.toml` configuration model.
+/// A HawkEye configuration.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
@@ -52,30 +52,34 @@ pub struct Config {
 }
 
 impl Config {
-    /// Reads and parses one `licenserc.toml`, anchoring its relative paths to the file.
+    /// Reads a configuration file and anchors its relative paths to that file.
     pub fn load<P: AsRef<Path>>(path: P) -> Result<Self, Error> {
         let path = path.as_ref();
         let source = fs::read_to_string(path).map_err(|err| {
             Error::new(
                 ErrorKind::Unexpected,
-                format!("cannot read config from {}", path.display()),
+                format!("cannot read configuration file {}", path.display()),
             )
             .with_source(err)
         })?;
         let mut config = toml::from_str::<Self>(&source).map_err(|source| {
-            Error::new(ErrorKind::ConfigInvalid, "cannot parse licenserc.toml").with_source(source)
+            Error::new(
+                ErrorKind::ConfigInvalid,
+                format!("cannot parse configuration file {}", path.display()),
+            )
+            .with_source(source)
         })?;
         let path = path.canonicalize().map_err(|err| {
             Error::new(
                 ErrorKind::Unexpected,
-                format!("cannot resolve {}", path.display()),
+                format!("cannot resolve configuration file {}", path.display()),
             )
             .with_source(err)
         })?;
         let directory = path.parent().ok_or_else(|| {
             Error::new(
                 ErrorKind::ConfigInvalid,
-                "configuration path has no parent directory",
+                "configuration file has no parent directory",
             )
         })?;
 
@@ -115,7 +119,7 @@ impl Config {
 pub struct HeaderConfig {
     /// A built-in header resource key.
     pub builtin: Option<String>,
-    /// A template path relative to `licenserc.toml`.
+    /// A template path anchored by [`Config::load`] when relative.
     pub path: Option<PathBuf>,
     /// An inline header template.
     pub text: Option<String>,
@@ -128,7 +132,7 @@ pub struct HeaderConfig {
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct FilesConfig {
-    /// The root scanned by HawkEye, relative to `licenserc.toml`.
+    /// The root scanned by HawkEye, anchored by [`Config::load`] when relative.
     pub root: PathBuf,
     /// Git-ignore-style inclusion patterns; an empty list selects all files.
     pub includes: Vec<String>,

@@ -99,7 +99,7 @@ styles_in = ["slash_block"]
 
 `header.builtin` is an opaque, case-sensitive resource key. v7 currently ships `Apache-2.0`, `Apache-2.0-ASF`, and `Elastic-2.0`; SPDX-like spelling is preserved instead of normalized to a Rust identifier.
 
-`header.path` loads a UTF-8 MiniJinja template. Relative paths use the directory containing `licenserc.toml`; absolute paths are accepted. The resolved template file is never selected as a source target, even when it is inside `files.root` and matches a rule. `header.text` stores the same template inline.
+`header.path` loads a UTF-8 MiniJinja template. Relative paths use the directory containing the configuration file; absolute paths are accepted. The resolved template file is never selected as a source target, even when it is inside `files.root` and matches a rule. `header.text` stores the same template inline.
 
 `header.keywords` defaults to `["copyright"]`. Every keyword must occur case-insensitively in a structurally parsed header before HawkEye may replace or remove it. This small semantic gate prevents an ordinary leading comment that happens to use the same comment syntax from becoming a deletion range.
 
@@ -122,7 +122,7 @@ Unavailable values remain `null`; they are never silently replaced with the curr
 
 ### File discovery
 
-`files.root` defaults to the directory containing `licenserc.toml`. Relative roots use that directory; absolute roots are accepted.
+`files.root` defaults to the directory containing the configuration file. Relative roots use that directory; absolute roots are accepted.
 
 `files.includes` and `files.excludes` are Git-ignore-style path filters relative to `files.root`, with `/` as the logical separator. An empty `includes` list means all files, after which excludes and rule selection still apply. `.git` is always excluded. HawkEye does not maintain another built-in list of generated or dependency directories.
 
