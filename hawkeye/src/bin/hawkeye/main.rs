@@ -93,13 +93,10 @@ fn main() -> ExitCode {
         .filter(RustLogFilterBuilder::from_default_env_or("info").build())
         .apply();
 
-    match run(Command::parse()) {
-        Ok(code) => code,
-        Err(error) => {
-            log::error!("{error:?}");
-            ExitCode::from(2)
-        }
-    }
+    run(Command::parse()).unwrap_or_else(|error| {
+        log::error!("{error:?}");
+        ExitCode::from(2)
+    })
 }
 
 fn run(command: Command) -> CliResult<ExitCode> {
