@@ -1,0 +1,187 @@
+# Copyright 2026 FastLabs Developers
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+[[rules]]
+extensions = [
+  "as",
+  "aj",
+  "c",
+  "cc",
+  "cpp",
+  "cs",
+  "css",
+  "go",
+  "gradle",
+  "groovy",
+  "h",
+  "hh",
+  "hpp",
+  "java",
+  "fx",
+  "js",
+  "cjs",
+  "jsx",
+  "kt",
+  "kts",
+  "proto",
+  "scala",
+  "scss",
+  "ts",
+  "tsx",
+  "v",
+  "sv",
+]
+style_out = "slash_block"
+styles_in = ["slash_line"]
+
+[[rules]]
+extensions = ["mbt", "rs", "zig"]
+filenames = ["go.mod"]
+style_out = "slash_line"
+styles_in = ["slash_block"]
+
+[[rules]]
+extensions = [
+  "pl",
+  "pm",
+  "properties",
+  "py",
+  "pyi",
+  "rb",
+  "sh",
+  "toml",
+  "yaml",
+  "yml",
+]
+filenames = [
+  ".editorconfig",
+  "CMakeLists.txt",
+  "Containerfile",
+  "Dockerfile",
+  "Makefile",
+]
+style_out = "hash_line"
+
+[[rules]]
+extensions = ["adb", "ads", "e", "sql"]
+style_out = "dash_line"
+
+[[rules]]
+extensions = [
+  "fml",
+  "dtd",
+  "gsp",
+  "htm",
+  "html",
+  "jspx",
+  "kml",
+  "mxml",
+  "pom",
+  "svelte",
+  "tagx",
+  "tld",
+  "vue",
+  "wsdl",
+  "xhtml",
+  "xml",
+  "xsd",
+  "xsl",
+  "xslt",
+]
+style_out = "xml_block"
+styles_in = ["xml_line"]
+
+[[rules]]
+extensions = ["asm", "clj", "cljs", "el"]
+style_out = "semicolon_line"
+
+[[rules]]
+extensions = ["f"]
+style_out = "bang_line"
+
+[[rules]]
+extensions = ["erl", "hrl"]
+style_out = "percent3_line"
+
+[[rules]]
+extensions = ["cls", "sty", "tex"]
+style_out = "percent_line"
+
+[[rules]]
+extensions = ["bas", "vba"]
+style_out = "apostrophe_line"
+
+[[rules]]
+extensions = ["bat", "cmd"]
+style_out = "rem_line"
+
+[[rules]]
+extensions = ["pas"]
+style_out = "brace_star_block"
+
+[[rules]]
+extensions = ["vm"]
+style_out = "hash_star_block"
+
+[[rules]]
+extensions = ["mustache"]
+style_out = "mustache_block"
+
+[[rules]]
+extensions = ["mv"]
+style_out = "mvel_block"
+
+[[rules]]
+extensions = ["ftl"]
+style_out = "freemarker_block"
+styles_in = ["freemarker_alt_block"]
+
+[[rules]]
+extensions = ["jsp"]
+style_out = "jsp_block"
+
+[[rules]]
+extensions = ["cfc", "cfm"]
+style_out = "coldfusion_block"
+
+[[rules]]
+extensions = ["asp"]
+style_out = "asp_block"
+
+[[rules]]
+extensions = ["php"]
+style_out = "slash_block"
+styles_in = ["slash_line"]
+
+[[rules]]
+extensions = ["lua"]
+style_out = "lua_block"
+
+[[rules]]
+extensions = ["adoc"]
+style_out = "asciidoc_block"
+
+[[rules]]
+extensions = ["pkl"]
+filenames = ["PklProject"]
+style_out = "swift_banner"
+styles_in = ["slash_line"]
+
+[[rules]]
+extensions = ["haml", "scaml"]
+style_out = "haml_line"
+
+[[rules]]
+extensions = ["apt"]
+style_out = "tilde2_line"

@@ -28,6 +28,7 @@ use crate::attrs::FileAttrsResolver;
 use crate::builtin;
 use crate::config::Config;
 use crate::config::GitConfig;
+use crate::config::RuleConfig;
 use crate::edit::Edit;
 use crate::git::GitRepo;
 use crate::report::FileOutcome;
@@ -132,29 +133,29 @@ impl Engine {
             ));
         };
 
-        let mut styles = builtin_styles();
-        for (name, style) in configured_styles {
-            if styles.contains_key(&name) {
-                log::warn!("custom style {name:?} overrides a built-in style of the same name");
+        let styles = {
+            let mut styles = builtin_styles();
+            for (name, style) in configured_styles {
+                if styles.contains_key(&name) {
+                    log::warn!("custom style {name:?} overrides a built-in style of the same name");
+                }
+                styles.insert(name, Style::new(style));
             }
-            styles.insert(name, Style::new(style));
-        }
+            styles
+        };
 
-        let mut rules = configured_rules
-            .iter()
+        let configured_rules = configured_rules
+            .into_iter()
             .enumerate()
-            .map(|(index, rule)| {
-                resolve_rule(
-                    &format!("rules[{index}]"),
-                    &rule.extensions,
-                    &rule.filenames,
-                    &rule.style_out,
-                    &rule.styles_in,
-                    &styles,
-                )
-            })
+            .map(|(index, rule)| Rule::new(format!("rules[{index}]"), rule, &styles));
+        let builtin_rules = builtin::RULES
+            .iter()
+            .cloned()
+            .enumerate()
+            .map(|(index, rule)| Rule::new(format!("builtin.rules[{index}]"), rule, &styles));
+        let rules = configured_rules
+            .chain(builtin_rules)
             .collect::<Result<Vec<_>, Error>>()?;
-        rules.extend(default_rules(&styles)?);
 
         Ok(Self {
             root,
@@ -318,6 +319,45 @@ impl PlannedFile {
 }
 
 impl Rule {
+    fn new(
+        source: impl AsRef<str>,
+        config: RuleConfig,
+        styles: &BTreeMap<String, Style>,
+    ) -> Result<Self, Error> {
+        let RuleConfig {
+            extensions,
+            filenames,
+            style_out,
+            styles_in,
+        } = config;
+        let mut accepted = Vec::with_capacity(styles_in.len() + 1);
+        let mut seen = BTreeSet::new();
+        for name in std::iter::once(style_out.as_str()).chain(styles_in.iter().map(String::as_str))
+        {
+            if !styles.contains_key(name) {
+                return Err(Error::new(
+                    ErrorKind::ConfigInvalid,
+                    format!("{} references unknown style {name:?}", source.as_ref()),
+                ));
+            }
+            if seen.insert(name) {
+                accepted.push(name.to_owned());
+            }
+        }
+        Ok(Self {
+            extensions: extensions
+                .into_iter()
+                .map(|extension| extension.to_lowercase())
+                .collect(),
+            filenames: filenames
+                .into_iter()
+                .map(|filename| filename.to_lowercase())
+                .collect(),
+            style_out,
+            styles_in: accepted,
+        })
+    }
+
     fn matches(&self, path: &Path) -> bool {
         let Some(filename) = path.file_name() else {
             return false;
@@ -329,148 +369,4 @@ impl Rule {
                 .iter()
                 .any(|extension| filename.ends_with(&format!(".{extension}")))
     }
-}
-
-fn resolve_rule(
-    location: &str,
-    extensions: &[String],
-    filenames: &[String],
-    style_out: &str,
-    styles_in: &[String],
-    styles: &BTreeMap<String, Style>,
-) -> Result<Rule, Error> {
-    validate_style(location, style_out, styles)?;
-    let mut accepted = Vec::with_capacity(styles_in.len() + 1);
-    let mut seen = BTreeSet::new();
-    for name in std::iter::once(style_out).chain(styles_in.iter().map(String::as_str)) {
-        validate_style(location, name, styles)?;
-        if seen.insert(name.to_owned()) {
-            accepted.push(name.to_owned());
-        }
-    }
-    Ok(Rule {
-        extensions: extensions
-            .iter()
-            .map(|extension| extension.to_lowercase())
-            .collect(),
-        filenames: filenames
-            .iter()
-            .map(|filename| filename.to_lowercase())
-            .collect(),
-        style_out: style_out.to_owned(),
-        styles_in: accepted,
-    })
-}
-
-fn validate_style(
-    location: &str,
-    name: &str,
-    styles: &BTreeMap<String, Style>,
-) -> Result<(), Error> {
-    if styles.contains_key(name) {
-        Ok(())
-    } else {
-        Err(Error::new(
-            ErrorKind::ConfigInvalid,
-            format!("{location} references unknown style {name:?}"),
-        ))
-    }
-}
-
-fn default_rules(styles: &BTreeMap<String, Style>) -> Result<Vec<Rule>, Error> {
-    let definitions: &[(&[&str], &[&str], &str, &[&str])] = &[
-        (
-            &[
-                "as", "aj", "c", "cc", "cpp", "cs", "css", "go", "gradle", "groovy", "h", "hh",
-                "hpp", "java", "fx", "js", "cjs", "jsx", "kt", "kts", "proto", "scala", "scss",
-                "ts", "tsx", "v", "sv",
-            ],
-            &[],
-            "slash_block",
-            &["slash_line"],
-        ),
-        (
-            &["mbt", "rs", "zig"],
-            &["go.mod"],
-            "slash_line",
-            &["slash_block"],
-        ),
-        (
-            &[
-                "pl",
-                "pm",
-                "properties",
-                "py",
-                "pyi",
-                "rb",
-                "sh",
-                "toml",
-                "yaml",
-                "yml",
-            ],
-            &[
-                ".editorconfig",
-                "CMakeLists.txt",
-                "Containerfile",
-                "Dockerfile",
-                "Makefile",
-            ],
-            "hash_line",
-            &[],
-        ),
-        (&["adb", "ads", "e", "sql"], &[], "dash_line", &[]),
-        (
-            &[
-                "fml", "dtd", "gsp", "htm", "html", "jspx", "kml", "mxml", "pom", "svelte", "tagx",
-                "tld", "vue", "wsdl", "xhtml", "xml", "xsd", "xsl", "xslt",
-            ],
-            &[],
-            "xml_block",
-            &["xml_line"],
-        ),
-        (&["asm", "clj", "cljs", "el"], &[], "semicolon_line", &[]),
-        (&["f"], &[], "bang_line", &[]),
-        (&["erl", "hrl"], &[], "percent3_line", &[]),
-        (&["cls", "sty", "tex"], &[], "percent_line", &[]),
-        (&["bas", "vba"], &[], "apostrophe_line", &[]),
-        (&["bat", "cmd"], &[], "rem_line", &[]),
-        (&["pas"], &[], "brace_star_block", &[]),
-        (&["vm"], &[], "hash_star_block", &[]),
-        (&["mustache"], &[], "mustache_block", &[]),
-        (&["mv"], &[], "mvel_block", &[]),
-        (&["ftl"], &[], "freemarker_block", &["freemarker_alt_block"]),
-        (&["jsp"], &[], "jsp_block", &[]),
-        (&["cfc", "cfm"], &[], "coldfusion_block", &[]),
-        (&["asp"], &[], "asp_block", &[]),
-        (&["php"], &[], "slash_block", &["slash_line"]),
-        (&["lua"], &[], "lua_block", &[]),
-        (&["adoc"], &[], "asciidoc_block", &[]),
-        (&["pkl"], &["PklProject"], "swift_banner", &["slash_line"]),
-        (&["haml", "scaml"], &[], "haml_line", &[]),
-        (&["apt"], &[], "tilde2_line", &[]),
-    ];
-
-    definitions
-        .iter()
-        .enumerate()
-        .map(|(index, (extensions, filenames, style_out, styles_in))| {
-            resolve_rule(
-                &format!("built-in rule {index}"),
-                &extensions
-                    .iter()
-                    .map(|value| (*value).to_owned())
-                    .collect::<Vec<_>>(),
-                &filenames
-                    .iter()
-                    .map(|value| (*value).to_owned())
-                    .collect::<Vec<_>>(),
-                style_out,
-                &styles_in
-                    .iter()
-                    .map(|value| (*value).to_owned())
-                    .collect::<Vec<_>>(),
-                styles,
-            )
-        })
-        .collect()
 }

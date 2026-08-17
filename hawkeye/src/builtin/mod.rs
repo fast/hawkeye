@@ -15,10 +15,25 @@
 use std::collections::BTreeMap;
 use std::sync::LazyLock;
 
+use serde::Deserialize;
+
+use crate::config::RuleConfig;
+
 pub static HEADERS: LazyLock<BTreeMap<&'static str, &'static str>> = LazyLock::new(|| {
     BTreeMap::from([
-        ("Apache-2.0", include_str!("Apache-2.0.txt")),
-        ("Apache-2.0-ASF", include_str!("Apache-2.0-ASF.txt")),
-        ("Elastic-2.0", include_str!("Elastic-2.0.txt")),
+        ("Apache-2.0", include_str!("headers/Apache-2.0.txt")),
+        ("Apache-2.0-ASF", include_str!("headers/Apache-2.0-ASF.txt")),
+        ("Elastic-2.0", include_str!("headers/Elastic-2.0.txt")),
     ])
+});
+
+pub static RULES: LazyLock<Vec<RuleConfig>> = LazyLock::new(|| {
+    #[derive(Deserialize)]
+    struct Rules {
+        rules: Vec<RuleConfig>,
+    }
+
+    let default_rules = include_str!("rules.toml");
+    let rules = toml::from_str::<Rules>(default_rules).unwrap();
+    rules.rules
 });
