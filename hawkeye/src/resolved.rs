@@ -72,16 +72,16 @@ impl Config {
         let config_path = config_path
             .canonicalize()
             .map_err(|source| Error::io("resolve", &config_path, source))?;
-        let config_dir = config_path.parent().ok_or_else(|| {
-            Error::InvalidConfig("configuration path has no parent directory".to_owned())
-        })?;
+        let config_dir = config_path
+            .parent()
+            .ok_or_else(|| Error::config("configuration path has no parent directory"))?;
 
         let root = resolve_path(config_dir, &files.root);
         let root = root
             .canonicalize()
             .map_err(|source| Error::io("resolve file root", &root, source))?;
         if !root.is_dir() {
-            return Err(Error::InvalidConfig(format!(
+            return Err(Error::config(format!(
                 "files.root is not a directory: {}",
                 root.display()
             )));
@@ -90,7 +90,7 @@ impl Config {
         let (source, header_path) = if let Some(key) = header.builtin.as_deref() {
             (
                 builtin_header(key).ok_or_else(|| {
-                    Error::InvalidConfig(format!(
+                    Error::config(format!(
                         "unknown header.builtin {key:?}; available values are Apache-2.0, Apache-2.0-ASF, and Elastic-2.0"
                     ))
                 })?
@@ -213,7 +213,7 @@ impl ResolvedConfig {
             .iter()
             .find(|keyword| !folded.contains(keyword.as_str()))
         {
-            return Err(Error::InvalidConfig(format!(
+            return Err(Error::config(format!(
                 "header template output for {:?} does not contain recognition keyword {keyword:?}",
                 attrs.filename
             )));
@@ -300,7 +300,7 @@ fn validate_style(location: &str, name: &str, styles: &BTreeMap<String, Style>) 
     if styles.contains_key(name) {
         Ok(())
     } else {
-        Err(Error::InvalidConfig(format!(
+        Err(Error::config(format!(
             "{location} references unknown style {name:?}"
         )))
     }

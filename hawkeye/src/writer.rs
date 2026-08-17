@@ -20,24 +20,34 @@ use tempfile::NamedTempFile;
 
 use crate::Error;
 use crate::Result;
+use crate::error::ErrorKind;
 
 pub(crate) fn validate_source(path: &Path, expected: &[u8]) -> Result<()> {
     let metadata = fs::symlink_metadata(path)
         .map_err(|source| Error::io("read metadata for", path, source))?;
     if metadata.file_type().is_symlink() {
-        return Err(Error::Symlink(path.to_path_buf()));
+        return Err(Error::new(
+            ErrorKind::Unsupported,
+            format!("refusing to replace symbolic link {}", path.display()),
+        ));
     }
     #[cfg(unix)]
     {
         use std::os::unix::fs::MetadataExt;
         if metadata.nlink() > 1 {
-            return Err(Error::HardLink(path.to_path_buf()));
+            return Err(Error::new(
+                ErrorKind::Unsupported,
+                format!("refusing to replace hard-linked file {}", path.display()),
+            ));
         }
     }
 
     let current = fs::read(path).map_err(|source| Error::io("reread", path, source))?;
     if current != expected {
-        return Err(Error::StaleFile(path.to_path_buf()));
+        return Err(Error::new(
+            ErrorKind::StalePlan,
+            format!("{} changed after it was analyzed", path.display()),
+        ));
     }
     Ok(())
 }
@@ -48,7 +58,10 @@ pub(crate) fn write_atomic(path: &Path, expected: &[u8], updated: &[u8]) -> Resu
         .map_err(|source| Error::io("read metadata for", path, source))?;
 
     let parent = path.parent().ok_or_else(|| {
-        Error::InvalidConfig(format!("source path has no parent: {}", path.display()))
+        Error::new(
+            ErrorKind::Unexpected,
+            format!("source path has no parent: {}", path.display()),
+        )
     })?;
     let mut temporary = NamedTempFile::new_in(parent)
         .map_err(|source| Error::io("create temporary file for", path, source))?;

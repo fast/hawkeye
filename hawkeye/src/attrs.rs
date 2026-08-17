@@ -123,10 +123,10 @@ impl FileAttrsResolver {
                     git: BTreeMap::new(),
                 });
             }
-            return Err(Error::Git(message.to_owned()));
+            return Err(Error::git(message.to_owned()));
         }
         let current_year = utc_year(SystemTime::now())
-            .ok_or_else(|| Error::Git("the current UTC year is out of range".to_owned()))?;
+            .ok_or_else(|| Error::git("the current UTC year is out of range".to_owned()))?;
         let started = Instant::now();
 
         let author = current_git_author(repo)?;
@@ -239,7 +239,7 @@ fn parse_history(
         record.clear();
         let read = reader
             .read_until(0, &mut record)
-            .map_err(|error| Error::Git(format!("cannot read Git history: {error}")))?;
+            .map_err(|error| Error::git(format!("cannot read Git history: {error}")))?;
         if read == 0 {
             break;
         }

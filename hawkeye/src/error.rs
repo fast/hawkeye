@@ -13,140 +13,145 @@
 // limitations under the License.
 
 use std::fmt;
-use std::ops::Range;
-use std::path::PathBuf;
+use std::path::Path;
 
-use crate::config::ConfigError;
+/// A stable, actionable category of failures returned by HawkEye.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum ErrorKind {
+    /// The configuration or header template must be corrected.
+    ConfigInvalid,
+    /// A filesystem operation failed.
+    Io,
+    /// A required Git operation or repository capability is unavailable.
+    GitUnavailable,
+    /// HawkEye deliberately refuses an operation that it cannot perform safely.
+    Unsupported,
+    /// A file changed after the operation was planned; callers may create a new plan and retry.
+    StalePlan,
+    /// An internal invariant failed and the operation cannot be recovered by the caller.
+    Unexpected,
+}
+
+impl fmt::Display for ErrorKind {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self {
+            Self::ConfigInvalid => "ConfigInvalid",
+            Self::Io => "Io",
+            Self::GitUnavailable => "GitUnavailable",
+            Self::Unsupported => "Unsupported",
+            Self::StalePlan => "StalePlan",
+            Self::Unexpected => "Unexpected",
+        })
+    }
+}
 
 /// An error returned by HawkEye's library API.
-#[derive(Debug)]
-pub enum Error {
-    /// The configuration could not be parsed or locally validated.
-    Config(ConfigError),
+pub struct Error {
+    kind: ErrorKind,
+    message: String,
+    source: Option<Box<dyn std::error::Error + Send + Sync>>,
+}
 
-    /// A configuration value could only be rejected while resolving resources.
-    InvalidConfig(String),
+impl Error {
+    /// Returns the stable category that callers can act on.
+    pub fn kind(&self) -> ErrorKind {
+        self.kind
+    }
 
-    /// A template could not be compiled or rendered.
-    Template(minijinja::Error),
+    pub(crate) fn new(kind: ErrorKind, message: impl Into<String>) -> Self {
+        Self {
+            kind,
+            message: message.into(),
+            source: None,
+        }
+    }
 
-    /// File discovery failed.
-    Discovery(ignore::Error),
+    pub(crate) fn with_source(
+        mut self,
+        source: impl std::error::Error + Send + Sync + 'static,
+    ) -> Self {
+        self.source = Some(Box::new(source));
+        self
+    }
 
-    /// A concrete filesystem operation failed.
-    Io {
-        /// The operation being attempted.
-        operation: &'static str,
-        /// The path involved in the failed operation.
-        path: PathBuf,
-        /// The underlying I/O error.
-        source: std::io::Error,
-    },
+    pub(crate) fn config(message: impl fmt::Display) -> Self {
+        Self::new(
+            ErrorKind::ConfigInvalid,
+            format!("invalid licenserc.toml: {message}"),
+        )
+    }
 
-    /// Git was required or started, but the operation failed.
-    Git(String),
+    pub(crate) fn config_source(
+        message: impl Into<String>,
+        source: impl std::error::Error + Send + Sync + 'static,
+    ) -> Self {
+        Self::new(ErrorKind::ConfigInvalid, message).with_source(source)
+    }
 
-    /// A source file changed after its edit was planned.
-    StaleFile(PathBuf),
+    pub(crate) fn git(message: impl fmt::Display) -> Self {
+        Self::new(
+            ErrorKind::GitUnavailable,
+            format!("Git integration is unavailable: {message}"),
+        )
+    }
 
-    /// An edit does not point at a valid UTF-8 byte range in its original input.
-    InvalidEdit {
-        /// The invalid byte range.
-        range: Range<usize>,
-        /// The original input length.
-        input_len: usize,
-    },
+    pub(crate) fn io(operation: &'static str, path: &Path, source: std::io::Error) -> Self {
+        Self::new(
+            ErrorKind::Io,
+            format!("cannot {operation} {}", path.display()),
+        )
+        .with_source(source)
+    }
+}
 
-    /// HawkEye refuses to replace a symbolic link.
-    Symlink(PathBuf),
+impl fmt::Debug for Error {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if formatter.alternate() {
+            return formatter
+                .debug_struct("Error")
+                .field("kind", &self.kind)
+                .field("message", &self.message)
+                .field("source", &self.source)
+                .finish();
+        }
 
-    /// HawkEye refuses to replace one name of a multiply linked file.
-    HardLink(PathBuf),
+        write!(formatter, "{} => {}", self.kind, self.message)?;
+        if let Some(source) = &self.source {
+            write!(formatter, "\n\nSource:\n   {source}")?;
+        }
+        Ok(())
+    }
 }
 
 impl fmt::Display for Error {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Config(error) => error.fmt(formatter),
-            Self::InvalidConfig(message) => {
-                write!(formatter, "invalid licenserc.toml: {message}")
-            }
-            Self::Template(error) => write!(formatter, "cannot render header template: {error}"),
-            Self::Discovery(error) => write!(formatter, "cannot discover files: {error}"),
-            Self::Io {
-                operation,
-                path,
-                source,
-            } => write!(formatter, "cannot {operation} {}: {source}", path.display()),
-            Self::Git(message) => write!(formatter, "Git integration is unavailable: {message}"),
-            Self::StaleFile(path) => {
-                write!(
-                    formatter,
-                    "{} changed after it was analyzed",
-                    path.display()
-                )
-            }
-            Self::InvalidEdit { range, input_len } => write!(
-                formatter,
-                "invalid edit range {range:?} for an input of {input_len} bytes"
-            ),
-            Self::Symlink(path) => {
-                write!(
-                    formatter,
-                    "refusing to replace symbolic link {}",
-                    path.display()
-                )
-            }
-            Self::HardLink(path) => write!(
-                formatter,
-                "refusing to replace hard-linked file {}",
-                path.display()
-            ),
-        }
+        formatter.write_str(&self.message)
     }
 }
 
 impl std::error::Error for Error {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            Self::Config(error) => Some(error),
-            Self::Template(error) => Some(error),
-            Self::Discovery(error) => Some(error),
-            Self::Io { source, .. } => Some(source),
-            _ => None,
-        }
-    }
-}
-
-impl From<ConfigError> for Error {
-    fn from(error: ConfigError) -> Self {
-        Self::Config(error)
+        self.source
+            .as_deref()
+            .map(|source| source as &(dyn std::error::Error + 'static))
     }
 }
 
 impl From<minijinja::Error> for Error {
-    fn from(error: minijinja::Error) -> Self {
-        Self::Template(error)
+    fn from(source: minijinja::Error) -> Self {
+        Self::new(ErrorKind::ConfigInvalid, "cannot render header template").with_source(source)
     }
 }
 
 impl From<ignore::Error> for Error {
-    fn from(error: ignore::Error) -> Self {
-        Self::Discovery(error)
-    }
-}
-
-impl Error {
-    pub(crate) fn io(
-        operation: &'static str,
-        path: impl Into<PathBuf>,
-        source: std::io::Error,
-    ) -> Self {
-        Self::Io {
-            operation,
-            path: path.into(),
-            source,
-        }
+    fn from(source: ignore::Error) -> Self {
+        let kind = if source.is_io() {
+            ErrorKind::Io
+        } else {
+            ErrorKind::Unexpected
+        };
+        Self::new(kind, "cannot discover files").with_source(source)
     }
 }
 

@@ -21,6 +21,7 @@ use ignore::WalkBuilder;
 use ignore::overrides::Override;
 use ignore::overrides::OverrideBuilder;
 
+use crate::Error;
 use crate::ResolvedConfig;
 use crate::Result;
 use crate::config::FeatureMode;
@@ -72,28 +73,36 @@ pub(crate) fn discover(config: &ResolvedConfig, repo: Option<&GitRepo>) -> Resul
 fn build_selection(config: &ResolvedConfig) -> Result<Override> {
     let mut builder = OverrideBuilder::new(config.root());
     if config.includes().is_empty() {
-        builder.add("**")?;
+        builder.add("**").map_err(selection_error)?;
     } else {
         for pattern in config.includes() {
-            builder.add(pattern)?;
+            builder.add(pattern).map_err(selection_error)?;
         }
     }
-    builder.add("!.git")?;
-    builder.add("!.git/**")?;
+    builder.add("!.git").map_err(selection_error)?;
+    builder.add("!.git/**").map_err(selection_error)?;
     for pattern in config.excludes() {
-        builder.add(&format!("!{pattern}"))?;
+        builder
+            .add(&format!("!{pattern}"))
+            .map_err(selection_error)?;
     }
-    builder.build().map_err(Into::into)
+    builder.build().map_err(selection_error)
 }
 
 fn build_exclusions(config: &ResolvedConfig) -> Result<Override> {
     let mut builder = OverrideBuilder::new(config.root());
-    builder.add("!.git")?;
-    builder.add("!.git/**")?;
+    builder.add("!.git").map_err(selection_error)?;
+    builder.add("!.git/**").map_err(selection_error)?;
     for pattern in config.excludes() {
-        builder.add(&format!("!{pattern}"))?;
+        builder
+            .add(&format!("!{pattern}"))
+            .map_err(selection_error)?;
     }
-    builder.build().map_err(Into::into)
+    builder.build().map_err(selection_error)
+}
+
+fn selection_error(source: ignore::Error) -> Error {
+    Error::config_source("invalid files.includes or files.excludes pattern", source)
 }
 
 fn walk(

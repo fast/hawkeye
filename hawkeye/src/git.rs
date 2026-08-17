@@ -56,7 +56,7 @@ impl GitRepo {
                 );
                 return Ok(None);
             }
-            Err(error) => return Err(Error::Git(format!("cannot start Git: {error}"))),
+            Err(error) => return Err(Error::git(format!("cannot start Git: {error}"))),
         };
 
         if !output.status.success() {
@@ -68,7 +68,7 @@ impl GitRepo {
                 );
                 return Ok(None);
             }
-            return Err(Error::Git(stderr(&output)));
+            return Err(Error::git(stderr(&output)));
         }
 
         let path = output
@@ -76,13 +76,13 @@ impl GitRepo {
             .strip_suffix(b"\n")
             .unwrap_or(output.stdout.as_slice());
         if path.is_empty() {
-            return Err(Error::Git(
+            return Err(Error::git(
                 "Git returned an empty repository root".to_owned(),
             ));
         }
         let root = path_from_git_bytes(path)
             .canonicalize()
-            .map_err(|error| Error::Git(format!("cannot resolve repository root: {error}")))?;
+            .map_err(|error| Error::git(format!("cannot resolve repository root: {error}")))?;
         log::debug!(
             "discovered Git repository {} in {:?}",
             root.display(),
@@ -97,7 +97,7 @@ impl GitRepo {
 
     pub(crate) fn list_files(&self, scan_root: &Path) -> Result<Vec<PathBuf>> {
         let relative_root = scan_root.strip_prefix(&self.root).map_err(|_| {
-            Error::Git(format!(
+            Error::git(format!(
                 "files.root {} is outside repository {}",
                 scan_root.display(),
                 self.root.display()
@@ -142,7 +142,7 @@ impl GitRepo {
             .arg(&self.root)
             .args(["rev-parse", "--verify", "HEAD"])
             .output()
-            .map_err(|error| Error::Git(format!("cannot inspect Git HEAD: {error}")))?;
+            .map_err(|error| Error::git(format!("cannot inspect Git HEAD: {error}")))?;
         Ok(output.status.success())
     }
 
@@ -151,7 +151,7 @@ impl GitRepo {
         match String::from_utf8_lossy(&output.stdout).trim() {
             "true" => Ok(true),
             "false" => Ok(false),
-            value => Err(Error::Git(format!(
+            value => Err(Error::git(format!(
                 "Git returned an invalid shallow-repository value: {value:?}"
             ))),
         }
@@ -163,7 +163,7 @@ impl GitRepo {
             .arg(&self.root)
             .args(["config", "--get", key])
             .output()
-            .map_err(|error| Error::Git(format!("cannot read {key}: {error}")))?;
+            .map_err(|error| Error::git(format!("cannot read {key}: {error}")))?;
         if !output.status.success() {
             return Ok(None);
         }
@@ -186,12 +186,12 @@ impl GitRepo {
             .arg(&self.root)
             .args(&arguments)
             .output()
-            .map_err(|error| Error::Git(format!("cannot start Git: {error}")))?;
+            .map_err(|error| Error::git(format!("cannot start Git: {error}")))?;
         log::debug!("Git {:?} completed in {:?}", arguments, started.elapsed());
         if output.status.success() {
             Ok(output)
         } else {
-            Err(Error::Git(stderr(&output)))
+            Err(Error::git(stderr(&output)))
         }
     }
 
@@ -210,17 +210,17 @@ impl GitRepo {
             .map(|argument| argument.as_ref().to_owned())
             .collect::<Vec<_>>();
         let mut stderr = tempfile::tempfile()
-            .map_err(|error| Error::Git(format!("cannot create Git stderr buffer: {error}")))?;
+            .map_err(|error| Error::git(format!("cannot create Git stderr buffer: {error}")))?;
         let stderr_writer = stderr
             .try_clone()
-            .map_err(|error| Error::Git(format!("cannot clone Git stderr buffer: {error}")))?;
+            .map_err(|error| Error::git(format!("cannot clone Git stderr buffer: {error}")))?;
         let stdin = if let Some(input) = input {
             let mut file = tempfile::tempfile()
-                .map_err(|error| Error::Git(format!("cannot create Git stdin buffer: {error}")))?;
+                .map_err(|error| Error::git(format!("cannot create Git stdin buffer: {error}")))?;
             file.write_all(input)
-                .map_err(|error| Error::Git(format!("cannot write Git stdin buffer: {error}")))?;
+                .map_err(|error| Error::git(format!("cannot write Git stdin buffer: {error}")))?;
             file.seek(SeekFrom::Start(0))
-                .map_err(|error| Error::Git(format!("cannot rewind Git stdin buffer: {error}")))?;
+                .map_err(|error| Error::git(format!("cannot rewind Git stdin buffer: {error}")))?;
             Stdio::from(file)
         } else {
             Stdio::null()
@@ -235,7 +235,7 @@ impl GitRepo {
             .stdout(Stdio::piped())
             .stderr(Stdio::from(stderr_writer))
             .spawn()
-            .map_err(|error| Error::Git(format!("cannot start Git: {error}")))?;
+            .map_err(|error| Error::git(format!("cannot start Git: {error}")))?;
         let stdout = child
             .stdout
             .take()
@@ -246,7 +246,7 @@ impl GitRepo {
         }
         let status = child
             .wait()
-            .map_err(|error| Error::Git(format!("cannot wait for Git: {error}")))?;
+            .map_err(|error| Error::git(format!("cannot wait for Git: {error}")))?;
         log::debug!("Git {:?} completed in {:?}", arguments, started.elapsed());
         let value = parsed?;
         if status.success() {
@@ -255,16 +255,16 @@ impl GitRepo {
 
         stderr
             .seek(SeekFrom::Start(0))
-            .map_err(|error| Error::Git(format!("cannot rewind Git stderr: {error}")))?;
+            .map_err(|error| Error::git(format!("cannot rewind Git stderr: {error}")))?;
         let mut bytes = Vec::new();
         stderr
             .read_to_end(&mut bytes)
-            .map_err(|error| Error::Git(format!("cannot read Git stderr: {error}")))?;
+            .map_err(|error| Error::git(format!("cannot read Git stderr: {error}")))?;
         let message = String::from_utf8_lossy(&bytes).trim().to_owned();
         if message.is_empty() {
-            Err(Error::Git(format!("Git exited with {status}")))
+            Err(Error::git(format!("Git exited with {status}")))
         } else {
-            Err(Error::Git(message))
+            Err(Error::git(message))
         }
     }
 }

@@ -26,6 +26,9 @@ use std::str::FromStr;
 
 use serde::Deserialize;
 
+use crate::Error;
+use crate::Result;
+
 /// A parsed and locally validated `licenserc.toml` document.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -51,26 +54,30 @@ pub struct Config {
 
 impl Config {
     /// Parses strict snake-case TOML and validates local invariants.
-    pub fn from_toml(source: &str) -> Result<Self, ConfigError> {
-        let config = toml::from_str::<Self>(source)?;
+    pub fn from_toml(source: &str) -> Result<Self> {
+        let config = toml::from_str::<Self>(source)
+            .map_err(|source| Error::config_source("cannot parse licenserc.toml", source))?;
         config.validate()?;
         Ok(config)
     }
 
-    pub(crate) fn validate(&self) -> Result<(), ConfigError> {
+    pub(crate) fn validate(&self) -> Result<()> {
         let issues = validate(self);
         if issues.is_empty() {
             Ok(())
         } else {
-            Err(ConfigError::Validation(ValidationErrors { issues }))
+            Err(Error::config_source(
+                "invalid licenserc.toml",
+                ValidationErrors { issues },
+            ))
         }
     }
 }
 
 impl FromStr for Config {
-    type Err = ConfigError;
+    type Err = Error;
 
-    fn from_str(source: &str) -> Result<Self, Self::Err> {
+    fn from_str(source: &str) -> Result<Self> {
         Self::from_toml(source)
     }
 }
@@ -202,51 +209,9 @@ pub enum StyleConfig {
     },
 }
 
-/// An error produced while parsing `licenserc.toml`.
-#[derive(Debug)]
-pub enum ConfigError {
-    /// The TOML is malformed or does not match the closed schema.
-    Parse(toml::de::Error),
-
-    /// The TOML shape is valid but one or more values are invalid.
-    Validation(ValidationErrors),
-}
-
-impl fmt::Display for ConfigError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Parse(error) => write!(formatter, "cannot parse licenserc.toml: {error}"),
-            Self::Validation(error) => error.fmt(formatter),
-        }
-    }
-}
-
-impl std::error::Error for ConfigError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            Self::Parse(error) => Some(error),
-            Self::Validation(error) => Some(error),
-        }
-    }
-}
-
-impl From<toml::de::Error> for ConfigError {
-    fn from(error: toml::de::Error) -> Self {
-        Self::Parse(error)
-    }
-}
-
-/// All local semantic errors found in one pass.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ValidationErrors {
+struct ValidationErrors {
     issues: Vec<ValidationIssue>,
-}
-
-impl ValidationErrors {
-    /// Returns validation errors in deterministic traversal order.
-    pub fn issues(&self) -> &[ValidationIssue] {
-        &self.issues
-    }
 }
 
 impl fmt::Display for ValidationErrors {
@@ -266,23 +231,10 @@ impl fmt::Display for ValidationErrors {
 
 impl std::error::Error for ValidationErrors {}
 
-/// One local semantic configuration error.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ValidationIssue {
+struct ValidationIssue {
     path: String,
     message: String,
-}
-
-impl ValidationIssue {
-    /// Returns the dotted/indexed location of the invalid value.
-    pub fn path(&self) -> &str {
-        &self.path
-    }
-
-    /// Returns the reason the value is invalid.
-    pub fn message(&self) -> &str {
-        &self.message
-    }
 }
 
 fn default_keywords() -> Vec<String> {

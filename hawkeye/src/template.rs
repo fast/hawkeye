@@ -47,14 +47,10 @@ impl HeaderTemplate {
         let normalized = rendered.replace("\r\n", "\n").replace('\r', "\n");
         let normalized = normalized.trim_matches('\n').to_owned();
         if normalized.trim().is_empty() {
-            return Err(Error::InvalidConfig(
-                "the header template rendered an empty value".to_owned(),
-            ));
+            return Err(Error::config("the header template rendered an empty value"));
         }
         if normalized.contains('\0') {
-            return Err(Error::InvalidConfig(
-                "the header template rendered a NUL byte".to_owned(),
-            ));
+            return Err(Error::config("the header template rendered a NUL byte"));
         }
         Ok(normalized)
     }

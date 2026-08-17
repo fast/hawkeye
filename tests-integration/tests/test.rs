@@ -22,6 +22,7 @@ use std::sync::OnceLock;
 
 use hawkeye::Config;
 use hawkeye::Engine;
+use hawkeye::ErrorKind;
 use hawkeye::Mode;
 use hawkeye::Status;
 use jiff::Timestamp;
@@ -584,11 +585,36 @@ text = "Copyright 2026 Acme"
         Ok(_) => panic!("mutated configuration must be validated again"),
         Err(error) => error,
     };
+    assert_eq!(error.kind(), ErrorKind::ConfigInvalid);
+    let source = std::error::Error::source(&error).expect("validation details must be preserved");
     assert!(
-        error
+        source
             .to_string()
             .contains("exactly one of `builtin`, `path`, or `text` must be set")
     );
+}
+
+#[test]
+fn invalid_discovery_pattern_is_a_configuration_error() {
+    let project = tempfile::tempdir().expect("create invalid pattern project");
+    let path = project.path().join("licenserc.toml");
+    fs::write(
+        &path,
+        r#"[header]
+text = "Copyright 2026 Acme"
+
+[files]
+includes = ["["]
+"#,
+    )
+    .expect("write configuration");
+
+    let engine = Engine::load(&path).expect("load configuration before file discovery");
+    let error = match engine.plan(Mode::Check) {
+        Ok(_) => panic!("invalid discovery pattern must fail"),
+        Err(error) => error,
+    };
+    assert_eq!(error.kind(), ErrorKind::ConfigInvalid);
 }
 
 #[test]
@@ -613,7 +639,8 @@ includes = ["**/*.rs"]
         .expect("change second source after planning");
 
     let error = plan.apply().expect_err("stale plan must fail");
-    assert!(matches!(error, hawkeye::Error::StaleFile(path) if path.ends_with("b.rs")));
+    assert_eq!(error.kind(), ErrorKind::StalePlan);
+    assert!(error.to_string().contains("b.rs"));
     assert_eq!(read_normalized(project.path().join("a.rs")), "fn a() {}\n");
     assert_eq!(
         read_normalized(project.path().join("b.rs")),

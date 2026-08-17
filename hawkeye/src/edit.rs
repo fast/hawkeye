@@ -16,6 +16,7 @@ use std::ops::Range;
 
 use crate::Error;
 use crate::Result;
+use crate::error::ErrorKind;
 
 /// A single, proven replacement in an original UTF-8 source file.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -36,10 +37,14 @@ impl Edit {
             || !input.is_char_boundary(self.range.start)
             || !input.is_char_boundary(self.range.end)
         {
-            return Err(Error::InvalidEdit {
-                range: self.range.clone(),
-                input_len: input.len(),
-            });
+            return Err(Error::new(
+                ErrorKind::Unexpected,
+                format!(
+                    "invalid edit range {:?} for an input of {} bytes",
+                    self.range,
+                    input.len()
+                ),
+            ));
         }
         let mut output = String::with_capacity(
             input.len() - (self.range.end - self.range.start) + self.replacement.len(),
