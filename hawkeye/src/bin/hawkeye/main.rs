@@ -113,11 +113,17 @@ fn do_main() -> Result<ExitCode, Error> {
     let config = Config::load(config).or_raise(|| Error::new("cannot load config"))?;
     let engine = Engine::new(config).or_raise(|| Error::new("cannot create engine"))?;
 
-    let (report, fail_on_unknown, fail_on_change) = match subcommand {
+    let (report, failed) = match subcommand {
         SubcommandOptions::Check(options) => {
             let make_error = || Error::new("failed to execute check command");
             let plan = engine.plan(Action::Check).or_raise(make_error)?;
-            (plan.report(), options.fail_on_unknown, false)
+            let report = plan.report();
+            let failed = report.files.iter().any(|file| match file.outcome {
+                Outcome::Clean => false,
+                Outcome::Add | Outcome::Replace | Outcome::Remove | Outcome::Conflict => true,
+                Outcome::Unsupported => options.fail_on_unknown,
+            });
+            (report, failed)
         }
         SubcommandOptions::Format(options) => {
             let make_error = || Error::new("failed to execute format command");
@@ -125,11 +131,14 @@ fn do_main() -> Result<ExitCode, Error> {
             if !options.dry_run {
                 plan.apply().or_raise(make_error)?;
             }
-            (
-                plan.report(),
-                options.fail_on_unknown,
-                options.fail_on_change,
-            )
+            let report = plan.report();
+            let failed = report.files.iter().any(|file| match file.outcome {
+                Outcome::Clean => false,
+                Outcome::Add | Outcome::Replace | Outcome::Remove => options.fail_on_change,
+                Outcome::Conflict => true,
+                Outcome::Unsupported => options.fail_on_unknown,
+            });
+            (report, failed)
         }
         SubcommandOptions::Remove(options) => {
             let make_error = || Error::new("failed to execute remove command");
@@ -137,11 +146,14 @@ fn do_main() -> Result<ExitCode, Error> {
             if !options.dry_run {
                 plan.apply().or_raise(make_error)?;
             }
-            (
-                plan.report(),
-                options.fail_on_unknown,
-                options.fail_on_change,
-            )
+            let report = plan.report();
+            let failed = report.files.iter().any(|file| match file.outcome {
+                Outcome::Clean => false,
+                Outcome::Add | Outcome::Replace | Outcome::Remove => options.fail_on_change,
+                Outcome::Conflict => true,
+                Outcome::Unsupported => options.fail_on_unknown,
+            });
+            (report, failed)
         }
     };
 
@@ -181,19 +193,11 @@ fn do_main() -> Result<ExitCode, Error> {
         }
     }
 
-    for file in report.files {
-        let failed = match file.outcome {
-            Outcome::Clean => false,
-            Outcome::Add | Outcome::Replace | Outcome::Remove => fail_on_change,
-            Outcome::Conflict => true,
-            Outcome::Unsupported => fail_on_unknown,
-        };
-
-        if failed {
-            return Ok(ExitCode::FAILURE);
-        }
-    }
-    Ok(ExitCode::SUCCESS)
+    Ok(if failed {
+        ExitCode::FAILURE
+    } else {
+        ExitCode::SUCCESS
+    })
 }
 
 fn default_config() -> Result<PathBuf, Error> {
