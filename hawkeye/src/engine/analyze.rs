@@ -17,10 +17,9 @@ use super::Analysis;
 use super::Edit;
 use super::Engine;
 use super::Rule;
+use super::lines;
+use super::style::Candidate;
 use crate::report::Outcome;
-use crate::style::Candidate;
-use crate::style::next_line;
-use crate::style::skip_blank_lines;
 
 impl Engine {
     pub(super) fn analyze(
@@ -31,9 +30,11 @@ impl Engine {
         action: Action,
     ) -> Analysis {
         let offset = preamble_offset(input);
+        let header_start = skip_blank_lines(input, offset);
         let eol = detect_eol(input);
         let rendered = {
             let mut value = self.style(&rule.style_out).render(header, eol);
+            value.push_str(eol);
             value.push_str(eol);
             value
         };
@@ -43,7 +44,7 @@ impl Engine {
             .iter()
             .filter_map(|name| {
                 self.style(name)
-                    .extract(input, offset)
+                    .parse(input, header_start)
                     .map(|candidate| (name.as_str(), candidate))
             })
             .filter(|(_, candidate)| has_keywords(&candidate.body, &self.keywords))
@@ -60,6 +61,7 @@ impl Engine {
         };
 
         if let Some((style_name, candidate)) = candidate {
+            let end = skip_blank_lines(input, candidate.range.end);
             let candidate_lines = candidate.body.lines().count();
             let header_lines = header.lines().count();
             if !safe_to_replace(&candidate.body, header, &self.keywords)
@@ -67,15 +69,14 @@ impl Engine {
                     && self
                         .styles
                         .values()
-                        .any(|style| style.extract(input, candidate.range.end).is_some()))
+                        .any(|style| style.parse(input, end).is_some()))
             {
                 return Analysis {
                     outcome: Outcome::Conflict,
                     edit: None,
                 };
             }
-            let end = skip_blank_lines(input, candidate.range.end);
-            let range = candidate.range.start..end;
+            let range = offset..end;
             if action == Action::Remove {
                 return Analysis {
                     outcome: Outcome::Remove,
@@ -104,7 +105,7 @@ impl Engine {
             }
         } else if self.styles.values().any(|style| {
             style
-                .extract(input, offset)
+                .parse(input, header_start)
                 .is_some_and(|candidate| has_keywords(&candidate.body, &self.keywords))
         }) {
             Analysis {
@@ -117,11 +118,10 @@ impl Engine {
                 edit: None,
             }
         } else {
-            let leading_end = skip_blank_lines(input, offset);
             Analysis {
                 outcome: Outcome::Add,
                 edit: (action == Action::Format).then_some(Edit {
-                    range: offset..leading_end,
+                    range: offset..header_start,
                     replacement: rendered,
                 }),
             }
@@ -178,35 +178,35 @@ fn detect_eol(input: &str) -> &'static str {
 
 fn preamble_offset(input: &str) -> usize {
     let mut position = usize::from(input.starts_with('\u{feff}')) * '\u{feff}'.len_utf8();
-    let Some(first) = next_line(input, position) else {
+    let Some((first, range)) = lines::iter(input, position).next() else {
         return position;
     };
-    let lower = first.content.to_ascii_lowercase();
-    if (first.content.starts_with("#!") && !first.content.starts_with("#!["))
+    let lower = first.to_ascii_lowercase();
+    if (first.starts_with("#!") && !first.starts_with("#!["))
         || (lower.starts_with("<?xml") && lower.ends_with("?>"))
         || lower
             .strip_prefix("<?php")
             .is_some_and(|tail| tail.chars().next().is_none_or(char::is_whitespace))
         || lower.starts_with("<!doctype ")
-        || first.content.starts_with("%YAML")
-        || first.content.starts_with("%TAG")
+        || first.starts_with("%YAML")
+        || first.starts_with("%TAG")
     {
-        position = first.end;
+        position = range.end;
     }
 
-    while let Some(line) = next_line(input, position) {
-        if !line.content.starts_with("%YAML") && !line.content.starts_with("%TAG") {
+    while let Some((line, range)) = lines::iter(input, position).next() {
+        if !line.starts_with("%YAML") && !line.starts_with("%TAG") {
             break;
         }
-        position = line.end;
+        position = range.end;
     }
 
     for _ in 0..2 {
-        let Some(line) = next_line(input, position) else {
+        let Some((line, range)) = lines::iter(input, position).next() else {
             break;
         };
-        let lower = line.content.to_ascii_lowercase();
-        let magic = line.content.starts_with('#')
+        let lower = line.to_ascii_lowercase();
+        let magic = line.starts_with('#')
             && (lower.contains("coding:")
                 || lower.contains("coding=")
                 || lower.contains("frozen_string_literal:")
@@ -214,7 +214,17 @@ fn preamble_offset(input: &str) -> usize {
         if !magic {
             break;
         }
-        position = line.end;
+        position = range.end;
+    }
+    position
+}
+
+fn skip_blank_lines(input: &str, mut position: usize) -> usize {
+    for (line, range) in lines::iter(input, position) {
+        if !line.trim().is_empty() {
+            break;
+        }
+        position = range.end;
     }
     position
 }

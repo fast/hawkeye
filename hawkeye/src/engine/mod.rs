@@ -14,6 +14,8 @@
 
 mod analyze;
 mod discovery;
+mod lines;
+mod style;
 
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
@@ -24,6 +26,7 @@ use std::path::PathBuf;
 
 use ignore::overrides::Override;
 
+use self::style::Style;
 use crate::Error;
 use crate::ErrorKind;
 use crate::attrs::FileAttrs;
@@ -36,7 +39,6 @@ use crate::git::GitRepo;
 use crate::report::FileOutcome;
 use crate::report::Outcome;
 use crate::report::Report;
-use crate::style::Style;
 use crate::template::HeaderTemplate;
 
 /// The action to plan for selected files.

@@ -24,7 +24,6 @@ mod engine;
 mod error;
 mod git;
 mod report;
-mod style;
 mod template;
 
 pub use self::config::Config;

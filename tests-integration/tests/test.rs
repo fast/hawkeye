@@ -88,6 +88,12 @@ fn conflicting_header_lifecycle() {
 }
 
 #[test]
+fn custom_style_lifecycle() {
+    let project = case("styles");
+    assert_format_lifecycle("styles", project.path(), false);
+}
+
+#[test]
 fn git_index_and_ignore_lifecycle() {
     let project = case("git-ignore");
     git(project.path(), ["init", "-b", "main"]);

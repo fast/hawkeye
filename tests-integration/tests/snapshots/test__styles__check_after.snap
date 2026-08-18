@@ -1,0 +1,16 @@
+---
+source: tests-integration/tests/test.rs
+expression: "&snapshot"
+---
+{
+  "files": [
+    {
+      "outcome": "clean",
+      "path": "example.block"
+    },
+    {
+      "outcome": "clean",
+      "path": "example.line"
+    }
+  ]
+}

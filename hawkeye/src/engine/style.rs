@@ -14,6 +14,7 @@
 
 use std::ops::Range;
 
+use super::lines;
 use crate::config::StyleConfig;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -64,7 +65,6 @@ impl Style {
     }
 
     pub fn render(&self, body: &str, eol: &str) -> String {
-        let lines = body.split('\n').collect::<Vec<_>>();
         let mut output = String::new();
         match self {
             Self::Line {
@@ -72,12 +72,21 @@ impl Style {
                 suffix,
                 pad_lines,
             } => {
-                let width = lines
-                    .iter()
-                    .map(|line| line.chars().count())
-                    .max()
-                    .unwrap_or(0);
-                for line in lines {
+                let lines = body.split('\n');
+                let width = if *pad_lines {
+                    lines
+                        .clone()
+                        .map(|line| line.chars().count())
+                        .max()
+                        .unwrap_or(0)
+                } else {
+                    0
+                };
+                for (index, line) in lines.enumerate() {
+                    if index > 0 {
+                        output.push_str(eol);
+                    }
+                    let line_start = output.len();
                     output.push_str(prefix);
                     output.push_str(line);
                     if *pad_lines {
@@ -88,9 +97,9 @@ impl Style {
                     }
                     output.push_str(suffix);
                     if suffix.is_empty() {
-                        truncate_trailing_spaces(&mut output);
+                        let len = output[line_start..].trim_end_matches([' ', '\t']).len();
+                        output.truncate(line_start + len);
                     }
-                    output.push_str(eol);
                 }
             }
             Self::Block {
@@ -100,100 +109,96 @@ impl Style {
                 end,
             } => {
                 output.push_str(start);
-                output.push_str(eol);
-                for line in lines {
+                for line in body.split('\n') {
+                    output.push_str(eol);
+                    let line_start = output.len();
                     output.push_str(prefix);
                     output.push_str(line);
                     output.push_str(suffix);
                     if suffix.is_empty() {
-                        truncate_trailing_spaces(&mut output);
+                        let len = output[line_start..].trim_end_matches([' ', '\t']).len();
+                        output.truncate(line_start + len);
                     }
-                    output.push_str(eol);
                 }
-                output.push_str(end);
                 output.push_str(eol);
+                output.push_str(end);
             }
         }
         output
     }
 
-    pub fn extract(&self, input: &str, offset: usize) -> Option<Candidate> {
-        let start = skip_blank_lines(input, offset);
-        let (range, body) = match self {
+    pub fn parse(&self, input: &str, start: usize) -> Option<Candidate> {
+        match self {
             Self::Line {
                 prefix,
                 suffix,
                 pad_lines,
-            } => extract_line(input, start, prefix, suffix, *pad_lines)?,
+            } => parse_line_style(input, start, prefix, suffix, *pad_lines),
             Self::Block {
                 start: opening,
                 prefix,
                 suffix,
                 end: closing,
-            } => extract_block(input, start, opening, prefix, suffix, closing)?,
-        };
-        Some(Candidate {
-            range: offset..range.end,
-            body,
-        })
+            } => parse_block_style(input, start, opening, prefix, suffix, closing),
+        }
     }
 }
 
-fn extract_line(
+fn parse_line_style(
     input: &str,
     start: usize,
     prefix: &str,
     suffix: &str,
     pad_lines: bool,
-) -> Option<(Range<usize>, String)> {
-    let mut position = start;
-    let mut lines = Vec::new();
-    while let Some(line) = next_line(input, position) {
-        let Some(body) = unwrap_line(line.content, prefix, suffix, pad_lines) else {
+) -> Option<Candidate> {
+    let mut end = start;
+    let mut body = Vec::new();
+    for (line, raw_range) in lines::iter(input, start) {
+        let Some(content) = strip_affixes(line, prefix, suffix, pad_lines) else {
             break;
         };
-        lines.push(body);
-        position = line.end;
-        if line.end == input.len() {
-            break;
-        }
+        body.push(content);
+        end = raw_range.start + line.len();
     }
-    if lines.is_empty() {
+    if body.is_empty() {
         None
     } else {
-        Some((start..position, lines.join("\n")))
+        Some(Candidate {
+            range: start..end,
+            body: body.join("\n"),
+        })
     }
 }
 
-fn extract_block(
+fn parse_block_style(
     input: &str,
     start: usize,
     opening: &str,
     prefix: &str,
     suffix: &str,
     closing: &str,
-) -> Option<(Range<usize>, String)> {
-    let first = next_line(input, start)?;
-    if first.content != opening {
+) -> Option<Candidate> {
+    let mut lines = lines::iter(input, start);
+    let (first, _) = lines.next()?;
+    if first != opening {
         return None;
     }
 
-    let mut position = first.end;
-    let mut lines = Vec::new();
-    while let Some(line) = next_line(input, position) {
-        if line.content == closing {
-            return Some((start..line.end, lines.join("\n")));
+    let mut body = Vec::new();
+    for (content, raw_range) in lines {
+        if content == closing {
+            let end = raw_range.start + content.len();
+            return Some(Candidate {
+                range: start..end,
+                body: body.join("\n"),
+            });
         }
-        lines.push(unwrap_line(line.content, prefix, suffix, false)?);
-        position = line.end;
-        if line.end == input.len() {
-            break;
-        }
+        body.push(strip_affixes(content, prefix, suffix, false)?);
     }
     None
 }
 
-fn unwrap_line(line: &str, prefix: &str, suffix: &str, pad_lines: bool) -> Option<String> {
+fn strip_affixes(line: &str, prefix: &str, suffix: &str, pad_lines: bool) -> Option<String> {
     let prefix_without_space = prefix.trim_end();
     let body = if line == prefix_without_space && suffix.is_empty() {
         ""
@@ -209,43 +214,5 @@ fn unwrap_line(line: &str, prefix: &str, suffix: &str, pad_lines: bool) -> Optio
         body.trim_end().to_owned()
     } else {
         body.to_owned()
-    })
-}
-
-pub fn skip_blank_lines(input: &str, mut position: usize) -> usize {
-    while let Some(line) = next_line(input, position) {
-        if !line.content.trim().is_empty() {
-            break;
-        }
-        position = line.end;
-        if position == input.len() {
-            break;
-        }
-    }
-    position
-}
-
-fn truncate_trailing_spaces(output: &mut String) {
-    let trimmed = output.trim_end_matches([' ', '\t']).len();
-    output.truncate(trimmed);
-}
-
-#[derive(Debug, Clone, Copy)]
-pub struct Line<'input> {
-    pub content: &'input str,
-    pub end: usize,
-}
-
-pub fn next_line(input: &str, position: usize) -> Option<Line<'_>> {
-    let tail = input.get(position..)?;
-    let line = tail.split_inclusive('\n').next()?;
-    let content = if let Some(content) = line.strip_suffix('\n') {
-        content.strip_suffix('\r').unwrap_or(content)
-    } else {
-        line
-    };
-    Some(Line {
-        content,
-        end: position + line.len(),
     })
 }
