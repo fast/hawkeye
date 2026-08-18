@@ -338,6 +338,69 @@ fn git_history_branches_dirty_files_and_untracked_directories() {
 }
 
 #[test]
+fn git_history_preserves_creation_year_for_recreated_paths() {
+    let project = tempfile::tempdir().expect("create history repository");
+    git(project.path(), ["init", "-b", "main"]);
+    git(project.path(), ["config", "user.name", "Current User"]);
+    git(
+        project.path(),
+        ["config", "user.email", "current@example.com"],
+    );
+
+    fs::write(project.path().join("staged.rs"), "fn staged() {}\n").expect("write staged source");
+    fs::write(project.path().join("untracked.rs"), "fn untracked() {}\n")
+        .expect("write untracked source");
+    git(project.path(), ["add", "staged.rs", "untracked.rs"]);
+    git_commit(
+        project.path(),
+        "add sources",
+        "Alice",
+        "alice@example.com",
+        "2019-06-01T12:00:00+0000",
+    );
+    git(project.path(), ["rm", "staged.rs", "untracked.rs"]);
+    git_commit(
+        project.path(),
+        "remove sources",
+        "Bob",
+        "bob@example.com",
+        "2020-06-01T12:00:00+0000",
+    );
+
+    fs::write(project.path().join("staged.rs"), "fn staged() {}\n")
+        .expect("recreate staged source");
+    fs::write(project.path().join("untracked.rs"), "fn untracked() {}\n")
+        .expect("recreate untracked source");
+    git(project.path(), ["add", "staged.rs"]);
+    fs::write(
+        project.path().join("licenserc.toml"),
+        r#"[header]
+text = "Copyright {{ attrs.git_file_created_year }}-{{ attrs.git_file_modified_year }} Acme"
+
+[files]
+includes = ["**/*.rs"]
+
+[git]
+file_attrs = "enable"
+ignore = "disable"
+"#,
+    )
+    .expect("write configuration");
+
+    let formatted = hawkeye(project.path(), ["format"]);
+    assert_exit(&formatted, 0);
+    let current_year = Timestamp::now().to_zoned(TimeZone::UTC).year();
+    assert_eq!(
+        read_normalized(project.path().join("staged.rs")),
+        format!("// Copyright 2019-{current_year} Acme\n\nfn staged() {{}}\n")
+    );
+    assert_eq!(
+        read_normalized(project.path().join("untracked.rs")),
+        format!("// Copyright 2019-{current_year} Acme\n\nfn untracked() {{}}\n")
+    );
+}
+
+#[test]
 fn shallow_repository_does_not_produce_git_years() {
     let project = tempfile::tempdir().expect("create shallow repository");
     fs::write(project.path().join("main.rs"), "fn main() {}\n").expect("write source");

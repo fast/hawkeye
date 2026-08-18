@@ -57,10 +57,8 @@ impl GitAttrs {
         }
     }
 
-    fn record_worktree(&mut self, year: i16, author: Option<&str>, new_file: bool) {
-        if new_file || self.created_year.is_none() {
-            self.created_year = Some(year);
-        }
+    fn record_worktree(&mut self, year: i16, author: Option<&str>) {
+        self.created_year.get_or_insert(year);
         self.modified_year = Some(year);
         if let Some(author) = author.filter(|value| !value.trim().is_empty()) {
             self.authors.insert(author.to_owned());
@@ -132,11 +130,9 @@ impl FileAttrsResolver {
 
         for path in selected.values() {
             if !git.contains_key(path) {
-                git.entry(path.clone()).or_default().record_worktree(
-                    current_year,
-                    author.as_deref(),
-                    true,
-                );
+                git.entry(path.clone())
+                    .or_default()
+                    .record_worktree(current_year, author.as_deref());
             }
         }
         log::debug!(
@@ -307,12 +303,11 @@ fn apply_worktree_status(
             continue;
         }
         let status = &record[..2];
-        let new_file = status == b"??" || status.contains(&b'A');
         if let Some(selected_path) = selected.get(&record[3..]) {
             attrs
                 .entry(selected_path.clone())
                 .or_default()
-                .record_worktree(year, author, new_file);
+                .record_worktree(year, author);
         }
         if status.contains(&b'R') || status.contains(&b'C') {
             index += 1;
