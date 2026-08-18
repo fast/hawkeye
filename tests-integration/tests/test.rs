@@ -158,6 +158,60 @@ fn git_repository_with_nested_files_root_lifecycle() {
 }
 
 #[test]
+fn git_history_scopes_worktree_status_to_nested_files_root() {
+    let project = tempfile::tempdir().expect("create history repository");
+    fs::create_dir(project.path().join("source")).expect("create source directory");
+    fs::write(project.path().join("source/main.rs"), "fn main() {}\n").expect("write source");
+    fs::write(project.path().join("outside.rs"), "fn outside() {}\n")
+        .expect("write source outside files.root");
+    git(project.path(), ["init", "-b", "main"]);
+    git(project.path(), ["add", "source/main.rs", "outside.rs"]);
+    git_commit(
+        project.path(),
+        "add sources",
+        "Alice",
+        "alice@example.com",
+        "2019-06-01T12:00:00+0000",
+    );
+
+    fs::write(
+        project.path().join("source/main.rs"),
+        "fn main() {}\nfn dirty() {}\n",
+    )
+    .expect("dirty selected source");
+    fs::write(
+        project.path().join("outside.rs"),
+        "fn outside() {}\nfn dirty() {}\n",
+    )
+    .expect("dirty source outside files.root");
+    fs::write(project.path().join("untracked.rs"), "fn untracked() {}\n")
+        .expect("write untracked source outside files.root");
+    fs::write(
+        project.path().join("licenserc.toml"),
+        r#"[header]
+text = "Copyright {{ attrs.git_file_created_year }}-{{ attrs.git_file_modified_year }} Acme"
+
+[files]
+root = "source"
+includes = ["**/*.rs"]
+
+[git]
+file_attrs = "enable"
+ignore = "enable"
+"#,
+    )
+    .expect("write configuration");
+
+    let formatted = hawkeye(project.path(), ["format"]);
+    assert_exit(&formatted, 0);
+    let current_year = Timestamp::now().to_zoned(TimeZone::UTC).year();
+    assert_eq!(
+        read_normalized(project.path().join("source/main.rs")),
+        format!("// Copyright 2019-{current_year} Acme\n\nfn main() {{}}\nfn dirty() {{}}\n")
+    );
+}
+
+#[test]
 fn required_git_capability_is_distinct_from_automatic_discovery() {
     let project = tempfile::tempdir().expect("create non-Git project");
     let config_path = project.path().join("licenserc.toml");
@@ -461,14 +515,22 @@ ignore = "disable"
 
 #[cfg(unix)]
 #[test]
-fn git_history_accepts_paths_starting_with_record_separator() {
+fn git_history_accepts_unusual_paths() {
     use std::ffi::OsString;
     use std::os::unix::ffi::OsStringExt;
 
     let project = tempfile::tempdir().expect("create history repository");
-    let filename = OsString::from_vec(b"\x1e2020.rs".to_vec());
-    let source = project.path().join(filename);
-    fs::write(&source, "fn main() {}\n").expect("write source");
+    let sources = [
+        project
+            .path()
+            .join(OsString::from_vec(b"\x1e2020.rs".to_vec())),
+        project
+            .path()
+            .join(OsString::from_vec(b"line\nbreak.rs".to_vec())),
+    ];
+    for source in &sources {
+        fs::write(source, "fn main() {}\n").expect("write source");
+    }
     git(project.path(), ["init", "-b", "main"]);
     git(project.path(), ["add", "--all"]);
     git_commit(
@@ -495,10 +557,12 @@ ignore = "disable"
 
     let formatted = hawkeye(project.path(), ["format"]);
     assert_exit(&formatted, 0);
-    assert_eq!(
-        read_normalized(source),
-        "// Copyright 2019 Acme\n\nfn main() {}\n"
-    );
+    for source in sources {
+        assert_eq!(
+            read_normalized(source),
+            "// Copyright 2019 Acme\n\nfn main() {}\n"
+        );
+    }
 }
 
 #[test]

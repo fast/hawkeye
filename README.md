@@ -168,7 +168,7 @@ Built-in output styles include line comments for slash, hash, dash, percent, sem
 
 ### Git file attributes
 
-`git.file_attrs` is `disable`, `auto`, or `enable` and defaults to `disable` because history traversal has a cost. `auto` populates attributes when a repository is available; `enable` turns repository discovery and Git command failures into operational errors.
+`git.file_attrs` is `disable`, `auto`, or `enable` and defaults to `disable` because history traversal has a cost. `auto` leaves attributes unavailable when no usable repository is found, while `enable` requires one. Once a repository is selected, both modes report Git command failures rather than silently returning incomplete attributes.
 
 History is traversed once per run, limited to the selected repository paths, and parsed as a stream instead of retaining the complete `git log` output. Each non-merge commit is compared through Git's normal changed-path output, avoiding a merge commit being attributed as a file modification merely because histories joined. Dirty tracked files and files inside untracked directories use the current UTC year and current configured Git author.
 

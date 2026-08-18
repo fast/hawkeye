@@ -22,13 +22,13 @@ use ignore::overrides::Override;
 use ignore::overrides::OverrideBuilder;
 
 use super::Engine;
-use super::git::GitRepo;
+use super::git::Repository;
 use crate::Error;
 use crate::ErrorKind;
 use crate::config::FeatureMode;
 
 impl Engine {
-    pub(super) fn discover(&self, repo: Option<&GitRepo>) -> Result<Vec<PathBuf>, Error> {
+    pub(super) fn discover(&self, repo: Option<&Repository>) -> Result<Vec<PathBuf>, Error> {
         let started = Instant::now();
         let (files, source) = if self.git.ignore != FeatureMode::Disable
             && let Some(repo) = repo

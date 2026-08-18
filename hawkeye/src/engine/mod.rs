@@ -29,8 +29,8 @@ use jiff::Timestamp;
 use jiff::tz::TimeZone;
 use serde::Serialize;
 
-use self::git::GitFileHistory;
-use self::git::GitRepo;
+use self::git::FileHistory;
+use self::git::Repository;
 use crate::Error;
 use crate::ErrorKind;
 use crate::builtin;
@@ -55,7 +55,7 @@ pub struct FileAttrs {
 }
 
 impl FileAttrs {
-    fn new(path: &Path, git: Option<&GitFileHistory>) -> Result<Self, Error> {
+    fn new(path: &Path, git: Option<&FileHistory>) -> Result<Self, Error> {
         let metadata = fs::metadata(path).map_err(|err| {
             Error::new(
                 ErrorKind::Unexpected,
@@ -268,7 +268,7 @@ impl Engine {
         let repo = if git_mode == FeatureMode::Disable {
             None
         } else {
-            match GitRepo::discover(&self.root) {
+            match Repository::discover(&self.root) {
                 Ok(repo) => Some(repo),
                 Err(err)
                     if git_mode == FeatureMode::Auto && err.kind() == ErrorKind::Unsupported =>
