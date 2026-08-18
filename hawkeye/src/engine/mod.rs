@@ -993,7 +993,12 @@ fn parse_block_style(
     None
 }
 
-fn strip_affixes(line: &str, prefix: &str, suffix: &str, pad_lines: bool) -> Option<String> {
+fn strip_affixes<'a>(
+    line: &'a str,
+    prefix: &str,
+    suffix: &str,
+    pad_lines: bool,
+) -> Option<&'a str> {
     let prefix_without_space = prefix.trim_end();
     let body = if line == prefix_without_space && suffix.is_empty() {
         ""
@@ -1005,11 +1010,7 @@ fn strip_affixes(line: &str, prefix: &str, suffix: &str, pad_lines: bool) -> Opt
     } else {
         body.strip_suffix(suffix)?
     };
-    Some(if pad_lines {
-        body.trim_end().to_owned()
-    } else {
-        body.to_owned()
-    })
+    Some(if pad_lines { body.trim_end() } else { body })
 }
 
 /// Iterates line contents without terminators and their full byte ranges in the input.
