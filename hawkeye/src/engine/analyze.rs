@@ -63,8 +63,7 @@ impl Engine {
                     .parse(input, header_start)
                     .map(|candidate| (name.as_str(), candidate))
             })
-            .filter(|(_, candidate)| has_keywords(&candidate.body, &self.keywords))
-            .collect::<Vec<_>>();
+            .filter(|(_, candidate)| has_keywords(&candidate.body, &self.keywords));
 
         let candidate = match unique_style_match(matches) {
             Ok(candidate) => candidate,
@@ -145,8 +144,9 @@ impl Engine {
     }
 }
 
-fn unique_style_match(matches: Vec<(&str, StyleMatch)>) -> Result<Option<(&str, StyleMatch)>, ()> {
-    let mut matches = matches.into_iter();
+fn unique_style_match<'a>(
+    mut matches: impl Iterator<Item = (&'a str, StyleMatch)>,
+) -> Result<Option<(&'a str, StyleMatch)>, ()> {
     let Some((style_name, first)) = matches.next() else {
         return Ok(None);
     };
@@ -164,14 +164,12 @@ fn has_keywords(body: &str, keywords: &[String]) -> bool {
 }
 
 fn safe_to_replace(candidate: &str, header: &str, keywords: &[String]) -> bool {
-    let candidate_lines = candidate.lines().collect::<Vec<_>>();
-    let header_lines = header.lines().collect::<Vec<_>>();
-    candidate_lines.len() <= header_lines.len()
-        && candidate_lines
-            .iter()
-            .zip(header_lines)
+    candidate.lines().count() <= header.lines().count()
+        && candidate
+            .lines()
+            .zip(header.lines())
             .all(|(candidate, header)| {
-                if candidate == &header {
+                if candidate == header {
                     return true;
                 }
                 let folded = candidate.to_lowercase();
