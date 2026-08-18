@@ -1333,6 +1333,7 @@ dependencies = [
  "same-file",
  "serde",
  "serde_json",
+ "tempfile",
  "toml",
 ]
 
@@ -1981,17 +1982,6 @@ dependencies = [
  "once_cell",
  "rustix",
  "windows-sys",
-]
-
-[[package]]
-name = "test-integration"
-version = "0.0.0"
-dependencies = [
- "hawkeye",
- "jiff",
- "serde",
- "serde_json",
- "tempfile",
 ]
 
 [[package]]

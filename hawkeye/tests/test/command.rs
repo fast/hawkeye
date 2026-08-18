@@ -14,11 +14,11 @@
 
 use std::fs;
 
-use test_integration::Project;
-use test_integration::assert_exit;
-use test_integration::assert_report;
-use test_integration::stderr;
-use test_integration::stdout;
+use super::support::Project;
+use super::support::assert_exit;
+use super::support::assert_report;
+use super::support::stderr;
+use super::support::stdout;
 
 #[test]
 fn reports_and_exit_codes_follow_command_policy() {

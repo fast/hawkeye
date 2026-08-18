@@ -15,9 +15,10 @@
 use hawkeye::Config;
 use hawkeye::Engine;
 use hawkeye::ErrorKind;
-use test_integration::Project;
-use test_integration::assert_exit;
-use test_integration::stderr;
+
+use super::support::Project;
+use super::support::assert_exit;
+use super::support::stderr;
 
 #[test]
 fn public_validation_matches_engine_initialization() {

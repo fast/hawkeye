@@ -14,9 +14,9 @@
 
 use std::fs;
 
-use test_integration::Project;
-use test_integration::assert_exit;
-use test_integration::assert_report;
+use super::support::Project;
+use super::support::assert_exit;
+use super::support::assert_report;
 
 #[test]
 fn mixed_repository_formats_checks_and_removes_headers() {

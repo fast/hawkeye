@@ -16,7 +16,7 @@
 builtin = "Apache-2.0"
 
 [files]
-excludes = ["tests-integration/**"]
+excludes = ["hawkeye/tests/cases/**"]
 includes = ["**/*.rs", "**/*.toml", "**/*.yaml", "**/*.yml"]
 
 [props]

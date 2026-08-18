@@ -177,7 +177,7 @@ cargo x test
 cargo x lint
 ```
 
-The integration suite lives in [`tests-integration`](tests-integration) and runs the Cargo-built binary against complete temporary repositories.
+The integration suite lives in [`hawkeye/tests`](hawkeye/tests) and runs the Cargo-built binary against complete temporary repositories.
 
 ## License
 

@@ -56,6 +56,7 @@ impl Project {
     pub fn from_case(name: &str) -> Self {
         let project = Self::empty();
         let source = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests")
             .join("cases")
             .join(name);
         copy_tree(&source, &project.root);
@@ -87,7 +88,7 @@ impl Project {
         I: IntoIterator<Item = S>,
         S: AsRef<OsStr>,
     {
-        let mut command = Command::new(hawkeye_binary());
+        let mut command = Command::new(env!("CARGO_BIN_EXE_hawkeye"));
         command
             .args(arguments)
             .current_dir(&self.root)
@@ -239,19 +240,4 @@ fn copy_tree(source: &Path, destination: &Path) {
             fs::copy(entry.path(), target).expect("copy test case file");
         }
     }
-}
-
-fn hawkeye_binary() -> PathBuf {
-    let test = std::env::current_exe().expect("locate integration test executable");
-    let profile = test
-        .parent()
-        .and_then(Path::parent)
-        .expect("integration test executable is inside a Cargo profile directory");
-    let binary = profile.join(format!("hawkeye{}", std::env::consts::EXE_SUFFIX));
-    assert!(
-        binary.is_file(),
-        "missing HawkEye binary at {}; run integration tests with `cargo x test`",
-        binary.display()
-    );
-    binary
 }

@@ -21,10 +21,11 @@ use hawkeye::ErrorKind;
 use hawkeye::FileOutcome;
 use jiff::Timestamp;
 use jiff::tz::TimeZone;
-use test_integration::Project;
-use test_integration::assert_exit;
-use test_integration::assert_report;
-use test_integration::stderr;
+
+use super::support::Project;
+use super::support::assert_exit;
+use super::support::assert_report;
+use super::support::stderr;
 
 #[test]
 fn git_discovery_combines_tracked_files_and_ignore_sources() {

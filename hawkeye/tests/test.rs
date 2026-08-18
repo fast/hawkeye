@@ -20,3 +20,5 @@ mod config;
 mod format;
 #[path = "test/git.rs"]
 mod git;
+#[path = "test/support.rs"]
+mod support;
