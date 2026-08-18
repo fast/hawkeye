@@ -26,12 +26,6 @@ The recommended way to install the command-line tool is to let [cargo-binstall](
 cargo binstall hawkeye@7.0.0-alpha.1
 ```
 
-The same executable is available as a Python wheel. The PyPI distribution is named `hawkeye-license`, while the installed command remains `hawkeye`:
-
-```shell
-uv tool install 'hawkeye-license==7.0.0a1'
-```
-
 To build from source instead, use Cargo:
 
 ```shell
@@ -43,7 +37,6 @@ Prebuilt releases cover the following platforms:
 | Distribution | Platforms |
 | --- | --- |
 | cargo-binstall | macOS and Linux on x86-64 or ARM64, plus Windows on x86-64; Linux archives support both glibc and musl. |
-| Python wheel | macOS and Linux on x86-64 or ARM64, plus Windows on x86-64; Linux wheels support manylinux and musllinux. |
 | Docker image | Linux on amd64 or arm64. |
 
 ## Getting started

@@ -12,10 +12,28 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-[build-system]
-build-backend = "maturin"
-requires = ["maturin>=1.0,<2.0"]
+name: Pre-commit
 
-[tool.maturin]
-bindings = "bin"
-manifest-path = "hawkeye/Cargo.toml"
+on:
+  pull_request:
+    branches: [ main ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.number || github.run_id }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test hook
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@1.89.0
+      - uses: astral-sh/setup-uv@v10.0.1
+      - run: uvx --from pre-commit pre-commit try-repo . hawkeye-format --all-files
+        env:
+          RUSTUP_TOOLCHAIN: 1.89.0
