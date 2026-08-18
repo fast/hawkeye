@@ -32,7 +32,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@1.89.0
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v10.0.1
       - name: Run hook
         run: uvx --from pre-commit pre-commit try-repo . hawkeye-format --all-files
         env:
@@ -143,6 +143,6 @@ jobs:
         uses: actions/attest@v4
         with:
           subject-path: 'dist/*'
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v10.0.1
       - name: Publish to PyPI
         run: uv publish --trusted-publishing always dist/*
