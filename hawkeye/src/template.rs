@@ -46,10 +46,7 @@ impl HeaderTemplate {
         props: &BTreeMap<String, toml::Value>,
         attrs: &FileAttrs,
     ) -> Result<String, Error> {
-        let template = self
-            .environment
-            .get_template("header")
-            .expect("header template is registered during construction");
+        let template = self.environment.get_template("header").unwrap();
         let rendered = template
             .render(minijinja::context! { props, attrs })
             .map_err(|err| {

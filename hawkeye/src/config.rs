@@ -129,6 +129,10 @@ pub struct HeaderConfig {
     pub keywords: Vec<String>,
 }
 
+fn default_keywords() -> Vec<String> {
+    vec!["copyright".to_owned()]
+}
+
 /// File discovery settings.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(default, deny_unknown_fields)]
@@ -153,14 +157,16 @@ impl Default for FilesConfig {
 
 /// Whether a Git-backed capability is disabled, opportunistic, or required.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
-#[serde(rename_all = "snake_case")]
 pub enum FeatureMode {
     /// Never use the capability.
+    #[serde(rename = "disable")]
     Disable,
     /// Use the capability when a Git repository is available.
+    #[serde(rename = "auto")]
     #[default]
     Auto,
     /// Require the capability and fail when it cannot be initialized.
+    #[serde(rename = "enable")]
     Enable,
 }
 
@@ -212,9 +218,10 @@ pub struct RuleConfig {
 
 /// A syntax-only custom comment style.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
-#[serde(deny_unknown_fields, rename_all = "snake_case", tag = "kind")]
+#[serde(tag = "kind", deny_unknown_fields)]
 pub enum StyleConfig {
     /// Every logical header line is wrapped independently.
+    #[serde(rename = "line")]
     Line {
         /// Text written before every logical line.
         #[serde(default)]
@@ -227,6 +234,7 @@ pub enum StyleConfig {
         pad_lines: bool,
     },
     /// One opening and closing delimiter encloses all logical lines.
+    #[serde(rename = "block")]
     Block {
         /// Opening delimiter written on its own line.
         start: String,
@@ -239,10 +247,6 @@ pub enum StyleConfig {
         /// Closing delimiter written on its own line.
         end: String,
     },
-}
-
-fn default_keywords() -> Vec<String> {
-    vec!["copyright".to_owned()]
 }
 
 #[derive(Default)]

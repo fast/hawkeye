@@ -95,6 +95,7 @@ impl Engine {
     /// Validates and builds an engine from parsed configuration.
     pub fn new(config: Config) -> Result<Self, Error> {
         config.validate()?;
+
         let Config {
             header,
             files,

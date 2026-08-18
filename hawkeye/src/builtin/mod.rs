@@ -34,8 +34,7 @@ pub static RULES: LazyLock<Vec<RuleConfig>> = LazyLock::new(|| {
         rules: Vec<RuleConfig>,
     }
 
-    let rules = toml::from_str::<Rules>(include_str!("rules.toml"))
-        .expect("builtin rules must be valid TOML");
+    let rules = toml::from_str::<Rules>(include_str!("rules.toml")).unwrap();
     rules.rules
 });
 
@@ -45,7 +44,6 @@ pub static STYLES: LazyLock<BTreeMap<String, StyleConfig>> = LazyLock::new(|| {
         styles: BTreeMap<String, StyleConfig>,
     }
 
-    let styles = toml::from_str::<Styles>(include_str!("styles.toml"))
-        .expect("builtin styles must be valid TOML");
+    let styles = toml::from_str::<Styles>(include_str!("styles.toml")).unwrap();
     styles.styles
 });

@@ -34,11 +34,11 @@ use crate::git::git_path;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct FileAttrs {
     pub filename: String,
-    disk_file_created_year: Option<i16>,
-    disk_file_modified_year: Option<i16>,
-    git_file_created_year: Option<i16>,
-    git_file_modified_year: Option<i16>,
-    git_authors: Vec<String>,
+    pub disk_file_created_year: Option<i16>,
+    pub disk_file_modified_year: Option<i16>,
+    pub git_file_created_year: Option<i16>,
+    pub git_file_modified_year: Option<i16>,
+    pub git_authors: Vec<String>,
 }
 
 #[derive(Debug, Clone, Default)]

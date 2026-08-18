@@ -32,17 +32,21 @@ pub enum Mode {
 
 /// The result of analyzing one selected file.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "snake_case")]
 pub enum Status {
     /// The file already contains the canonical header.
+    #[serde(rename = "clean")]
     Clean,
     /// No recognized header was found.
+    #[serde(rename = "missing")]
     Missing,
     /// A recognized header differs in content, style, or spacing.
+    #[serde(rename = "replaceable")]
     Replaceable,
     /// The file looks licensed but no safe edit range is known.
+    #[serde(rename = "conflict")]
     Conflict,
     /// The file has no rule or is not supported UTF-8 text.
+    #[serde(rename = "unsupported")]
     Unsupported,
 }
 
