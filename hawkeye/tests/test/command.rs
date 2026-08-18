@@ -106,6 +106,124 @@ ignore = "disable"
 }
 
 #[test]
+fn commands_process_requested_files_and_directories() {
+    let project = Project::empty();
+    project.write(
+        "licenserc.toml",
+        r#"[header]
+text = "Copyright 2026 Acme"
+
+[files]
+root = "source"
+includes = ["**/*.rs"]
+
+[git]
+ignore = "enable"
+"#,
+    );
+    project.write("source/selected.rs", "fn selected() {}\n");
+    project.write("source/untouched.rs", "fn untouched() {}\n");
+    project.write("source/nested/selected.rs", "fn nested() {}\n");
+    project.git(["init", "--initial-branch=main"]);
+
+    let formatted = project.run([
+        "format",
+        "source/selected.rs",
+        "source/nested",
+        "--output-format=json",
+    ]);
+    assert_exit(&formatted, 0);
+    assert_report(
+        &formatted,
+        &[("nested/selected.rs", "add"), ("selected.rs", "add")],
+    );
+    assert!(
+        project
+            .read("source/selected.rs")
+            .starts_with("// Copyright 2026 Acme\n")
+    );
+    assert!(
+        project
+            .read("source/nested/selected.rs")
+            .starts_with("// Copyright 2026 Acme\n")
+    );
+    assert_eq!(project.read("source/untouched.rs"), "fn untouched() {}\n");
+}
+
+#[test]
+fn explicit_files_bypass_git_ignore_but_obey_config_filters() {
+    let project = Project::empty();
+    project.write(
+        "licenserc.toml",
+        r#"[header]
+text = "Copyright 2026 Acme"
+
+[files]
+includes = ["**/*.rs"]
+excludes = ["excluded.rs"]
+
+[git]
+ignore = "enable"
+"#,
+    );
+    project.write(".gitignore", "ignored.rs\n");
+    project.write("ignored.rs", "fn ignored() {}\n");
+    project.write("selected.rs", "fn selected() {}\n");
+    project.write("excluded.rs", "fn excluded() {}\n");
+    project.git(["init", "--initial-branch=main"]);
+
+    let formatted = project.run([
+        "format",
+        "ignored.rs",
+        "selected.rs",
+        "excluded.rs",
+        "missing.rs",
+        "--output-format=json",
+    ]);
+    assert_exit(&formatted, 0);
+    assert_report(&formatted, &[("ignored.rs", "add"), ("selected.rs", "add")]);
+    assert!(stderr(&formatted).contains("skipping path that does not exist"));
+    assert!(stderr(&formatted).contains("missing.rs"));
+    assert_eq!(project.read("excluded.rs"), "fn excluded() {}\n");
+}
+
+#[test]
+fn files_from_accepts_files_stdin_and_empty_input() {
+    let project = Project::empty();
+    project.write(
+        "licenserc.toml",
+        r#"[header]
+text = "Copyright 2026 Acme"
+
+[files]
+root = "source"
+includes = ["**/*.rs"]
+
+[git]
+ignore = "disable"
+"#,
+    );
+    project.write("source/first.rs", "fn first() {}\n");
+    project.write("source/second.rs", "fn second() {}\n");
+    project.write("paths.txt", "source/first.rs\r\n");
+
+    let from_file = project.run(["format", "--files-from=paths.txt", "--output-format=json"]);
+    assert_exit(&from_file, 0);
+    assert_report(&from_file, &[("first.rs", "add")]);
+
+    let from_stdin = project.run_with_stdin(
+        ["format", "--files-from=-", "--output-format=json"],
+        b"source/second.rs\0",
+    );
+    assert_exit(&from_stdin, 0);
+    assert_report(&from_stdin, &[("second.rs", "add")]);
+
+    let empty = project.run_with_stdin(["check", "--files-from=-", "--output-format=json"], []);
+    assert_exit(&empty, 0);
+    assert_report(&empty, &[]);
+}
+
+#[test]
 fn errors_and_debug_logs_use_stderr_only() {
     let project = Project::empty();
     let missing_config = project.run(["check"]);

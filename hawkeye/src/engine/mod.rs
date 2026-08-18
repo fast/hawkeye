@@ -259,7 +259,18 @@ impl Engine {
     ///
     /// Returns an error if selected files cannot be discovered, read, or analyzed.
     pub fn check(&self) -> Result<Report, Error> {
-        Ok(self.edits(HeaderTarget::Present)?.report)
+        Ok(self.edits(HeaderTarget::Present, None)?.report)
+    }
+
+    /// Checks only the requested files and directories without modifying them.
+    ///
+    /// Relative paths are resolved against `files.root`. An empty slice selects no files.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if selected files cannot be discovered, read, or analyzed.
+    pub fn check_paths(&self, paths: &[PathBuf]) -> Result<Report, Error> {
+        Ok(self.edits(HeaderTarget::Present, Some(paths))?.report)
     }
 
     /// Prepares additions and replacements that make selected headers canonical.
@@ -268,7 +279,18 @@ impl Engine {
     ///
     /// Returns an error if selected files cannot be discovered, read, or analyzed.
     pub fn format(&self) -> Result<Edits, Error> {
-        self.edits(HeaderTarget::Present)
+        self.edits(HeaderTarget::Present, None)
+    }
+
+    /// Prepares additions and replacements for only the requested files and directories.
+    ///
+    /// Relative paths are resolved against `files.root`. An empty slice selects no files.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if selected files cannot be discovered, read, or analyzed.
+    pub fn format_paths(&self, paths: &[PathBuf]) -> Result<Edits, Error> {
+        self.edits(HeaderTarget::Present, Some(paths))
     }
 
     /// Prepares removals for recognized headers.
@@ -277,10 +299,32 @@ impl Engine {
     ///
     /// Returns an error if selected files cannot be discovered, read, or analyzed.
     pub fn remove(&self) -> Result<Edits, Error> {
-        self.edits(HeaderTarget::Absent)
+        self.edits(HeaderTarget::Absent, None)
     }
 
-    fn edits(&self, target: HeaderTarget) -> Result<Edits, Error> {
+    /// Prepares removals for recognized headers in only the requested files and directories.
+    ///
+    /// Relative paths are resolved against `files.root`. An empty slice selects no files.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if selected files cannot be discovered, read, or analyzed.
+    pub fn remove_paths(&self, paths: &[PathBuf]) -> Result<Edits, Error> {
+        self.edits(HeaderTarget::Absent, Some(paths))
+    }
+
+    fn edits(
+        &self,
+        target: HeaderTarget,
+        requested_paths: Option<&[PathBuf]>,
+    ) -> Result<Edits, Error> {
+        if matches!(requested_paths, Some([])) {
+            return Ok(Edits {
+                report: Report { files: Vec::new() },
+                files: Vec::new(),
+            });
+        }
+
         let git_mode = self.git.ignore.combine(self.git.file_attrs);
         let repo = if git_mode == FeatureMode::Disable {
             None
@@ -296,7 +340,7 @@ impl Engine {
                 Err(err) => return Err(err),
             }
         };
-        let paths = self.discover(repo.as_ref())?;
+        let paths = self.discover(repo.as_ref(), requested_paths)?;
         let selected = paths
             .into_iter()
             .map(|path| {

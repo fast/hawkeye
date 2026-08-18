@@ -14,10 +14,12 @@
 
 use std::ffi::OsStr;
 use std::fs;
+use std::io::Write;
 use std::path::Path;
 use std::path::PathBuf;
 use std::process::Command;
 use std::process::Output;
+use std::process::Stdio;
 
 use serde::Deserialize;
 use tempfile::TempDir;
@@ -103,6 +105,27 @@ impl Project {
         S: AsRef<OsStr>,
     {
         self.command(arguments).output().expect("run hawkeye")
+    }
+
+    pub fn run_with_stdin<I, S>(&self, arguments: I, input: impl AsRef<[u8]>) -> Output
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<OsStr>,
+    {
+        let mut child = self
+            .command(arguments)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("start hawkeye");
+        child
+            .stdin
+            .take()
+            .expect("open hawkeye stdin")
+            .write_all(input.as_ref())
+            .expect("write hawkeye stdin");
+        child.wait_with_output().expect("wait for hawkeye")
     }
 
     pub fn git<I, S>(&self, arguments: I)
