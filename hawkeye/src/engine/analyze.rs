@@ -19,7 +19,7 @@ use super::Engine;
 use super::Rule;
 use super::lines;
 use super::style::Candidate;
-use crate::report::Outcome;
+use crate::report::FileOutcome;
 
 impl Engine {
     pub(super) fn analyze(
@@ -54,7 +54,7 @@ impl Engine {
             Ok(candidate) => candidate,
             Err(()) => {
                 return Analysis {
-                    outcome: Outcome::Conflict,
+                    outcome: FileOutcome::Conflict,
                     edit: None,
                 };
             }
@@ -72,14 +72,14 @@ impl Engine {
                         .any(|style| style.parse(input, end).is_some()))
             {
                 return Analysis {
-                    outcome: Outcome::Conflict,
+                    outcome: FileOutcome::Conflict,
                     edit: None,
                 };
             }
             let range = offset..end;
             if action == Action::Remove {
                 return Analysis {
-                    outcome: Outcome::Remove,
+                    outcome: FileOutcome::Remove,
                     edit: Some(Edit {
                         range,
                         replacement: String::new(),
@@ -91,12 +91,12 @@ impl Engine {
                 && input.get(range.clone()) == Some(rendered.as_str());
             if clean {
                 Analysis {
-                    outcome: Outcome::Clean,
+                    outcome: FileOutcome::Clean,
                     edit: None,
                 }
             } else {
                 Analysis {
-                    outcome: Outcome::Replace,
+                    outcome: FileOutcome::Replace,
                     edit: (action == Action::Format).then_some(Edit {
                         range,
                         replacement: rendered,
@@ -109,17 +109,17 @@ impl Engine {
                 .is_some_and(|candidate| has_keywords(&candidate.body, &self.keywords))
         }) {
             Analysis {
-                outcome: Outcome::Conflict,
+                outcome: FileOutcome::Conflict,
                 edit: None,
             }
         } else if action == Action::Remove {
             Analysis {
-                outcome: Outcome::Clean,
+                outcome: FileOutcome::Clean,
                 edit: None,
             }
         } else {
             Analysis {
-                outcome: Outcome::Add,
+                outcome: FileOutcome::Add,
                 edit: (action == Action::Format).then_some(Edit {
                     range: offset..header_start,
                     replacement: rendered,

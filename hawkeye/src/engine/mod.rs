@@ -39,7 +39,7 @@ use crate::config::FeatureMode;
 use crate::config::GitConfig;
 use crate::config::RuleConfig;
 use crate::report::FileOutcome;
-use crate::report::Outcome;
+use crate::report::FileReport;
 use crate::report::Report;
 use crate::template::HeaderTemplate;
 
@@ -77,7 +77,7 @@ struct Rule {
 }
 
 struct Analysis {
-    outcome: Outcome,
+    outcome: FileOutcome,
     edit: Option<Edit>,
 }
 
@@ -366,7 +366,7 @@ impl Plan {
             files: self
                 .files
                 .iter()
-                .map(|file| FileOutcome {
+                .map(|file| FileReport {
                     path: file.relative_path.clone(),
                     outcome: file.outcome,
                 })
@@ -398,7 +398,7 @@ impl Plan {
 struct PlannedFile {
     absolute_path: PathBuf,
     relative_path: PathBuf,
-    outcome: Outcome,
+    outcome: FileOutcome,
     updated: Option<Vec<u8>>,
 }
 
@@ -407,7 +407,7 @@ impl PlannedFile {
         Self {
             absolute_path,
             relative_path,
-            outcome: Outcome::Unsupported,
+            outcome: FileOutcome::Unsupported,
             updated: None,
         }
     }

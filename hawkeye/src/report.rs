@@ -18,34 +18,39 @@ use serde::Serialize;
 
 /// The planned outcome for one selected file.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum Outcome {
+pub enum FileOutcome {
     /// No change is needed.
+    #[serde(rename = "clean")]
     Clean,
     /// A canonical header should be added.
+    #[serde(rename = "add")]
     Add,
     /// A recognized header should be replaced.
+    #[serde(rename = "replace")]
     Replace,
     /// A recognized header should be removed.
+    #[serde(rename = "remove")]
     Remove,
     /// The file looks licensed but no safe edit range is known.
+    #[serde(rename = "conflict")]
     Conflict,
     /// The file has no rule or is not supported UTF-8 text.
+    #[serde(rename = "unsupported")]
     Unsupported,
 }
 
-/// The outcome for one path.
+/// One file entry in a report.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct FileOutcome {
+pub struct FileReport {
     /// The path relative to `files.root`.
     pub path: PathBuf,
     /// The planned outcome.
-    pub outcome: Outcome,
+    pub outcome: FileOutcome,
 }
 
 /// A report produced from a plan.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Report {
     /// All selected file outcomes.
-    pub files: Vec<FileOutcome>,
+    pub files: Vec<FileReport>,
 }

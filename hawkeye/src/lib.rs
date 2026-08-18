@@ -37,5 +37,5 @@ pub use self::engine::Plan;
 pub use self::error::Error;
 pub use self::error::ErrorKind;
 pub use self::report::FileOutcome;
-pub use self::report::Outcome;
+pub use self::report::FileReport;
 pub use self::report::Report;

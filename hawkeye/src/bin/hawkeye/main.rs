@@ -28,7 +28,7 @@ use exn::bail;
 use hawkeye::Action;
 use hawkeye::Config;
 use hawkeye::Engine;
-use hawkeye::Outcome;
+use hawkeye::FileOutcome;
 use logforth::filter::rustlog::RustLogFilterBuilder;
 
 #[derive(Debug, Parser)]
@@ -121,9 +121,12 @@ fn do_main() -> Result<ExitCode, Error> {
             let plan = engine.plan(Action::Check).or_raise(make_error)?;
             let report = plan.report();
             let failed = report.files.iter().any(|file| match file.outcome {
-                Outcome::Clean => false,
-                Outcome::Add | Outcome::Replace | Outcome::Remove | Outcome::Conflict => true,
-                Outcome::Unsupported => options.fail_on_unknown,
+                FileOutcome::Clean => false,
+                FileOutcome::Add
+                | FileOutcome::Replace
+                | FileOutcome::Remove
+                | FileOutcome::Conflict => true,
+                FileOutcome::Unsupported => options.fail_on_unknown,
             });
             (report, failed)
         }
@@ -135,10 +138,12 @@ fn do_main() -> Result<ExitCode, Error> {
             }
             let report = plan.report();
             let failed = report.files.iter().any(|file| match file.outcome {
-                Outcome::Clean => false,
-                Outcome::Add | Outcome::Replace | Outcome::Remove => options.fail_on_change,
-                Outcome::Conflict => true,
-                Outcome::Unsupported => options.fail_on_unknown,
+                FileOutcome::Clean => false,
+                FileOutcome::Add | FileOutcome::Replace | FileOutcome::Remove => {
+                    options.fail_on_change
+                }
+                FileOutcome::Conflict => true,
+                FileOutcome::Unsupported => options.fail_on_unknown,
             });
             (report, failed)
         }
@@ -150,10 +155,12 @@ fn do_main() -> Result<ExitCode, Error> {
             }
             let report = plan.report();
             let failed = report.files.iter().any(|file| match file.outcome {
-                Outcome::Clean => false,
-                Outcome::Add | Outcome::Replace | Outcome::Remove => options.fail_on_change,
-                Outcome::Conflict => true,
-                Outcome::Unsupported => options.fail_on_unknown,
+                FileOutcome::Clean => false,
+                FileOutcome::Add | FileOutcome::Replace | FileOutcome::Remove => {
+                    options.fail_on_change
+                }
+                FileOutcome::Conflict => true,
+                FileOutcome::Unsupported => options.fail_on_unknown,
             });
             (report, failed)
         }
@@ -170,12 +177,12 @@ fn do_main() -> Result<ExitCode, Error> {
         OutputFormat::Human => {
             for file in &report.files {
                 let label = match file.outcome {
-                    Outcome::Clean => continue,
-                    Outcome::Add => "add",
-                    Outcome::Replace => "replace",
-                    Outcome::Remove => "remove",
-                    Outcome::Conflict => "conflict",
-                    Outcome::Unsupported => "unsupported",
+                    FileOutcome::Clean => continue,
+                    FileOutcome::Add => "add",
+                    FileOutcome::Replace => "replace",
+                    FileOutcome::Remove => "remove",
+                    FileOutcome::Conflict => "conflict",
+                    FileOutcome::Unsupported => "unsupported",
                 };
                 writeln!(stdout, "{label:>11}  {}", file.path.display())
                     .or_raise(make_write_error)?;
@@ -187,10 +194,10 @@ fn do_main() -> Result<ExitCode, Error> {
             let mut unsupported = 0;
             for file in &report.files {
                 match file.outcome {
-                    Outcome::Clean => continue,
-                    Outcome::Add | Outcome::Replace | Outcome::Remove => changes += 1,
-                    Outcome::Conflict => conflicts += 1,
-                    Outcome::Unsupported => unsupported += 1,
+                    FileOutcome::Clean => continue,
+                    FileOutcome::Add | FileOutcome::Replace | FileOutcome::Remove => changes += 1,
+                    FileOutcome::Conflict => conflicts += 1,
+                    FileOutcome::Unsupported => unsupported += 1,
                 }
             }
             writeln!(

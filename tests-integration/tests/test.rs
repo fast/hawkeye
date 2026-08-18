@@ -24,7 +24,7 @@ use hawkeye::Action;
 use hawkeye::Config;
 use hawkeye::Engine;
 use hawkeye::ErrorKind;
-use hawkeye::Outcome;
+use hawkeye::FileOutcome;
 use jiff::Timestamp;
 use jiff::tz::TimeZone;
 use serde_json::Value;
@@ -176,7 +176,7 @@ ignore = "auto"
         .expect("fall back to filesystem discovery");
     let report = plan.report();
     assert_eq!(report.files.len(), 1);
-    assert_eq!(report.files[0].outcome, Outcome::Add);
+    assert_eq!(report.files[0].outcome, FileOutcome::Add);
 }
 
 #[cfg(target_os = "linux")]
