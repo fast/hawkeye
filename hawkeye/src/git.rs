@@ -149,7 +149,10 @@ impl GitRepo {
                     .with_source(source));
                 }
             };
-            if metadata.file_type().is_file() && path.starts_with(scan_root) {
+            let file_type = metadata.file_type();
+            if (file_type.is_file() || (file_type.is_symlink() && path.is_file()))
+                && path.starts_with(scan_root)
+            {
                 files.push(path);
             }
         }

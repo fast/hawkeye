@@ -64,7 +64,13 @@ impl Engine {
         }
 
         if let Some(header_path) = &self.header_path {
-            files.remove(header_path);
+            files.retain(|path| {
+                path != header_path
+                    && (!path.is_symlink()
+                        || path
+                            .canonicalize()
+                            .is_ok_and(|target| target != *header_path))
+            });
         }
         Ok(files.into_iter().collect())
     }
@@ -134,7 +140,11 @@ fn walk(
         let entry = entry.map_err(|err| {
             Error::new(ErrorKind::Unexpected, "cannot discover files").with_source(err)
         })?;
-        if !entry.file_type().is_some_and(|kind| kind.is_file()) {
+        let path = entry.path();
+        if !entry
+            .file_type()
+            .is_some_and(|kind| kind.is_file() || (kind.is_symlink() && path.is_file()))
+        {
             continue;
         }
         let path = entry.into_path();

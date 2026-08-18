@@ -670,6 +670,9 @@ includes = ["**/*.rs"]
     .expect("write configuration");
     fs::write(project.path().join("license.rs"), "Copyright 2026 Acme\n")
         .expect("write header template");
+    #[cfg(unix)]
+    std::os::unix::fs::symlink("license.rs", project.path().join("license-link.rs"))
+        .expect("create header template symlink");
     fs::write(project.path().join("main.rs"), "fn main() {}\n").expect("write source");
 
     let formatted = hawkeye(project.path(), ["format", "--output-format=json"]);
@@ -787,6 +790,52 @@ ignore = "disable"
         "// Copyright 2026 Acme\n\nfn main() {}\n"
     );
     assert_eq!(read_normalized(&source), read_normalized(&target));
+}
+
+#[cfg(unix)]
+#[test]
+fn format_follows_file_symlinks() {
+    use std::os::unix::fs::symlink;
+
+    for git_discovery in [false, true] {
+        let project = tempfile::tempdir().expect("create symlink project");
+        if git_discovery {
+            git(project.path(), ["init", "-b", "main"]);
+        }
+        fs::write(
+            project.path().join("licenserc.toml"),
+            format!(
+                r#"[header]
+text = "Copyright 2026 Acme"
+
+[files]
+includes = ["source.rs"]
+
+[git]
+ignore = "{}"
+"#,
+                if git_discovery { "auto" } else { "disable" }
+            ),
+        )
+        .expect("write configuration");
+        let target = project.path().join("target.txt");
+        let source = project.path().join("source.rs");
+        fs::write(&target, "fn main() {}\n").expect("write symlink target");
+        symlink("target.txt", &source).expect("create source symlink");
+
+        let formatted = hawkeye(project.path(), ["format"]);
+        assert_exit(&formatted, 0);
+        assert!(
+            fs::symlink_metadata(&source)
+                .expect("read source metadata")
+                .file_type()
+                .is_symlink()
+        );
+        assert_eq!(
+            read_normalized(&target),
+            "// Copyright 2026 Acme\n\nfn main() {}\n"
+        );
+    }
 }
 
 fn assert_format_lifecycle(name: &str, project: &Path, conflict: bool) {

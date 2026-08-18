@@ -150,6 +150,8 @@ Unavailable values remain `null`; they are never silently replaced with the curr
 
 `files.includes` and `files.excludes` are Git-ignore-style path filters relative to `files.root`, with `/` as the logical separator. An empty `includes` list means all files, after which excludes and rule selection still apply. `.git` is always excluded. HawkEye does not maintain another built-in list of generated or dependency directories.
 
+File symlinks are matched by their link path and formatting follows the link to its regular-file target without replacing the link itself. Directory symlinks are not traversed, and broken symlinks are ignored.
+
 `git.ignore` is `disable`, `auto`, or `enable` and defaults to `auto`. When a repository is available, HawkEye asks Git for tracked and non-ignored untracked files. This preserves Git's index semantics: a file force-added with `git add -f` remains selected even if it also matches `.gitignore`. Outside a repository, `auto` falls back to an ordinary filesystem walk because `.gitignore` has no repository context; `enable` requires `files.root` to be inside a Git worktree.
 
 Git-backed capabilities invoke the `git` executable from `PATH`. Standard GitHub-hosted runner images include Git; self-hosted runners and custom containers must provide it themselves.
