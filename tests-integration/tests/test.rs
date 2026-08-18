@@ -460,7 +460,7 @@ ignore = "disable"
     let checked = hawkeye(project.path(), ["check"]);
     assert_exit(&checked, 1);
     assert!(
-        stdout(&checked).ends_with("1 files, 1 changes, 0 conflicts, 0 unsupported\n"),
+        stdout(&checked).ends_with("1 file, 1 change, 0 conflicts, 0 unsupported\n"),
         "{}",
         stdout(&checked)
     );
@@ -745,7 +745,11 @@ includes = ["**/*.rs"]
 
     let implicit = hawkeye(&child, ["check"]);
     assert_exit(&implicit, 2);
-    assert!(stderr(&implicit).contains("licenserc.toml"));
+    assert!(stdout(&implicit).is_empty());
+    assert_eq!(
+        stderr(&implicit),
+        "error: cannot find a config file in any of the default locations: [\"licenserc.toml\", \".licenserc.toml\"]\n"
+    );
 
     let configured = hawkeye(&child, ["--config", "../licenserc.toml", "format"]);
     assert_exit(&configured, 0);

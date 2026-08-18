@@ -280,7 +280,6 @@ impl Engine {
             }
         };
         let paths = self.discover(repo.as_ref())?;
-        log::trace!("selected files: {paths:?}");
         let selected = paths
             .into_iter()
             .map(|path| {

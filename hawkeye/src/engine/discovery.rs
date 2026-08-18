@@ -35,7 +35,7 @@ impl Engine {
         {
             let mut files = repo.list_files(&self.root)?;
             files.retain(|path| self.selection.matched(path, false).is_whitelist());
-            (files, "the Git index")
+            (files, "the Git worktree")
         } else {
             let files = walk(
                 &self.root,

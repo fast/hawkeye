@@ -22,6 +22,8 @@ use clap::Args;
 use clap::Parser;
 use clap::Subcommand;
 use clap::ValueEnum;
+use exn::Exn;
+use exn::Frame;
 use exn::Result;
 use exn::ResultExt;
 use exn::bail;
@@ -89,11 +91,11 @@ struct EditOptions {
 
 fn main() -> ExitCode {
     logforth::starter_log::stderr()
-        .filter(RustLogFilterBuilder::from_default_env_or("info").build())
+        .filter(RustLogFilterBuilder::from_default_env_or("warn").build())
         .apply();
 
     do_main().unwrap_or_else(|err| {
-        log::error!("{err:?}");
+        emit_error(&err);
         ExitCode::from(2)
     })
 }
@@ -185,9 +187,16 @@ fn do_main() -> Result<ExitCode, Error> {
                     FileOutcome::Unsupported => unsupported += 1,
                 }
             }
+            let file_label = if files == 1 { "file" } else { "files" };
+            let change_label = if changes == 1 { "change" } else { "changes" };
+            let conflict_label = if conflicts == 1 {
+                "conflict"
+            } else {
+                "conflicts"
+            };
             writeln!(
                 stdout,
-                "{files} files, {changes} changes, {conflicts} conflicts, {unsupported} unsupported"
+                "{files} {file_label}, {changes} {change_label}, {conflicts} {conflict_label}, {unsupported} unsupported"
             )
             .or_raise(make_error)?;
         }
@@ -198,6 +207,23 @@ fn do_main() -> Result<ExitCode, Error> {
     } else {
         ExitCode::SUCCESS
     })
+}
+
+fn emit_error(err: &Exn<Error>) {
+    fn write_causes(writer: &mut impl Write, frame: &Frame, depth: usize) -> io::Result<()> {
+        for cause in frame.children() {
+            for _ in 0..depth {
+                writer.write_all(b"  ")?;
+            }
+            writeln!(writer, "caused by: {}", cause.error())?;
+            write_causes(writer, cause, depth + 1)?;
+        }
+        Ok(())
+    }
+
+    let mut stderr = io::stderr().lock();
+    let _ = writeln!(stderr, "error: {}", err.frame().error());
+    let _ = write_causes(&mut stderr, err.frame(), 1);
 }
 
 fn default_config() -> Result<PathBuf, Error> {
