@@ -35,7 +35,7 @@ pub enum Outcome {
 /// The outcome for one path.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct FileOutcome {
-    /// The path relative to `files.root`.
+    /// The display path relative to `files.root`.
     pub path: String,
     /// The planned outcome.
     pub outcome: Outcome,

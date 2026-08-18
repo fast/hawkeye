@@ -275,7 +275,18 @@ fn git_history_branches_dirty_files_and_untracked_directories() {
 
     let checked = hawkeye(project.path(), ["check", "--output-format=json"]);
     assert_exit(&checked, 1);
-    assert_json_snapshot("git_history__check_before", &checked);
+    let report = assert_json_snapshot("git_history__check_before", &checked);
+    let nested_path = Path::new("new")
+        .join("fresh.rs")
+        .to_string_lossy()
+        .into_owned();
+    assert!(
+        report["files"]
+            .as_array()
+            .expect("files array")
+            .iter()
+            .any(|file| file["path"] == nested_path)
+    );
 
     let formatted = hawkeye(project.path(), ["format", "--output-format=json"]);
     assert_exit(&formatted, 0);
@@ -1011,7 +1022,17 @@ fn assert_exit(output: &Output, expected: i32) {
 
 fn assert_json_snapshot(name: &str, output: &Output) -> Value {
     let report = json(output);
-    insta::assert_json_snapshot!(name, &report);
+    let snapshot = if cfg!(windows) {
+        let mut snapshot = report.clone();
+        for file in snapshot["files"].as_array_mut().expect("files array") {
+            let path = file["path"].as_str().expect("report path");
+            file["path"] = Value::String(path.replace('\\', "/"));
+        }
+        snapshot
+    } else {
+        report.clone()
+    };
+    insta::assert_json_snapshot!(name, &snapshot);
     report
 }
 

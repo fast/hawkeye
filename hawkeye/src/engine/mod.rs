@@ -330,16 +330,9 @@ impl Plan {
             files: self
                 .files
                 .iter()
-                .map(|file| {
-                    let path = file.relative_path.to_string_lossy();
-                    #[cfg(windows)]
-                    let path = path.replace('\\', "/");
-                    #[cfg(not(windows))]
-                    let path = path.into_owned();
-                    FileOutcome {
-                        path,
-                        outcome: file.outcome,
-                    }
+                .map(|file| FileOutcome {
+                    path: file.relative_path.to_string_lossy().into_owned(),
+                    outcome: file.outcome,
                 })
                 .collect(),
         }
