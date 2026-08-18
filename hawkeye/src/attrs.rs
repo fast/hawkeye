@@ -192,7 +192,7 @@ fn read_history(
         "--full-history",
         "--no-merges",
         "--no-renames",
-        "--format=\u{001e}%cI%x00%an",
+        "--format=%x00%x00%cI%x00%an",
         "--name-only",
         "-z",
     ];
@@ -204,8 +204,8 @@ fn read_history(
         // repository containing a selected path with an embedded line ending.
         arguments.push("--");
     }
-    // NUL separators preserve arbitrary path bytes. The record marker keeps commit metadata
-    // distinguishable from a path without relying on Git's quoting rules.
+    // Empty NUL-delimited records cannot be file paths, so a pair unambiguously frames commit
+    // metadata without relying on Git's quoting rules or reserving a valid path byte.
     repo.read_stdout(arguments, pathspecs.as_deref(), |reader| {
         parse_history(reader, selected)
     })
@@ -227,10 +227,16 @@ fn parse_history(
     reader: &mut dyn BufRead,
     selected: &BTreeMap<Vec<u8>, PathBuf>,
 ) -> Result<BTreeMap<PathBuf, GitAttrs>, Error> {
-    const MARKER: u8 = 0x1e;
+    #[derive(Clone, Copy)]
+    enum State {
+        Paths,
+        Author(Option<i16>),
+    }
+
     let mut current: Option<(i16, String)> = None;
-    let mut expecting_author = false;
     let mut expecting_first_path = false;
+    let mut empty_records = 0;
+    let mut state = State::Paths;
     let mut result = BTreeMap::<PathBuf, GitAttrs>::new();
     let mut record = Vec::new();
     loop {
@@ -245,24 +251,29 @@ fn parse_history(
             record.pop();
         }
         let record = record.as_slice();
-        if let Some(date) = record.strip_prefix(&[MARKER]) {
-            let year = date
+        if record.is_empty() {
+            empty_records += 1;
+            continue;
+        }
+        if matches!(state, State::Paths) && empty_records >= 2 {
+            let year = record
                 .get(..4)
                 .and_then(|year| std::str::from_utf8(year).ok())
                 .and_then(|year| year.parse::<i16>().ok());
-            current = year.map(|year| (year, String::new()));
-            expecting_author = true;
+            current = None;
             expecting_first_path = false;
+            empty_records = 0;
+            state = State::Author(year);
             continue;
         }
-        if expecting_author {
-            if let Some((_, author)) = &mut current {
-                *author = String::from_utf8_lossy(record).into_owned();
-            }
-            expecting_author = false;
+        if let State::Author(year) = state {
+            current = year.map(|year| (year, String::from_utf8_lossy(record).into_owned()));
             expecting_first_path = true;
+            empty_records = 0;
+            state = State::Paths;
             continue;
         }
+        empty_records = 0;
         let path = if expecting_first_path {
             expecting_first_path = false;
             // `--name-only -z` inserts one newline between the pretty header and its first path.
@@ -333,7 +344,7 @@ mod tests {
     fn history_parser_handles_records_across_small_buffers() {
         let selected_path = PathBuf::from("/repo/src/main.rs");
         let selected = BTreeMap::from([(b"src/main.rs".to_vec(), selected_path.clone())]);
-        let history = b"\x1e2024-01-02T00:00:00Z\0Alice\0\nsrc/main.rs\0other.rs\0\x1e2020-03-04T00:00:00Z\0Bob\0\nsrc/main.rs\0";
+        let history = b"\x00\x002024-01-02T00:00:00Z\x00Alice\x00\nsrc/main.rs\x00other.rs\x00\x00\x002020-03-04T00:00:00Z\x00Bob\x00\nsrc/main.rs\x00";
         let mut reader = BufReader::with_capacity(3, Cursor::new(history));
 
         let attrs = parse_history(&mut reader, &selected).expect("parse history");

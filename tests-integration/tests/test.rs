@@ -400,6 +400,48 @@ ignore = "disable"
     );
 }
 
+#[cfg(unix)]
+#[test]
+fn git_history_accepts_paths_starting_with_record_separator() {
+    use std::ffi::OsString;
+    use std::os::unix::ffi::OsStringExt;
+
+    let project = tempfile::tempdir().expect("create history repository");
+    let filename = OsString::from_vec(b"\x1e2020.rs".to_vec());
+    let source = project.path().join(filename);
+    fs::write(&source, "fn main() {}\n").expect("write source");
+    git(project.path(), ["init", "-b", "main"]);
+    git(project.path(), ["add", "--all"]);
+    git_commit(
+        project.path(),
+        "add source",
+        "Alice",
+        "alice@example.com",
+        "2019-06-01T12:00:00+0000",
+    );
+    fs::write(
+        project.path().join("licenserc.toml"),
+        r#"[header]
+text = "Copyright {{ attrs.git_file_created_year }} Acme"
+
+[files]
+includes = ["**/*.rs"]
+
+[git]
+file_attrs = "enable"
+ignore = "disable"
+"#,
+    )
+    .expect("write configuration");
+
+    let formatted = hawkeye(project.path(), ["format"]);
+    assert_exit(&formatted, 0);
+    assert_eq!(
+        read_normalized(source),
+        "// Copyright 2019 Acme\n\nfn main() {}\n"
+    );
+}
+
 #[test]
 fn shallow_repository_does_not_produce_git_years() {
     let project = tempfile::tempdir().expect("create shallow repository");
