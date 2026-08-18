@@ -65,3 +65,8 @@ pre-release-commit-message = "chore: release v{{version}}"
 shared-version = true
 sign-tag = true
 tag-name = "v{{version}}"
+
+# The profile that 'dist' will build with
+[profile.dist]
+inherits = "release"
+lto = "thin"
