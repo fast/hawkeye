@@ -133,10 +133,11 @@ fn do_main() -> Result<ExitCode, Error> {
         SubcommandOptions::Format(options) => {
             let make_error = || Error::new("failed to execute format command");
             let plan = engine.plan(Action::Format).or_raise(make_error)?;
-            if !options.dry_run {
-                plan.apply().or_raise(make_error)?;
-            }
-            let report = plan.report();
+            let report = if options.dry_run {
+                plan.report()
+            } else {
+                plan.apply().or_raise(make_error)?
+            };
             let failed = report.files.iter().any(|file| match file.outcome {
                 FileOutcome::Clean => false,
                 FileOutcome::Add | FileOutcome::Replace | FileOutcome::Remove => {
@@ -150,10 +151,11 @@ fn do_main() -> Result<ExitCode, Error> {
         SubcommandOptions::Remove(options) => {
             let make_error = || Error::new("failed to execute remove command");
             let plan = engine.plan(Action::Remove).or_raise(make_error)?;
-            if !options.dry_run {
-                plan.apply().or_raise(make_error)?;
-            }
-            let report = plan.report();
+            let report = if options.dry_run {
+                plan.report()
+            } else {
+                plan.apply().or_raise(make_error)?
+            };
             let failed = report.files.iter().any(|file| match file.outcome {
                 FileOutcome::Clean => false,
                 FileOutcome::Add | FileOutcome::Replace | FileOutcome::Remove => {

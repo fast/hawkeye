@@ -87,19 +87,8 @@ struct Edit {
 }
 
 impl Edit {
-    fn apply(&self, input: &str) -> String {
-        debug_assert!(self.range.start <= self.range.end);
-        debug_assert!(self.range.end <= input.len());
-        debug_assert!(input.is_char_boundary(self.range.start));
-        debug_assert!(input.is_char_boundary(self.range.end));
-
-        let mut output = String::with_capacity(
-            input.len() - (self.range.end - self.range.start) + self.replacement.len(),
-        );
-        output.push_str(&input[..self.range.start]);
-        output.push_str(&self.replacement);
-        output.push_str(&input[self.range.end..]);
-        output
+    fn apply(&self, input: &mut String) {
+        input.replace_range(self.range.clone(), &self.replacement);
     }
 }
 
@@ -282,11 +271,17 @@ impl Engine {
             debug_assert_ne!(git.file_attrs, FeatureMode::Enable);
             None
         };
-        let mut files = Vec::with_capacity(discovered.len());
+        let mut report = Report {
+            files: Vec::with_capacity(discovered.len()),
+        };
+        let mut edits = Vec::new();
 
         for (path, relative, rule) in discovered {
             let Some(rule) = rule else {
-                files.push(PlannedFile::unsupported(path, relative));
+                report.files.push(FileReport {
+                    path: relative,
+                    outcome: FileOutcome::Unsupported,
+                });
                 continue;
             };
 
@@ -298,7 +293,10 @@ impl Engine {
                 .with_source(err)
             })?;
             let Ok(input) = std::str::from_utf8(&original) else {
-                files.push(PlannedFile::unsupported(path, relative));
+                report.files.push(FileReport {
+                    path: relative,
+                    outcome: FileOutcome::Unsupported,
+                });
                 continue;
             };
             let file_attrs = FileAttrs::new(
@@ -307,21 +305,16 @@ impl Engine {
             )?;
             let header = self.render_header(&file_attrs)?;
             let analysis = self.analyze(rule, input, &header, action);
-            let updated = analysis
-                .edit
-                .as_ref()
-                .map(|edit| edit.apply(input))
-                .filter(|output| output.as_bytes() != original)
-                .map(String::into_bytes);
-            files.push(PlannedFile {
-                absolute_path: path,
-                relative_path: relative,
+            report.files.push(FileReport {
+                path: relative,
                 outcome: analysis.outcome,
-                updated,
             });
+            if let Some(edit) = analysis.edit {
+                edits.push(FileEdit { path, edit });
+            }
         }
 
-        Ok(Plan { files })
+        Ok(Plan { report, edits })
     }
 
     fn rule_for(&self, path: &Path) -> Option<&Rule> {
@@ -356,61 +349,44 @@ impl Engine {
 
 /// A complete plan produced before any file is written.
 pub struct Plan {
-    files: Vec<PlannedFile>,
+    report: Report,
+    edits: Vec<FileEdit>,
 }
 
 impl Plan {
     /// Builds the serializable report for this plan.
     pub fn report(&self) -> Report {
-        Report {
-            files: self
-                .files
-                .iter()
-                .map(|file| FileReport {
-                    path: file.relative_path.clone(),
-                    outcome: file.outcome,
-                })
-                .collect(),
-        }
+        self.report.clone()
     }
 
     /// Writes every planned edit directly to its source file.
     ///
     /// Callers must ensure that selected files are not modified between planning and applying.
-    pub fn apply(&self) -> Result<(), Error> {
-        for file in &self.files {
-            let Some(updated) = &file.updated else {
-                continue;
-            };
-            fs::write(&file.absolute_path, updated).map_err(|err| {
+    pub fn apply(self) -> Result<Report, Error> {
+        for file in self.edits {
+            let mut input = fs::read_to_string(&file.path).map_err(|err| {
                 Error::new(
                     ErrorKind::Unexpected,
-                    format!("cannot write {}", file.absolute_path.display()),
+                    format!("cannot read {}", file.path.display()),
+                )
+                .with_source(err)
+            })?;
+            file.edit.apply(&mut input);
+            fs::write(&file.path, input).map_err(|err| {
+                Error::new(
+                    ErrorKind::Unexpected,
+                    format!("cannot write {}", file.path.display()),
                 )
                 .with_source(err)
             })?;
         }
-        Ok(())
+        Ok(self.report)
     }
 }
 
-/// The analysis and optional replacement planned for one file.
-struct PlannedFile {
-    absolute_path: PathBuf,
-    relative_path: PathBuf,
-    outcome: FileOutcome,
-    updated: Option<Vec<u8>>,
-}
-
-impl PlannedFile {
-    fn unsupported(absolute_path: PathBuf, relative_path: PathBuf) -> Self {
-        Self {
-            absolute_path,
-            relative_path,
-            outcome: FileOutcome::Unsupported,
-            updated: None,
-        }
-    }
+struct FileEdit {
+    path: PathBuf,
+    edit: Edit,
 }
 
 impl Rule {
