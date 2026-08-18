@@ -207,6 +207,31 @@ ignore = "enable"
     assert_eq!(report["files"][0]["outcome"], "add");
 }
 
+#[cfg(target_os = "linux")]
+#[test]
+fn json_report_returns_an_error_for_non_utf8_paths() {
+    use std::os::unix::ffi::OsStringExt;
+
+    let project = tempfile::tempdir().expect("create non-UTF-8 report project");
+    fs::write(
+        project.path().join("licenserc.toml"),
+        r#"[header]
+text = "Copyright 2026 Acme"
+
+[files]
+excludes = ["licenserc.toml"]
+"#,
+    )
+    .expect("write configuration");
+    let filename = std::ffi::OsString::from_vec(b"source-\xff.rs".to_vec());
+    fs::write(project.path().join(filename), "fn main() {}\n").expect("write source");
+
+    let checked = hawkeye(project.path(), ["check", "--output-format=json"]);
+    assert_exit(&checked, 2);
+    assert!(stderr(&checked).contains("cannot serialize JSON report"));
+    assert!(!stderr(&checked).contains("panicked"));
+}
+
 #[cfg(unix)]
 #[test]
 fn report_paths_preserve_backslashes_in_unix_filenames() {

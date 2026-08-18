@@ -13,6 +13,8 @@
 // limitations under the License.
 
 use std::fmt;
+use std::io;
+use std::io::Write;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
@@ -157,10 +159,13 @@ fn do_main() -> Result<ExitCode, Error> {
         }
     };
 
+    let make_write_error = || Error::new("cannot write report to stdout");
+    let mut stdout = io::stdout().lock();
     match output_format {
         OutputFormat::Json => {
-            let report = serde_json::to_string_pretty(&report).unwrap();
-            println!("{report}");
+            let report = serde_json::to_string_pretty(&report)
+                .or_raise(|| Error::new("cannot serialize JSON report"))?;
+            writeln!(stdout, "{report}").or_raise(make_write_error)?;
         }
         OutputFormat::Human => {
             for file in &report.files {
@@ -172,7 +177,8 @@ fn do_main() -> Result<ExitCode, Error> {
                     Outcome::Conflict => "conflict",
                     Outcome::Unsupported => "unsupported",
                 };
-                println!("{label:>11}  {}", file.path.display());
+                writeln!(stdout, "{label:>11}  {}", file.path.display())
+                    .or_raise(make_write_error)?;
             }
 
             let files = report.files.len();
@@ -187,9 +193,11 @@ fn do_main() -> Result<ExitCode, Error> {
                     Outcome::Unsupported => unsupported += 1,
                 }
             }
-            println!(
+            writeln!(
+                stdout,
                 "{files} files, {changes} changes, {conflicts} conflicts, {unsupported} unsupported"
-            );
+            )
+            .or_raise(make_write_error)?;
         }
     }
 
