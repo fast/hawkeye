@@ -26,7 +26,7 @@ use crate::ErrorKind;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct FileAttrs {
-    pub filename: String,
+    pub filename: Option<String>,
     pub disk_file_created_year: Option<i16>,
     pub disk_file_modified_year: Option<i16>,
     pub git_file_created_year: Option<i16>,
@@ -46,11 +46,9 @@ impl FileAttrs {
         Ok(Self {
             filename: path
                 .file_name()
-                .expect("discovery only returns files")
-                .to_string_lossy()
-                .into_owned(),
-            disk_file_created_year: metadata.created().ok().and_then(utc_year),
-            disk_file_modified_year: metadata.modified().ok().and_then(utc_year),
+                .map(|name| name.to_string_lossy().into_owned()),
+            disk_file_created_year: metadata.created().ok().and_then(file_time_to_year),
+            disk_file_modified_year: metadata.modified().ok().and_then(file_time_to_year),
             git_file_created_year: git.and_then(|history| history.created_year),
             git_file_modified_year: git.and_then(|history| history.modified_year),
             git_authors: git
@@ -60,8 +58,7 @@ impl FileAttrs {
     }
 }
 
-fn utc_year(time: SystemTime) -> Option<i16> {
-    Timestamp::try_from(time)
-        .ok()
-        .map(|timestamp| timestamp.to_zoned(TimeZone::UTC).year())
+fn file_time_to_year(time: SystemTime) -> Option<i16> {
+    let ts = Timestamp::try_from(time).ok()?;
+    Some(ts.to_zoned(TimeZone::system()).year())
 }

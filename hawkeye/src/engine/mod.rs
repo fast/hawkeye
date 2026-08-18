@@ -342,11 +342,11 @@ impl Engine {
             .iter()
             .find(|keyword| !folded.contains(keyword.as_str()))
         {
+            let filename = attrs.filename.as_deref();
             return Err(Error::new(
                 ErrorKind::ConfigInvalid,
                 format!(
-                    "header template output for {:?} does not contain recognition keyword {keyword:?}",
-                    attrs.filename
+                    "header template output for {filename:?} does not contain recognition keyword {keyword:?}"
                 ),
             ));
         }
