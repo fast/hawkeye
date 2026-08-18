@@ -150,8 +150,12 @@ fn detect_eol(input: &str) -> &'static str {
 }
 
 fn preamble_offset(input: &str) -> usize {
-    let mut position = usize::from(input.starts_with('\u{feff}')) * '\u{feff}'.len_utf8();
-    let Some((first, range)) = lines(input, position).next() else {
+    let mut position = if input.starts_with('\u{feff}') {
+        '\u{feff}'.len_utf8()
+    } else {
+        0
+    };
+    let Some((first, line_range)) = lines(input, position).next() else {
         return position;
     };
     let lower = first.to_ascii_lowercase();
@@ -164,18 +168,18 @@ fn preamble_offset(input: &str) -> usize {
         || first.starts_with("%YAML")
         || first.starts_with("%TAG")
     {
-        position = range.end;
+        position = line_range.end;
     }
 
-    while let Some((line, range)) = lines(input, position).next() {
+    while let Some((line, line_range)) = lines(input, position).next() {
         if !line.starts_with("%YAML") && !line.starts_with("%TAG") {
             break;
         }
-        position = range.end;
+        position = line_range.end;
     }
 
     for _ in 0..2 {
-        let Some((line, range)) = lines(input, position).next() else {
+        let Some((line, line_range)) = lines(input, position).next() else {
             break;
         };
         let lower = line.to_ascii_lowercase();
@@ -187,17 +191,17 @@ fn preamble_offset(input: &str) -> usize {
         if !magic {
             break;
         }
-        position = range.end;
+        position = line_range.end;
     }
     position
 }
 
 fn skip_blank_lines(input: &str, mut position: usize) -> usize {
-    for (line, range) in lines(input, position) {
+    for (line, line_range) in lines(input, position) {
         if !line.trim().is_empty() {
             break;
         }
-        position = range.end;
+        position = line_range.end;
     }
     position
 }
@@ -298,12 +302,12 @@ fn parse_line_style(
 ) -> Option<StyleMatch> {
     let mut end = start;
     let mut body = Vec::new();
-    for (line, raw_range) in lines(input, start) {
+    for (line, line_range) in lines(input, start) {
         let Some(content) = strip_affixes(line, prefix, suffix, pad_lines) else {
             break;
         };
         body.push(content);
-        end = raw_range.start + line.len();
+        end = line_range.start + line.len();
     }
     if body.is_empty() {
         None
@@ -330,9 +334,9 @@ fn parse_block_style(
     }
 
     let mut body = Vec::new();
-    for (content, raw_range) in lines {
+    for (content, line_range) in lines {
         if content == closing {
-            let end = raw_range.start + content.len();
+            let end = line_range.start + content.len();
             return Some(StyleMatch {
                 range: start..end,
                 body: body.join("\n"),
@@ -367,13 +371,13 @@ fn strip_affixes<'a>(
 fn lines(input: &str, start: usize) -> impl Iterator<Item = (&str, Range<usize>)> {
     let mut position = start;
     input[start..].split_inclusive('\n').map(move |line| {
-        let raw_range = position..position + line.len();
-        position = raw_range.end;
+        let line_range = position..position + line.len();
+        position = line_range.end;
         let content = if let Some(content) = line.strip_suffix('\n') {
             content.strip_suffix('\r').unwrap_or(content)
         } else {
             line
         };
-        (content, raw_range)
+        (content, line_range)
     })
 }
