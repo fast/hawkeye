@@ -12,13 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#[path = "test/cli.rs"]
-mod cli;
+#[path = "test/command.rs"]
+mod command;
 #[path = "test/config.rs"]
 mod config;
 #[path = "test/format.rs"]
 mod format;
 #[path = "test/git.rs"]
 mod git;
-#[path = "test/support.rs"]
-mod support;

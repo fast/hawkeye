@@ -13,7 +13,7 @@
 # limitations under the License.
 
 [workspace]
-members = ["hawkeye", "xtask"]
+members = ["hawkeye", "tests-integration", "xtask"]
 resolver = "3"
 
 [workspace.package]

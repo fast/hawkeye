@@ -1,12 +1,10 @@
-# Integration test cases
+# Integration tests
 
-The test harness lives at `hawkeye/tests/test.rs`, where Cargo exposes the package's real `hawkeye` binary without another build step or binary-path discovery. This directory contains only repository trees that are useful to inspect as data.
+This package runs the Cargo-built `hawkeye` binary against complete repository fixtures. `tests/test.rs` is the suite entry point, its neighboring modules group related behavior, and `src/lib.rs` contains the shared temporary-project driver.
 
-Each case is copied into a fresh temporary worktree before a test runs. Tests may then initialize Git, populate its index, configure ignore sources, create dated history, or add dirty and untracked files. The checked-in cases are never modified.
+Each fixture is copied to a temporary directory before use. Tests may initialize Git, create history, or change the copied files without modifying the checked-in case.
 
-Expected reports and changed file contents are asserted next to the action in the corresponding test module. There is no snapshot update workflow: a behavior change must make the new expectation explicit in code.
-
-Run the complete suite through the repository workflow:
+Expected reports and file contents are asserted next to each command. Run the suite through the repository workflow so the `hawkeye` binary is available to the test driver:
 
 ```shell
 cargo x test

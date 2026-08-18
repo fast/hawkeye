@@ -14,15 +14,15 @@
 
 use std::fs;
 
-use super::support::Project;
-use super::support::assert_exit;
-use super::support::assert_report;
-use super::support::stderr;
-use super::support::stdout;
+use test_integration::Project;
+use test_integration::assert_exit;
+use test_integration::assert_report;
+use test_integration::stderr;
+use test_integration::stdout;
 
 #[test]
 fn reports_and_exit_codes_follow_command_policy() {
-    let project = Project::new();
+    let project = Project::empty();
     project.write(
         "licenserc.toml",
         r#"[header]
@@ -79,7 +79,7 @@ ignore = "disable"
 
 #[test]
 fn dry_run_reports_changes_without_writing_files() {
-    let project = Project::new();
+    let project = Project::empty();
     project.write(
         "licenserc.toml",
         r#"[header]
@@ -107,7 +107,7 @@ ignore = "disable"
 
 #[test]
 fn errors_and_debug_logs_use_stderr_only() {
-    let project = Project::new();
+    let project = Project::empty();
     let missing_config = project.run(["check"]);
     assert_exit(&missing_config, 2);
     assert!(stdout(&missing_config).is_empty());
@@ -148,7 +148,7 @@ ignore = "disable"
 
 #[test]
 fn config_lookup_is_local_and_prefers_licenserc() {
-    let project = Project::new();
+    let project = Project::empty();
     project.write(
         "licenserc.toml",
         r#"[header]
@@ -178,7 +178,7 @@ includes = ["**/*.rs"]
         "// Copyright 2026 Parent\n\nfn child() {}\n"
     );
 
-    let fallback = Project::new();
+    let fallback = Project::empty();
     fs::create_dir(fallback.path().join("licenserc.toml"))
         .expect("create non-file primary candidate");
     fallback.write(
@@ -203,7 +203,7 @@ includes = ["**/*.rs"]
 #[cfg(unix)]
 #[test]
 fn report_paths_preserve_unix_filename_characters() {
-    let project = Project::new();
+    let project = Project::empty();
     project.write(
         "licenserc.toml",
         r#"[header]
@@ -229,7 +229,7 @@ fn non_utf8_report_paths_return_a_diagnostic() {
     use std::ffi::OsString;
     use std::os::unix::ffi::OsStringExt;
 
-    let project = Project::new();
+    let project = Project::empty();
     project.write(
         "licenserc.toml",
         r#"[header]

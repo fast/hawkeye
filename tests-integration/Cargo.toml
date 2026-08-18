@@ -13,41 +13,28 @@
 # limitations under the License.
 
 [package]
-description = "A license header checker and formatter."
-name = "hawkeye"
-version = "7.0.0-alpha.1"
+name = "test-integration"
+publish = false
+version = "0.0.0"
 
 edition.workspace = true
-homepage.workspace = true
-license.workspace = true
-readme.workspace = true
-repository.workspace = true
 rust-version.workspace = true
 
-[package.metadata.docs.rs]
-all-features = true
-rustdoc-args = ["--cfg", "docsrs"]
+[package.metadata.release]
+release = false
 
 [lib]
-path = "src/lib.rs"
-
-[[bin]]
-name = "hawkeye"
-path = "src/bin/hawkeye/main.rs"
+doc = false
+doctest = false
 
 [dependencies]
-clap = { workspace = true }
-exn = { workspace = true }
-gix = { workspace = true }
-ignore = { workspace = true }
-jiff = { workspace = true }
-log = { workspace = true }
-logforth = { workspace = true }
-minijinja = { workspace = true }
-same-file = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-toml = { workspace = true }
+tempfile = { workspace = true }
+
+[dev-dependencies]
+hawkeye = { workspace = true }
+jiff = { workspace = true }
 
 [lints]
 workspace = true

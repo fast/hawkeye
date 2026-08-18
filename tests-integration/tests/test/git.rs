@@ -21,11 +21,10 @@ use hawkeye::ErrorKind;
 use hawkeye::FileOutcome;
 use jiff::Timestamp;
 use jiff::tz::TimeZone;
-
-use super::support::Project;
-use super::support::assert_exit;
-use super::support::assert_report;
-use super::support::stderr;
+use test_integration::Project;
+use test_integration::assert_exit;
+use test_integration::assert_report;
+use test_integration::stderr;
 
 #[test]
 fn git_discovery_combines_tracked_files_and_ignore_sources() {
@@ -104,7 +103,7 @@ fn git_history_tracks_branches_dirty_files_and_untracked_files() {
 
 #[test]
 fn nested_roots_scope_worktree_status_for_git_attributes() {
-    let project = Project::new();
+    let project = Project::empty();
     project.write("source/main.rs", "fn main() {}\n");
     project.write("outside.rs", "fn outside() {}\n");
     project.git(["init", "-b", "main"]);
@@ -147,7 +146,7 @@ ignore = "enable"
 
 #[test]
 fn recreated_paths_keep_their_earliest_commit_year() {
-    let project = Project::new();
+    let project = Project::empty();
     project.git(["init", "-b", "main"]);
     project.git(["config", "user.name", "Current User"]);
     project.git(["config", "user.email", "current@example.com"]);
@@ -201,7 +200,7 @@ ignore = "disable"
 fn git_history_accepts_control_characters_in_paths() {
     use std::os::unix::ffi::OsStringExt;
 
-    let project = Project::new();
+    let project = Project::empty();
     let paths = [
         OsString::from_vec(b"\x1e2020.rs".to_vec()),
         OsString::from_vec(b"line\nbreak.rs".to_vec()),
@@ -268,7 +267,7 @@ ignore = "enable"
 
 #[test]
 fn shallow_history_is_required_only_for_supported_files() {
-    let project = Project::new();
+    let project = Project::empty();
     project.write("main.rs", "fn main() {}\n");
     project.git(["init", "-b", "main"]);
     project.git(["config", "user.name", "Current User"]);
@@ -320,7 +319,7 @@ ignore = "disable"
 
 #[test]
 fn gix_supports_sha256_repositories_without_a_git_executable() {
-    let project = Project::new();
+    let project = Project::empty();
     project.git(["init", "--object-format=sha256", "-b", "main"]);
     project.write("main.rs", "fn main() {}\n");
     project.git(["add", "main.rs"]);
@@ -358,7 +357,7 @@ ignore = "enable"
 
 #[test]
 fn automatic_git_mode_falls_back_only_when_no_repository_exists() {
-    let project = Project::new();
+    let project = Project::empty();
     project.write("main.rs", "fn main() {}\n");
     project.write(
         "licenserc.toml",

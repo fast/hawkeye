@@ -14,9 +14,9 @@
 
 use std::fs;
 
-use super::support::Project;
-use super::support::assert_exit;
-use super::support::assert_report;
+use test_integration::Project;
+use test_integration::assert_exit;
+use test_integration::assert_report;
 
 #[test]
 fn mixed_repository_formats_checks_and_removes_headers() {
@@ -204,7 +204,7 @@ fn ambiguous_or_partial_headers_are_never_edited() {
         "// Confidential © Siemens 2026\n\n// An ordinary leading comment.\n\nfn ordinary_comment() {}\n"
     );
 
-    let unsafe_project = Project::new();
+    let unsafe_project = Project::empty();
     unsafe_project.write(
         "licenserc.toml",
         r#"[header]
@@ -234,7 +234,7 @@ includes = ["**/*.rs"]
 
 #[test]
 fn header_template_files_are_not_selected_as_sources() {
-    let project = Project::new();
+    let project = Project::empty();
     project.write(
         "licenserc.toml",
         r#"[header]
@@ -263,7 +263,7 @@ includes = ["**/*.rs"]
 
 #[test]
 fn format_writes_through_hard_links() {
-    let project = Project::new();
+    let project = Project::empty();
     project.write(
         "licenserc.toml",
         r#"[header]
@@ -295,7 +295,7 @@ ignore = "disable"
 #[test]
 fn format_writes_through_file_symlinks() {
     for git_ignore in ["disable", "auto"] {
-        let project = Project::new();
+        let project = Project::empty();
         if git_ignore == "auto" {
             project.git(["init", "-b", "main"]);
         }

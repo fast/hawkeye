@@ -15,14 +15,13 @@
 use hawkeye::Config;
 use hawkeye::Engine;
 use hawkeye::ErrorKind;
-
-use super::support::Project;
-use super::support::assert_exit;
-use super::support::stderr;
+use test_integration::Project;
+use test_integration::assert_exit;
+use test_integration::stderr;
 
 #[test]
 fn public_validation_matches_engine_initialization() {
-    let project = Project::new();
+    let project = Project::empty();
     project.write(
         "licenserc.toml",
         r#"[header]
@@ -67,7 +66,7 @@ text = "Copyright 2026 Acme"
 
 #[test]
 fn discovery_patterns_are_checked_when_the_engine_is_built() {
-    let project = Project::new();
+    let project = Project::empty();
     project.write(
         "licenserc.toml",
         r#"[header]
@@ -93,7 +92,7 @@ includes = ["["]
 
 #[test]
 fn rules_use_first_match_and_user_rules_override_builtins() {
-    let project = Project::new();
+    let project = Project::empty();
     project.write(
         "licenserc.toml",
         r#"[header]
@@ -136,7 +135,7 @@ style_out = "script"
 
 #[test]
 fn input_styles_default_validate_and_deduplicate() {
-    let project = Project::new();
+    let project = Project::empty();
     project.write(
         "licenserc.toml",
         r#"[header]
@@ -201,7 +200,7 @@ styles_in = ["doubleslash", "slashstar", "slashstar"]
 
 #[test]
 fn custom_styles_can_override_builtins_with_a_warning() {
-    let project = Project::new();
+    let project = Project::empty();
     project.write(
         "licenserc.toml",
         r##"[header]
@@ -228,7 +227,7 @@ prefix = "# "
 
 #[test]
 fn rendered_headers_must_contain_every_recognition_keyword() {
-    let project = Project::new();
+    let project = Project::empty();
     project.write(
         "licenserc.toml",
         r#"[header]
@@ -250,7 +249,7 @@ includes = ["**/*.rs"]
 
 #[test]
 fn parse_errors_name_the_selected_config_file() {
-    let project = Project::new();
+    let project = Project::empty();
     project.write(
         "bad.toml",
         r#"[header]

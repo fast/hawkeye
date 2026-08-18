@@ -23,13 +23,14 @@ use serde::Deserialize;
 use tempfile::TempDir;
 
 pub struct Project {
-    _temporary: TempDir,
+    #[expect(dead_code, reason = "keeps the temporary directory alive")]
+    temporary: TempDir,
     root: PathBuf,
     git_config: PathBuf,
 }
 
 impl Project {
-    pub fn new() -> Self {
+    pub fn empty() -> Self {
         Self::with_name("worktree")
     }
 
@@ -46,18 +47,16 @@ impl Project {
         let git_config = temporary.path().join("gitconfig");
         fs::write(&git_config, "").expect("create isolated Git config");
         Self {
-            _temporary: temporary,
+            temporary,
             root,
             git_config,
         }
     }
 
     pub fn from_case(name: &str) -> Self {
-        let project = Self::new();
+        let project = Self::empty();
         let source = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .expect("hawkeye package is inside the workspace")
-            .join("tests-integration/cases")
+            .join("cases")
             .join(name);
         copy_tree(&source, &project.root);
         project
@@ -88,7 +87,7 @@ impl Project {
         I: IntoIterator<Item = S>,
         S: AsRef<OsStr>,
     {
-        let mut command = Command::new(env!("CARGO_BIN_EXE_hawkeye"));
+        let mut command = Command::new(hawkeye_binary());
         command
             .args(arguments)
             .current_dir(&self.root)
@@ -240,4 +239,19 @@ fn copy_tree(source: &Path, destination: &Path) {
             fs::copy(entry.path(), target).expect("copy test case file");
         }
     }
+}
+
+fn hawkeye_binary() -> PathBuf {
+    let test = std::env::current_exe().expect("locate integration test executable");
+    let profile = test
+        .parent()
+        .and_then(Path::parent)
+        .expect("integration test executable is inside a Cargo profile directory");
+    let binary = profile.join(format!("hawkeye{}", std::env::consts::EXE_SUFFIX));
+    assert!(
+        binary.is_file(),
+        "missing HawkEye binary at {}; run integration tests with `cargo x test`",
+        binary.display()
+    );
+    binary
 }
