@@ -33,11 +33,8 @@ impl Engine {
         let (files, source) = if self.git.ignore != FeatureMode::Disable
             && let Some(repo) = repo
         {
-            let files = repo
-                .list_files(&self.root)?
-                .into_iter()
-                .filter(|path| self.selection.matched(path, false).is_whitelist())
-                .collect::<BTreeSet<_>>();
+            let mut files = repo.list_files(&self.root)?;
+            files.retain(|path| self.selection.matched(path, false).is_whitelist());
             (files, "the Git index")
         } else {
             let files = walk(

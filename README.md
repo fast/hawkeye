@@ -45,7 +45,7 @@ hawkeye remove
 # Emit the stable data shape without a separate report version.
 hawkeye check --output-format json
 
-# Inspect file discovery, Git commands, and timing.
+# Inspect file discovery, Git operations, and timing.
 RUST_LOG=hawkeye=debug hawkeye check
 ```
 
@@ -154,7 +154,7 @@ File symlinks are matched by their link path and formatting follows the link to 
 
 `git.ignore` is `disable`, `auto`, or `enable` and defaults to `auto`. When a repository is available, HawkEye asks Git for tracked and non-ignored untracked files. This preserves Git's index semantics: a file force-added with `git add -f` remains selected even if it also matches `.gitignore`. Outside a repository, `auto` falls back to an ordinary filesystem walk because `.gitignore` has no repository context; `enable` requires `files.root` to be inside a Git worktree.
 
-Git-backed capabilities invoke the `git` executable from `PATH`. Standard GitHub-hosted runner images include Git; self-hosted runners and custom containers must provide it themselves.
+Git-backed capabilities read repositories in-process and do not require a `git` executable at runtime.
 
 ### Rules and styles
 
@@ -168,9 +168,9 @@ Built-in output styles include line comments for slash, hash, dash, percent, sem
 
 ### Git file attributes
 
-`git.file_attrs` is `disable`, `auto`, or `enable` and defaults to `disable` because history traversal has a cost. `auto` leaves attributes unavailable when no usable repository is found, while `enable` requires one. Once a repository is selected, both modes report Git command failures rather than silently returning incomplete attributes.
+`git.file_attrs` is `disable`, `auto`, or `enable` and defaults to `disable` because history traversal has a cost. `auto` leaves attributes unavailable when no usable repository is found, while `enable` requires one. Once a repository is selected, both modes report Git operation failures rather than silently returning incomplete attributes.
 
-History is traversed once per run, limited to the selected repository paths, and parsed as a stream instead of retaining the complete `git log` output. Each non-merge commit is compared through Git's normal changed-path output, avoiding a merge commit being attributed as a file modification merely because histories joined. Dirty tracked files and files inside untracked directories use the current UTC year and current configured Git author.
+History walks the commits reachable from `HEAD` once per run. Each non-merge commit tree is compared with its sole parent, and only changes to selected paths are retained; skipping merge diffs avoids attributing a modification merely because histories joined. Rename detection is disabled, so a renamed path begins its own history. Dirty tracked files and files inside untracked directories use the current UTC year and current configured Git author.
 
 A shallow repository cannot provide truthful creation years. In that situation, `file_attrs = "enable"` fails with an instruction to fetch complete history; `auto` logs a warning and leaves Git-derived attributes unavailable instead of manufacturing years from the shallow boundary.
 

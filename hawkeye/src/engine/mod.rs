@@ -295,7 +295,7 @@ impl Engine {
         let git_history = if self.git.file_attrs == FeatureMode::Disable || supported.is_empty() {
             None
         } else if let Some(repo) = repo.as_ref() {
-            if repo.is_shallow()? {
+            if repo.is_shallow() {
                 let message = "Git file attributes require complete history, but the repository is shallow; fetch complete history first";
                 if self.git.file_attrs == FeatureMode::Auto {
                     log::warn!("{message}; continuing with Git file attributes disabled");

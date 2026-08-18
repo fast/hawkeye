@@ -261,6 +261,98 @@ ignore = "auto"
     assert_eq!(report.files[0].outcome, FileOutcome::Add);
 }
 
+#[test]
+fn automatic_git_discovery_does_not_hide_a_broken_repository() {
+    let project = tempfile::tempdir().expect("create broken Git repository");
+    git(project.path(), ["init", "-b", "main"]);
+    fs::write(project.path().join(".git/config"), "[broken\n").expect("break repository config");
+    fs::write(project.path().join("main.rs"), "fn main() {}\n").expect("write source");
+    fs::write(
+        project.path().join("licenserc.toml"),
+        r#"[header]
+text = "Copyright 2026 Acme"
+
+[files]
+includes = ["**/*.rs"]
+
+[git]
+ignore = "auto"
+"#,
+    )
+    .expect("write configuration");
+
+    let checked = hawkeye(project.path(), ["check"]);
+    assert_exit(&checked, 2);
+    assert!(stderr(&checked).contains("cannot open Git repository"));
+}
+
+#[test]
+fn git_sha256_repository_history() {
+    let project = tempfile::tempdir().expect("create SHA-256 Git repository");
+    git(
+        project.path(),
+        ["init", "--object-format=sha256", "-b", "main"],
+    );
+    fs::write(project.path().join("main.rs"), "fn main() {}\n").expect("write source");
+    git(project.path(), ["add", "main.rs"]);
+    git_commit(
+        project.path(),
+        "add source",
+        "Alice",
+        "alice@example.com",
+        "2019-06-01T12:00:00+0000",
+    );
+    fs::write(
+        project.path().join("licenserc.toml"),
+        r#"[header]
+text = "Copyright {{ attrs.git_file_created_year }} Acme"
+
+[files]
+includes = ["**/*.rs"]
+
+[git]
+file_attrs = "enable"
+ignore = "enable"
+"#,
+    )
+    .expect("write configuration");
+
+    let formatted = hawkeye(project.path(), ["format"]);
+    assert_exit(&formatted, 0);
+    assert_eq!(
+        read_normalized(project.path().join("main.rs")),
+        "// Copyright 2019 Acme\n\nfn main() {}\n"
+    );
+}
+
+#[test]
+fn git_capabilities_do_not_require_a_git_executable() {
+    let project = tempfile::tempdir().expect("create Git repository");
+    fs::write(project.path().join("main.rs"), "fn main() {}\n").expect("write source");
+    fs::write(
+        project.path().join("licenserc.toml"),
+        git_attrs_config("enable"),
+    )
+    .expect("write configuration");
+    git(project.path(), ["init", "-b", "main"]);
+    git(project.path(), ["add", "main.rs"]);
+    git_commit(
+        project.path(),
+        "add source",
+        "Alice",
+        "alice@example.com",
+        "2019-06-01T12:00:00+0000",
+    );
+
+    let checked = Command::new(hawkeye_binary())
+        .arg("check")
+        .current_dir(project.path())
+        .env("PATH", "")
+        .output()
+        .expect("run hawkeye without Git in PATH");
+    assert_exit(&checked, 1);
+}
+
 #[cfg(target_os = "linux")]
 #[test]
 fn git_discovery_preserves_non_utf8_repository_roots() {

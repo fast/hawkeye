@@ -14,21 +14,24 @@
 
 use std::collections::BTreeSet;
 use std::collections::HashMap;
-use std::ffi::OsString;
-use std::io::BufRead;
+use std::convert::Infallible;
+use std::ops::ControlFlow;
 use std::path::Path;
 use std::path::PathBuf;
 use std::time::Instant;
 
+use gix::bstr::BString;
 use jiff::Timestamp;
+use jiff::tz::Offset;
 use jiff::tz::TimeZone;
 
 use super::Repository;
 use super::encode_path;
-use super::output_failure;
-use super::read_record;
+use super::scan_pathspec;
 use crate::Error;
 use crate::ErrorKind;
+
+const OBJECT_CACHE_LIMIT: usize = 16 * 1024 * 1024;
 
 #[derive(Debug, Clone, Default)]
 pub struct FileHistory {
@@ -72,7 +75,7 @@ impl Repository {
 
         let worktree_year = Timestamp::now().to_zoned(TimeZone::UTC).year();
         let started = Instant::now();
-        let author = self.author_name()?;
+        let author = self.author_name();
         let mut history = self.read_history(&selected)?;
         self.apply_worktree_status(
             relative_root,
@@ -97,187 +100,179 @@ impl Repository {
         Ok(history)
     }
 
-    fn has_head(&self) -> Result<bool, Error> {
-        let output = self.run_unchecked(["rev-parse", "--verify", "--quiet", "HEAD"])?;
-        if output.status.success() {
-            Ok(true)
-        } else if output.status.code() == Some(1) {
-            Ok(false)
-        } else {
-            Err(Error::new(ErrorKind::Unexpected, "cannot inspect Git HEAD")
-                .with_source(output_failure(&output)))
-        }
-    }
-
-    fn author_name(&self) -> Result<Option<String>, Error> {
-        let output = self.run_unchecked(["config", "--get", "user.name"])?;
-        if output.status.code() == Some(1) {
-            return Ok(None);
-        }
-        if !output.status.success() {
-            return Err(
-                Error::new(ErrorKind::Unexpected, "cannot read Git author name")
-                    .with_source(output_failure(&output)),
-            );
-        }
-        let value = String::from_utf8_lossy(&output.stdout).trim().to_owned();
-        Ok((!value.is_empty()).then_some(value))
+    fn author_name(&self) -> Option<String> {
+        self.inner
+            .config_snapshot()
+            .string(gix::config::tree::User::NAME)
+            .map(|value| String::from_utf8_lossy(&value).trim().to_owned())
+            .filter(|value| !value.is_empty())
     }
 
     fn read_history(
         &self,
-        selected: &HashMap<Vec<u8>, PathBuf>,
+        selected: &HashMap<BString, PathBuf>,
     ) -> Result<HashMap<PathBuf, FileHistory>, Error> {
-        if !self.has_head()? {
+        let mut repo = self.inner.clone();
+        // Repeated tree diffs benefit from decoded objects, but gix's recommendation scales with
+        // the complete index. Cap this private history handle for predictable memory use.
+        let cache_size = {
+            let index = repo.index_or_empty().map_err(|err| {
+                Error::new(ErrorKind::Unexpected, "cannot read Git index").with_source(err)
+            })?;
+            repo.compute_object_cache_size_for_tree_diffs(&index)
+                .min(OBJECT_CACHE_LIMIT)
+        };
+        repo.object_cache_size_if_unset(cache_size);
+
+        let head = repo
+            .head()
+            .map_err(|err| {
+                Error::new(ErrorKind::Unexpected, "cannot inspect Git HEAD").with_source(err)
+            })?
+            .try_into_peeled_id()
+            .map_err(|err| {
+                Error::new(ErrorKind::Unexpected, "cannot inspect Git HEAD").with_source(err)
+            })?;
+        let Some(head) = head else {
             return Ok(HashMap::new());
+        };
+
+        let mut resource_cache = repo
+            .diff_resource_cache(gix::diff::blob::pipeline::Mode::ToGit, Default::default())
+            .map_err(|err| {
+                Error::new(ErrorKind::Unexpected, "cannot prepare Git tree diff").with_source(err)
+            })?;
+        let commits = repo.rev_walk([head.detach()]).all().map_err(|err| {
+            Error::new(ErrorKind::Unexpected, "cannot traverse Git history").with_source(err)
+        })?;
+        let mut history = HashMap::<PathBuf, FileHistory>::new();
+        for info in commits {
+            let info = info.map_err(|err| {
+                Error::new(ErrorKind::Unexpected, "cannot traverse Git history").with_source(err)
+            })?;
+            let parent = match info.parent_ids.as_slice() {
+                [] => None,
+                [parent] => Some(*parent),
+                _ => continue,
+            };
+            let commit = info.object().map_err(|err| {
+                Error::new(ErrorKind::Unexpected, "cannot read Git commit").with_source(err)
+            })?;
+            let time = commit.time().map_err(|err| {
+                Error::new(ErrorKind::Unexpected, "cannot read Git commit time").with_source(err)
+            })?;
+            let year = commit_year(time)?;
+            let author = commit.author().map_err(|err| {
+                Error::new(ErrorKind::Unexpected, "cannot read Git commit author").with_source(err)
+            })?;
+            let author = String::from_utf8_lossy(author.name.as_ref()).into_owned();
+            let tree = commit.tree().map_err(|err| {
+                Error::new(ErrorKind::Unexpected, "cannot read Git commit tree").with_source(err)
+            })?;
+            let previous_tree = if let Some(parent) = parent {
+                let parent = repo.find_commit(parent).map_err(|err| {
+                    Error::new(ErrorKind::Unexpected, "cannot read Git parent commit")
+                        .with_source(err)
+                })?;
+                parent.tree().map_err(|err| {
+                    Error::new(ErrorKind::Unexpected, "cannot read Git parent tree")
+                        .with_source(err)
+                })?
+            } else {
+                repo.empty_tree()
+            };
+            let mut changes = previous_tree.changes().map_err(|err| {
+                Error::new(ErrorKind::Unexpected, "cannot configure Git tree diff").with_source(err)
+            })?;
+            changes.options(|options| {
+                options.track_rewrites(None);
+            });
+            changes
+                .for_each_to_obtain_tree_with_cache::<Infallible>(
+                    &tree,
+                    &mut resource_cache,
+                    |change| {
+                        if let Some(path) = selected.get(change.location()) {
+                            history
+                                .entry(path.clone())
+                                .or_default()
+                                .record(year, &author);
+                        }
+                        Ok(ControlFlow::Continue(()))
+                    },
+                )
+                .map_err(|err| {
+                    Error::new(ErrorKind::Unexpected, "cannot compare Git commit trees")
+                        .with_source(err)
+                })?;
         }
-        let mut arguments = vec![
-            "-c",
-            "core.quotepath=false",
-            "log",
-            "--full-history",
-            "--no-merges",
-            "--no-renames",
-            "--format=%x00%x00%cI%x00%an",
-            "--name-only",
-            "-z",
-        ];
-        let pathspecs = history_pathspecs(selected);
-        if pathspecs.is_some() {
-            arguments.push("--stdin");
-        } else {
-            // `git log --stdin` is line-delimited. Fall back to an unfiltered traversal for the
-            // rare repository containing a selected path with an embedded line ending.
-            arguments.push("--");
-        }
-        // Empty NUL-delimited records cannot be file paths, so a pair unambiguously frames commit
-        // metadata without relying on Git's quoting rules or reserving a valid path byte.
-        self.parse_stdout(
-            "cannot read Git history",
-            arguments,
-            pathspecs.as_deref(),
-            |reader| parse_history(reader, selected),
-        )
+        Ok(history)
     }
 
     fn apply_worktree_status(
         &self,
         relative_root: &Path,
-        selected: &HashMap<Vec<u8>, PathBuf>,
+        selected: &HashMap<BString, PathBuf>,
         year: i16,
         author: Option<&str>,
         history: &mut HashMap<PathBuf, FileHistory>,
     ) -> Result<(), Error> {
-        let pathspec = if relative_root.as_os_str().is_empty() {
-            OsString::from(".")
-        } else {
-            relative_root.as_os_str().to_owned()
-        };
-        self.parse_stdout(
-            "cannot inspect Git worktree status",
-            [
-                OsString::from("status"),
-                OsString::from("--porcelain=v1"),
-                OsString::from("-z"),
-                OsString::from("--untracked-files=all"),
-                OsString::from("--"),
-                pathspec,
-            ],
-            None,
-            |reader| {
-                let mut record = Vec::new();
-                while read_record(reader, &mut record, "cannot read Git worktree status")? {
-                    if record.len() < 4 {
-                        continue;
-                    }
-                    let status = &record[..2];
-                    if let Some(selected_path) = selected.get(&record[3..]) {
-                        history
-                            .entry(selected_path.clone())
-                            .or_default()
-                            .record_worktree(year, author);
-                    }
-                    if status.contains(&b'R') || status.contains(&b'C') {
-                        read_record(reader, &mut record, "cannot read Git worktree status")?;
-                    }
+        let mut status = self
+            .inner
+            .status(gix::progress::Discard)
+            .map_err(|err| {
+                Error::new(
+                    ErrorKind::Unexpected,
+                    "cannot configure Git worktree status",
+                )
+                .with_source(err)
+            })?
+            .untracked_files(gix::status::UntrackedFiles::Files)
+            .index_worktree_submodules(None)
+            .index_worktree_rewrites(None)
+            .tree_index_track_renames(gix::status::tree_index::TrackRenames::Disabled)
+            .into_iter(scan_pathspec(relative_root))
+            .map_err(|err| {
+                Error::new(ErrorKind::Unexpected, "cannot inspect Git worktree status")
+                    .with_source(err)
+            })?;
+        for item in &mut status {
+            let item = item.map_err(|err| {
+                Error::new(ErrorKind::Unexpected, "cannot inspect Git worktree status")
+                    .with_source(err)
+            })?;
+            let path = match &item {
+                gix::status::Item::IndexWorktree(item) if item.summary().is_some() => {
+                    item.rela_path()
                 }
-                Ok(())
-            },
+                gix::status::Item::TreeIndex(change) => change.location(),
+                _ => continue,
+            };
+            if let Some(path) = selected.get(path) {
+                history
+                    .entry(path.clone())
+                    .or_default()
+                    .record_worktree(year, author);
+            }
+        }
+        Ok(())
+    }
+}
+
+fn commit_year(time: gix::date::Time) -> Result<i16, Error> {
+    let timestamp = Timestamp::from_second(time.seconds).map_err(|err| {
+        Error::new(
+            ErrorKind::Unexpected,
+            "Git commit time is outside the supported range",
         )
-    }
-}
-
-fn history_pathspecs(selected: &HashMap<Vec<u8>, PathBuf>) -> Option<Vec<u8>> {
-    let mut input = b"--\n".to_vec();
-    for path in selected.keys() {
-        if path.contains(&b'\n') || path.contains(&b'\r') {
-            return None;
-        }
-        input.extend_from_slice(path);
-        input.push(b'\n');
-    }
-    Some(input)
-}
-
-fn parse_history(
-    reader: &mut dyn BufRead,
-    selected: &HashMap<Vec<u8>, PathBuf>,
-) -> Result<HashMap<PathBuf, FileHistory>, Error> {
-    #[derive(Clone, Copy)]
-    enum State {
-        Paths,
-        Author(Option<i16>),
-    }
-
-    let mut current: Option<(i16, String)> = None;
-    let mut expecting_first_path = false;
-    let mut empty_records = 0;
-    let mut state = State::Paths;
-    let mut result = HashMap::<PathBuf, FileHistory>::new();
-    let mut record = Vec::new();
-    while read_record(reader, &mut record, "cannot read Git history")? {
-        if record.is_empty() {
-            empty_records += 1;
-            continue;
-        }
-        if matches!(state, State::Paths) && empty_records >= 2 {
-            let year = record
-                .get(..4)
-                .and_then(|year| std::str::from_utf8(year).ok())
-                .and_then(|year| year.parse::<i16>().ok());
-            current = None;
-            expecting_first_path = false;
-            empty_records = 0;
-            state = State::Author(year);
-            continue;
-        }
-        if let State::Author(year) = state {
-            current = year.map(|year| (year, String::from_utf8_lossy(&record).into_owned()));
-            expecting_first_path = true;
-            empty_records = 0;
-            state = State::Paths;
-            continue;
-        }
-        empty_records = 0;
-        let path = if expecting_first_path {
-            expecting_first_path = false;
-            // `--name-only -z` inserts one newline between the pretty header and its first path.
-            record.strip_prefix(b"\n").unwrap_or(&record)
-        } else {
-            &record
-        };
-        if path.is_empty() {
-            continue;
-        }
-        let Some(path) = selected.get(path) else {
-            continue;
-        };
-        if let Some((year, author)) = &current {
-            result
-                .entry(path.clone())
-                .or_default()
-                .record(*year, author);
-        }
-    }
-    Ok(result)
+        .with_source(err)
+    })?;
+    let offset = Offset::from_seconds(time.offset).map_err(|err| {
+        Error::new(
+            ErrorKind::Unexpected,
+            "Git commit timezone is outside the supported range",
+        )
+        .with_source(err)
+    })?;
+    Ok(timestamp.to_zoned(offset.to_time_zone()).year())
 }

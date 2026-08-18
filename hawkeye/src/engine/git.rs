@@ -14,65 +14,51 @@
 
 mod history;
 
-use std::ffi::OsStr;
-use std::ffi::OsString;
-use std::io::BufRead;
-use std::io::BufReader;
-use std::io::Read;
-use std::io::Seek;
-use std::io::SeekFrom;
-use std::io::Write;
+use std::collections::BTreeSet;
 use std::path::Path;
 use std::path::PathBuf;
-use std::process::Command;
-use std::process::Output;
-use std::process::Stdio;
 use std::time::Instant;
+
+use gix::bstr::BStr;
+use gix::bstr::BString;
+use gix::bstr::ByteSlice;
 
 pub use self::history::FileHistory;
 use crate::Error;
 use crate::ErrorKind;
 
 pub struct Repository {
+    inner: gix::Repository,
     root: PathBuf,
 }
 
 impl Repository {
     pub fn discover(root: &Path) -> Result<Self, Error> {
         let started = Instant::now();
-        let output = match command(root)
-            .args(["rev-parse", "--show-toplevel"])
-            .output()
-        {
-            Ok(output) => output,
-            Err(err) => {
-                return Err(Error::new(
+        let inner = gix::discover(root).map_err(|err| {
+            let (kind, message) = match &err {
+                gix::discover::Error::Discover(
+                    gix::discover::upwards::Error::NoGitRepository { .. }
+                    | gix::discover::upwards::Error::NoGitRepositoryWithinCeiling { .. }
+                    | gix::discover::upwards::Error::NoGitRepositoryWithinFs { .. },
+                ) => (
                     ErrorKind::Unsupported,
-                    format!("Git cannot be started for {}", root.display()),
-                )
-                .with_source(err));
-            }
-        };
-
-        if !output.status.success() {
-            return Err(Error::new(
+                    format!("{} is not a usable Git worktree", root.display()),
+                ),
+                _ => (
+                    ErrorKind::Unexpected,
+                    format!("cannot open Git repository for {}", root.display()),
+                ),
+            };
+            Error::new(kind, message).with_source(err)
+        })?;
+        let workdir = inner.workdir().ok_or_else(|| {
+            Error::new(
                 ErrorKind::Unsupported,
                 format!("{} is not a usable Git worktree", root.display()),
             )
-            .with_source(output_failure(&output)));
-        }
-
-        let path = output
-            .stdout
-            .strip_suffix(b"\n")
-            .unwrap_or(output.stdout.as_slice());
-        if path.is_empty() {
-            return Err(Error::new(
-                ErrorKind::Unexpected,
-                "Git returned an empty repository root",
-            ));
-        }
-        let root = decode_path(path).canonicalize().map_err(|err| {
+        })?;
+        let root = workdir.canonicalize().map_err(|err| {
             Error::new(ErrorKind::Unexpected, "cannot resolve repository root").with_source(err)
         })?;
         log::debug!(
@@ -80,80 +66,90 @@ impl Repository {
             root.display(),
             started.elapsed()
         );
-        Ok(Self { root })
+        Ok(Self { inner, root })
     }
 
-    pub fn list_files(&self, scan_root: &Path) -> Result<Vec<PathBuf>, Error> {
+    pub fn list_files(&self, scan_root: &Path) -> Result<BTreeSet<PathBuf>, Error> {
         let relative_root = self.relative_scan_root(scan_root)?;
-        let pathspec = if relative_root.as_os_str().is_empty() {
-            OsString::from(".")
-        } else {
-            relative_root.as_os_str().to_owned()
-        };
-        self.parse_stdout(
-            "cannot list Git worktree files",
-            [
-                OsString::from("ls-files"),
-                OsString::from("--cached"),
-                OsString::from("--others"),
-                OsString::from("--exclude-standard"),
-                OsString::from("-z"),
-                OsString::from("--"),
-                pathspec,
-            ],
-            None,
-            |reader| {
-                let mut files = Vec::new();
-                let mut record = Vec::new();
-                while read_record(reader, &mut record, "cannot read Git worktree files")? {
-                    if record.is_empty() {
-                        continue;
-                    }
-                    let path = self.root.join(decode_path(&record));
-                    let metadata = match std::fs::symlink_metadata(&path) {
-                        Ok(metadata) => metadata,
-                        Err(err) if err.kind() == std::io::ErrorKind::NotFound => continue,
-                        Err(err) => {
-                            return Err(Error::new(
-                                ErrorKind::Unexpected,
-                                format!("cannot read metadata for {}", path.display()),
-                            )
-                            .with_source(err));
-                        }
-                    };
-                    let file_type = metadata.file_type();
-                    if file_type.is_file() || (file_type.is_symlink() && path.is_file()) {
-                        let relative = path.strip_prefix(scan_root).map_err(|_| {
-                            Error::new(
-                                ErrorKind::Unexpected,
-                                format!(
-                                    "Git returned path outside files.root {}: {}",
-                                    scan_root.display(),
-                                    path.display()
-                                ),
-                            )
-                        })?;
-                        files.push(relative.to_path_buf());
-                    }
-                }
-                Ok(files)
-            },
-        )
+        let prefix = path_prefix(relative_root);
+        let index = self.inner.index_or_empty().map_err(|err| {
+            Error::new(ErrorKind::Unexpected, "cannot read Git index").with_source(err)
+        })?;
+        let mut files = BTreeSet::new();
+        if let Some(entries) = index.prefixed_entries(prefix.as_bstr()) {
+            for entry in entries {
+                self.insert_file(entry.path(&index), scan_root, &mut files)?;
+            }
+        }
+
+        let options = self
+            .inner
+            .dirwalk_options()
+            .map_err(|err| {
+                Error::new(
+                    ErrorKind::Unexpected,
+                    "cannot configure Git worktree traversal",
+                )
+                .with_source(err)
+            })?
+            .emit_untracked(gix::dir::walk::EmissionMode::Matching);
+        let mut untracked = self
+            .inner
+            .dirwalk_iter(
+                index,
+                scan_pathspec(relative_root),
+                Default::default(),
+                options,
+            )
+            .map_err(|err| {
+                Error::new(ErrorKind::Unexpected, "cannot list Git worktree files").with_source(err)
+            })?;
+        for item in &mut untracked {
+            let item = item.map_err(|err| {
+                Error::new(ErrorKind::Unexpected, "cannot list Git worktree files").with_source(err)
+            })?;
+            self.insert_file(item.entry.rela_path.as_ref(), scan_root, &mut files)?;
+        }
+        Ok(files)
     }
 
-    pub fn is_shallow(&self) -> Result<bool, Error> {
-        let output = self.run(
-            "cannot inspect whether the Git repository is shallow",
-            ["rev-parse", "--is-shallow-repository"],
-        )?;
-        match String::from_utf8_lossy(&output.stdout).trim() {
-            "true" => Ok(true),
-            "false" => Ok(false),
-            value => Err(Error::new(
-                ErrorKind::Unexpected,
-                format!("Git returned an invalid shallow-repository value: {value:?}"),
-            )),
+    pub fn is_shallow(&self) -> bool {
+        self.inner.is_shallow()
+    }
+
+    fn insert_file(
+        &self,
+        repository_path: &BStr,
+        scan_root: &Path,
+        files: &mut BTreeSet<PathBuf>,
+    ) -> Result<(), Error> {
+        let path = self.root.join(gix::path::from_bstr(repository_path));
+        let metadata = match std::fs::symlink_metadata(&path) {
+            Ok(metadata) => metadata,
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+            Err(err) => {
+                return Err(Error::new(
+                    ErrorKind::Unexpected,
+                    format!("cannot read metadata for {}", path.display()),
+                )
+                .with_source(err));
+            }
+        };
+        let file_type = metadata.file_type();
+        if file_type.is_file() || (file_type.is_symlink() && path.is_file()) {
+            let relative = path.strip_prefix(scan_root).map_err(|_| {
+                Error::new(
+                    ErrorKind::Unexpected,
+                    format!(
+                        "Git returned path outside files.root {}: {}",
+                        scan_root.display(),
+                        path.display()
+                    ),
+                )
+            })?;
+            files.insert(relative.to_path_buf());
         }
+        Ok(())
     }
 
     fn relative_scan_root<'a>(&self, scan_root: &'a Path) -> Result<&'a Path, Error> {
@@ -168,182 +164,27 @@ impl Repository {
             )
         })
     }
+}
 
-    fn run<I, S>(&self, operation: &str, arguments: I) -> Result<Output, Error>
-    where
-        I: IntoIterator<Item = S>,
-        S: AsRef<OsStr>,
-    {
-        let output = self.run_unchecked(arguments)?;
-        if output.status.success() {
-            Ok(output)
-        } else {
-            Err(Error::new(ErrorKind::Unexpected, operation).with_source(output_failure(&output)))
-        }
+fn path_prefix(path: &Path) -> BString {
+    let mut path = encode_path(path);
+    if !path.is_empty() {
+        path.push(b'/');
+    }
+    path
+}
+
+fn scan_pathspec(relative_root: &Path) -> Option<BString> {
+    let prefix = path_prefix(relative_root);
+    if prefix.is_empty() {
+        return None;
     }
 
-    fn run_unchecked<I, S>(&self, arguments: I) -> Result<Output, Error>
-    where
-        I: IntoIterator<Item = S>,
-        S: AsRef<OsStr>,
-    {
-        let arguments = arguments
-            .into_iter()
-            .map(|argument| argument.as_ref().to_owned())
-            .collect::<Vec<_>>();
-        let started = Instant::now();
-        let output = command(&self.root)
-            .args(&arguments)
-            .output()
-            .map_err(|err| {
-                Error::new(
-                    ErrorKind::Unexpected,
-                    format!("cannot execute Git {arguments:?}"),
-                )
-                .with_source(err)
-            })?;
-        log::debug!("Git {:?} completed in {:?}", arguments, started.elapsed());
-        Ok(output)
-    }
-
-    fn parse_stdout<I, S, Value>(
-        &self,
-        operation: &str,
-        arguments: I,
-        stdin: Option<&[u8]>,
-        parse: impl FnOnce(&mut dyn BufRead) -> Result<Value, Error>,
-    ) -> Result<Value, Error>
-    where
-        I: IntoIterator<Item = S>,
-        S: AsRef<OsStr>,
-    {
-        let arguments = arguments
-            .into_iter()
-            .map(|argument| argument.as_ref().to_owned())
-            .collect::<Vec<_>>();
-        // File-backed stdin and stderr let Git consume and produce both while stdout is parsed
-        // synchronously, without another thread or the risk of a full pipe blocking the child.
-        let mut stderr = tempfile::tempfile().map_err(|err| {
-            Error::new(ErrorKind::Unexpected, "cannot create Git stderr buffer").with_source(err)
-        })?;
-        let stderr_writer = stderr.try_clone().map_err(|err| {
-            Error::new(ErrorKind::Unexpected, "cannot clone Git stderr buffer").with_source(err)
-        })?;
-        let stdin = if let Some(input) = stdin {
-            let mut file = tempfile::tempfile().map_err(|err| {
-                Error::new(ErrorKind::Unexpected, "cannot create Git stdin buffer").with_source(err)
-            })?;
-            file.write_all(input).map_err(|err| {
-                Error::new(ErrorKind::Unexpected, "cannot write Git stdin buffer").with_source(err)
-            })?;
-            file.seek(SeekFrom::Start(0)).map_err(|err| {
-                Error::new(ErrorKind::Unexpected, "cannot rewind Git stdin buffer").with_source(err)
-            })?;
-            Stdio::from(file)
-        } else {
-            Stdio::null()
-        };
-        let started = Instant::now();
-        let mut child = command(&self.root)
-            .args(&arguments)
-            .stdin(stdin)
-            .stdout(Stdio::piped())
-            .stderr(Stdio::from(stderr_writer))
-            .spawn()
-            .map_err(|err| {
-                Error::new(
-                    ErrorKind::Unexpected,
-                    format!("cannot execute Git {arguments:?}"),
-                )
-                .with_source(err)
-            })?;
-        let stdout = child
-            .stdout
-            .take()
-            .expect("Git stdout must be configured as a pipe");
-        let parsed = parse(&mut BufReader::new(stdout));
-        if parsed.is_err() {
-            let _ = child.kill();
-        }
-        let status = child.wait().map_err(|err| {
-            Error::new(ErrorKind::Unexpected, "cannot wait for Git").with_source(err)
-        })?;
-        log::debug!("Git {:?} completed in {:?}", arguments, started.elapsed());
-        let value = parsed?;
-        if status.success() {
-            return Ok(value);
-        }
-
-        stderr.seek(SeekFrom::Start(0)).map_err(|err| {
-            Error::new(ErrorKind::Unexpected, "cannot rewind Git stderr").with_source(err)
-        })?;
-        let mut bytes = Vec::new();
-        stderr.read_to_end(&mut bytes).map_err(|err| {
-            Error::new(ErrorKind::Unexpected, "cannot read Git stderr").with_source(err)
-        })?;
-        Err(Error::new(ErrorKind::Unexpected, operation)
-            .with_source(failure_message(&status, &bytes)))
-    }
+    let mut pattern = BString::from(":(top,literal)");
+    pattern.extend_from_slice(&prefix);
+    Some(pattern)
 }
 
-fn command(root: &Path) -> Command {
-    let mut command = Command::new("git");
-    command
-        .arg("-C")
-        .arg(root)
-        .env("GIT_LITERAL_PATHSPECS", "1")
-        .env("GIT_OPTIONAL_LOCKS", "0");
-    command
-}
-
-fn output_failure(output: &Output) -> String {
-    failure_message(&output.status, &output.stderr)
-}
-
-fn failure_message(status: &std::process::ExitStatus, bytes: &[u8]) -> String {
-    let message = String::from_utf8_lossy(bytes).trim().to_owned();
-    if message.is_empty() {
-        format!("Git exited with {status}")
-    } else {
-        message
-    }
-}
-
-fn read_record(
-    reader: &mut dyn BufRead,
-    record: &mut Vec<u8>,
-    operation: &str,
-) -> Result<bool, Error> {
-    record.clear();
-    let read = reader
-        .read_until(0, record)
-        .map_err(|err| Error::new(ErrorKind::Unexpected, operation.to_owned()).with_source(err))?;
-    if record.last() == Some(&0) {
-        record.pop();
-    }
-    Ok(read != 0)
-}
-
-#[cfg(unix)]
-fn encode_path(path: &Path) -> Vec<u8> {
-    use std::os::unix::ffi::OsStrExt;
-
-    path.as_os_str().as_bytes().to_vec()
-}
-
-#[cfg(not(unix))]
-fn encode_path(path: &Path) -> Vec<u8> {
-    path.to_string_lossy().replace('\\', "/").into_bytes()
-}
-
-#[cfg(unix)]
-fn decode_path(bytes: &[u8]) -> PathBuf {
-    use std::os::unix::ffi::OsStringExt;
-
-    PathBuf::from(OsString::from_vec(bytes.to_vec()))
-}
-
-#[cfg(not(unix))]
-fn decode_path(bytes: &[u8]) -> PathBuf {
-    PathBuf::from(String::from_utf8_lossy(bytes).into_owned())
+fn encode_path(path: &Path) -> BString {
+    gix::path::to_unix_separators_on_windows(gix::path::into_bstr(path)).into_owned()
 }
