@@ -1426,9 +1426,8 @@ where
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
 {
-    let output = Command::new("git")
+    let output = git_command(directory)
         .args(arguments)
-        .current_dir(directory)
         .output()
         .expect("run Git");
     assert!(output.status.success(), "Git failed:\n{}", stderr(&output));
@@ -1439,9 +1438,8 @@ where
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
 {
-    let output = Command::new("git")
+    let output = git_command(directory)
         .args(arguments)
-        .current_dir(directory)
         .output()
         .expect("run Git");
     assert!(output.status.success(), "Git failed:\n{}", stderr(&output));
@@ -1457,9 +1455,8 @@ where
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
 {
-    let output = Command::new("git")
+    let output = git_command(directory)
         .args(arguments)
-        .current_dir(directory)
         .env("GIT_AUTHOR_NAME", name)
         .env("GIT_AUTHOR_EMAIL", email)
         .env("GIT_AUTHOR_DATE", date)
@@ -1469,4 +1466,12 @@ where
         .output()
         .expect("run Git with identity");
     assert!(output.status.success(), "Git failed:\n{}", stderr(&output));
+}
+
+fn git_command(directory: &Path) -> Command {
+    let mut command = Command::new("git");
+    command
+        .args(["-c", "commit.gpgsign=false"])
+        .current_dir(directory);
+    command
 }
