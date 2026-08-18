@@ -150,6 +150,7 @@ fn detect_eol(input: &str) -> &'static str {
 }
 
 fn preamble_offset(input: &str) -> usize {
+    // A UTF-8 BOM describes the file itself and must remain before any inserted header.
     let mut position = if input.starts_with('\u{feff}') {
         '\u{feff}'.len_utf8()
     } else {
@@ -158,6 +159,8 @@ fn preamble_offset(input: &str) -> usize {
     let Some((first, line_range)) = lines(input, position).next() else {
         return position;
     };
+    // Interpreter and document declarations are meaningful only at the start of a file. `#![` is
+    // a Rust inner attribute rather than a shebang, so it remains ordinary source text.
     let lower = first.to_ascii_lowercase();
     if (first.starts_with("#!") && !first.starts_with("#!["))
         || (lower.starts_with("<?xml") && lower.ends_with("?>"))
@@ -171,6 +174,7 @@ fn preamble_offset(input: &str) -> usize {
         position = line_range.end;
     }
 
+    // YAML permits a consecutive directive block before the document content.
     while let Some((line, line_range)) = lines(input, position).next() {
         if !line.starts_with("%YAML") && !line.starts_with("%TAG") {
             break;
@@ -178,6 +182,8 @@ fn preamble_offset(input: &str) -> usize {
         position = line_range.end;
     }
 
+    // Python and Ruby inspect a small leading window for encoding and other magic comments. The
+    // bound prevents an ordinary leading comment later in the file from becoming a preamble.
     for _ in 0..2 {
         let Some((line, line_range)) = lines(input, position).next() else {
             break;
