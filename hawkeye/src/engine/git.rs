@@ -30,8 +30,6 @@ use jiff::tz::TimeZone;
 use crate::Error;
 use crate::ErrorKind;
 
-const OBJECT_CACHE_LIMIT: usize = 16 * 1024 * 1024;
-
 #[derive(Debug, Clone, Default)]
 pub struct FileHistory {
     pub created_year: Option<i16>,
@@ -238,14 +236,14 @@ impl Repository {
         selected: &HashMap<BString, PathBuf>,
     ) -> Result<HashMap<PathBuf, FileHistory>, Error> {
         let mut repo = self.inner.clone();
-        // Repeated tree diffs benefit from decoded objects, but gix's recommendation scales with
+        // Repeated tree diffs benefit from decoded objects, but the recommendation scales with
         // the complete index. Cap this private history handle for predictable memory use.
         let cache_size = {
             let index = repo.index_or_empty().map_err(|err| {
                 Error::new(ErrorKind::Unexpected, "cannot read Git index").with_source(err)
             })?;
-            repo.compute_object_cache_size_for_tree_diffs(&index)
-                .min(OBJECT_CACHE_LIMIT)
+            let cache_size = repo.compute_object_cache_size_for_tree_diffs(&index);
+            cache_size.min(16 * 1024 * 1024) // up to 16 MiB for a large repository
         };
         repo.object_cache_size_if_unset(cache_size);
 

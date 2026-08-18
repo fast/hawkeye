@@ -21,11 +21,11 @@ use ignore::WalkBuilder;
 use ignore::overrides::Override;
 use ignore::overrides::OverrideBuilder;
 
-use super::Engine;
-use super::git::Repository;
+use crate::Engine;
 use crate::Error;
 use crate::ErrorKind;
 use crate::config::FeatureMode;
+use crate::engine::git::Repository;
 
 impl Engine {
     pub(super) fn discover(&self, repo: Option<&Repository>) -> Result<Vec<PathBuf>, Error> {

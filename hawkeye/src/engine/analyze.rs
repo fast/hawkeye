@@ -14,12 +14,12 @@
 
 use std::ops::Range;
 
-use super::Engine;
-use super::FileAnalysis;
-use super::HeaderTarget;
-use super::Replacement;
-use super::Rule;
+use crate::Engine;
 use crate::config::StyleConfig;
+use crate::engine::FileAnalysis;
+use crate::engine::HeaderTarget;
+use crate::engine::Replacement;
+use crate::engine::Rule;
 
 impl Engine {
     pub(super) fn analyze(
