@@ -101,8 +101,27 @@ fn main() -> ExitCode {
 }
 
 fn do_main() -> Result<ExitCode, Error> {
-    let cmd = Command::parse();
-    let config = match cmd.config {
+    let Command {
+        config,
+        output_format,
+        subcommand,
+    } = Command::parse();
+    let (action, write, fail_on_unknown, reject_changes) = match subcommand {
+        SubcommandOptions::Check(options) => (Action::Check, false, options.fail_on_unknown, true),
+        SubcommandOptions::Format(options) => (
+            Action::Format,
+            !options.dry_run,
+            options.fail_on_unknown,
+            options.fail_on_change,
+        ),
+        SubcommandOptions::Remove(options) => (
+            Action::Remove,
+            !options.dry_run,
+            options.fail_on_unknown,
+            options.fail_on_change,
+        ),
+    };
+    let config = match config {
         Some(path) => path,
         None => default_config()?,
     };
@@ -110,56 +129,26 @@ fn do_main() -> Result<ExitCode, Error> {
 
     let config = Config::load(config).or_raise(|| Error::new("cannot load config"))?;
     let engine = Engine::new(config).or_raise(|| Error::new("cannot initialize HawkEye"))?;
-
-    match cmd.subcommand {
-        SubcommandOptions::Check(options) => {
-            let plan = engine
-                .plan(Action::Check)
-                .or_raise(|| Error::new("cannot analyze selected files"))?;
-            let report = plan.report();
-            emit(&report, cmd.output_format)?;
-            let failed = report.files.iter().any(|file| {
-                matches!(
-                    file.outcome,
-                    Outcome::Add | Outcome::Replace | Outcome::Conflict
-                ) || (options.fail_on_unknown && file.outcome == Outcome::Unsupported)
-            });
-            Ok(policy_exit(failed))
-        }
-        SubcommandOptions::Format(options) => {
-            edit(&engine, Action::Format, options, cmd.output_format)
-        }
-        SubcommandOptions::Remove(options) => {
-            edit(&engine, Action::Remove, options, cmd.output_format)
-        }
-    }
-}
-
-fn edit(
-    engine: &Engine,
-    action: Action,
-    options: EditOptions,
-    output_format: OutputFormat,
-) -> Result<ExitCode, Error> {
     let plan = engine
         .plan(action)
         .or_raise(|| Error::new("cannot analyze selected files"))?;
-    if !options.dry_run {
+    if write {
         plan.apply()
             .or_raise(|| Error::new("cannot apply planned file edits"))?;
     }
     let report = plan.report();
     emit(&report, output_format)?;
-    let failed = report.files.iter().any(|file| {
-        file.outcome == Outcome::Conflict
-            || (options.fail_on_unknown && file.outcome == Outcome::Unsupported)
-            || (options.fail_on_change
-                && matches!(
-                    file.outcome,
-                    Outcome::Add | Outcome::Replace | Outcome::Remove
-                ))
+    let failed = report.files.iter().any(|file| match file.outcome {
+        Outcome::Clean => false,
+        Outcome::Add | Outcome::Replace | Outcome::Remove => reject_changes,
+        Outcome::Conflict => true,
+        Outcome::Unsupported => fail_on_unknown,
     });
-    Ok(policy_exit(failed))
+    Ok(if failed {
+        ExitCode::FAILURE
+    } else {
+        ExitCode::SUCCESS
+    })
 }
 
 fn emit(report: &Report, output_format: OutputFormat) -> Result<(), Error> {
@@ -179,37 +168,35 @@ fn emit(report: &Report, output_format: OutputFormat) -> Result<(), Error> {
 
 fn emit_human(report: &Report) -> io::Result<()> {
     let mut stdout = io::stdout().lock();
+    let mut changes = 0;
+    let mut conflicts = 0;
+    let mut unsupported = 0;
     for file in &report.files {
         let label = match file.outcome {
             Outcome::Clean => continue,
-            Outcome::Add => "add",
-            Outcome::Replace => "replace",
-            Outcome::Remove => "remove",
-            Outcome::Conflict => "conflict",
-            Outcome::Unsupported => "unsupported",
+            Outcome::Add => {
+                changes += 1;
+                "add"
+            }
+            Outcome::Replace => {
+                changes += 1;
+                "replace"
+            }
+            Outcome::Remove => {
+                changes += 1;
+                "remove"
+            }
+            Outcome::Conflict => {
+                conflicts += 1;
+                "conflict"
+            }
+            Outcome::Unsupported => {
+                unsupported += 1;
+                "unsupported"
+            }
         };
         writeln!(stdout, "{label:>11}  {}", file.path)?;
     }
-    let changes = report
-        .files
-        .iter()
-        .filter(|file| {
-            matches!(
-                file.outcome,
-                Outcome::Add | Outcome::Replace | Outcome::Remove
-            )
-        })
-        .count();
-    let conflicts = report
-        .files
-        .iter()
-        .filter(|file| file.outcome == Outcome::Conflict)
-        .count();
-    let unsupported = report
-        .files
-        .iter()
-        .filter(|file| file.outcome == Outcome::Unsupported)
-        .count();
     writeln!(
         stdout,
         "{} files, {} changes, {} conflicts, {} unsupported",
@@ -218,14 +205,6 @@ fn emit_human(report: &Report) -> io::Result<()> {
         conflicts,
         unsupported,
     )
-}
-
-fn policy_exit(failed: bool) -> ExitCode {
-    if failed {
-        ExitCode::FAILURE
-    } else {
-        ExitCode::SUCCESS
-    }
 }
 
 fn default_config() -> Result<PathBuf, Error> {

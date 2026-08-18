@@ -60,6 +60,12 @@ fn mixed_repository_lifecycle() {
             .starts_with("// Copyright 2026 Acme Labs\n// Sequence 1-2-3\n\n"),
         "fail-on-change must report the applied change rather than suppressing it"
     );
+
+    let dry_run = case("mixed");
+    let before = tree_snapshot(dry_run.path());
+    let formatted = hawkeye(dry_run.path(), ["format", "--dry-run", "--fail-on-change"]);
+    assert_exit(&formatted, 1);
+    assert_eq!(tree_snapshot(dry_run.path()), before);
 }
 
 #[test]
