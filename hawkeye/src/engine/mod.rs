@@ -95,7 +95,7 @@ fn file_time_to_year(time: SystemTime) -> Option<i16> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Target {
+enum HeaderTarget {
     Present,
     Absent,
 }
@@ -247,22 +247,21 @@ impl Engine {
 
     /// Reports the changes needed to make selected headers canonical.
     pub fn check(&self) -> Result<Report, Error> {
-        Ok(self.edits(Target::Present)?.report)
+        Ok(self.edits(HeaderTarget::Present)?.report)
     }
 
     /// Prepares edits that make selected headers canonical.
     pub fn format(&self) -> Result<Edits, Error> {
-        self.edits(Target::Present)
+        self.edits(HeaderTarget::Present)
     }
 
     /// Prepares edits that remove recognized headers from selected files.
     pub fn remove(&self) -> Result<Edits, Error> {
-        self.edits(Target::Absent)
+        self.edits(HeaderTarget::Absent)
     }
 
-    fn edits(&self, target: Target) -> Result<Edits, Error> {
-        let git = self.git;
-        let git_mode = git.ignore.combine(git.file_attrs);
+    fn edits(&self, target: HeaderTarget) -> Result<Edits, Error> {
+        let git_mode = self.git.ignore.combine(self.git.file_attrs);
         let repo = if git_mode == FeatureMode::Disable {
             None
         } else {
@@ -277,24 +276,24 @@ impl Engine {
                 Err(err) => return Err(err),
             }
         };
-        let relative_paths = self.discover(repo.as_ref())?;
-        let discovered = relative_paths
+        let files = self
+            .discover(repo.as_ref())?
             .into_iter()
             .map(|path| {
                 let rule = self.rule_for(&path);
                 (path, rule)
             })
             .collect::<Vec<_>>();
-        let supported = discovered
+        let supported = files
             .iter()
             .filter_map(|(path, rule)| rule.is_some().then_some(path.as_path()))
             .collect::<Vec<_>>();
-        let git_history = if git.file_attrs == FeatureMode::Disable || supported.is_empty() {
+        let git_history = if self.git.file_attrs == FeatureMode::Disable || supported.is_empty() {
             None
         } else if let Some(repo) = repo.as_ref() {
             if repo.is_shallow()? {
                 let message = "Git file attributes require complete history, but the repository is shallow; fetch complete history first";
-                if git.file_attrs == FeatureMode::Auto {
+                if self.git.file_attrs == FeatureMode::Auto {
                     log::warn!("{message}; continuing with Git file attributes disabled");
                     None
                 } else {
@@ -304,24 +303,24 @@ impl Engine {
                 Some(repo.file_history(&self.root, supported)?)
             }
         } else {
-            debug_assert_ne!(git.file_attrs, FeatureMode::Enable);
+            debug_assert_ne!(self.git.file_attrs, FeatureMode::Enable);
             None
         };
         let mut report = Report {
-            files: Vec::with_capacity(discovered.len()),
+            files: Vec::with_capacity(files.len()),
         };
         let mut file_edits = Vec::new();
 
-        for (relative, rule) in discovered {
+        for (relative_path, rule) in files {
             let Some(rule) = rule else {
                 report.files.push(FileReport {
-                    path: relative,
+                    path: relative_path,
                     outcome: FileOutcome::Unsupported,
                 });
                 continue;
             };
 
-            let path = self.root.join(&relative);
+            let path = self.root.join(&relative_path);
             let original = fs::read(&path).map_err(|err| {
                 Error::new(
                     ErrorKind::Unexpected,
@@ -331,7 +330,7 @@ impl Engine {
             })?;
             let Ok(input) = std::str::from_utf8(&original) else {
                 report.files.push(FileReport {
-                    path: relative,
+                    path: relative_path,
                     outcome: FileOutcome::Unsupported,
                 });
                 continue;
@@ -340,12 +339,12 @@ impl Engine {
                 &path,
                 git_history
                     .as_ref()
-                    .and_then(|history| history.get(&relative)),
+                    .and_then(|history| history.get(&relative_path)),
             )?;
             let header = self.render_header(&file_attrs)?;
             let (outcome, replacement) = self.analyze(rule, input, &header, target).into_parts();
             report.files.push(FileReport {
-                path: relative,
+                path: relative_path,
                 outcome,
             });
             if let Some(replacement) = replacement {
@@ -431,7 +430,7 @@ struct FileEdit {
 
 impl Rule {
     fn new(
-        source: impl AsRef<str>,
+        source: &str,
         config: RuleConfig,
         styles: &BTreeMap<String, StyleConfig>,
     ) -> Result<Self, Error> {
@@ -439,19 +438,20 @@ impl Rule {
             extensions,
             filenames,
             style_out,
-            mut styles_in,
+            styles_in,
         } = config;
-        let source = source.as_ref();
         if !styles.contains_key(&style_out) {
             return Err(Error::new(
                 ErrorKind::ConfigInvalid,
                 format!("{source} references unknown style {style_out:?}"),
             ));
         }
-        if styles_in.is_empty() {
-            styles_in.push(style_out.clone());
-        }
-        let mut accepted = Vec::with_capacity(styles_in.len());
+        let styles_in = if styles_in.is_empty() {
+            vec![style_out.clone()]
+        } else {
+            styles_in
+        };
+        let mut input_styles = Vec::with_capacity(styles_in.len());
         let mut seen = BTreeSet::new();
         for name in styles_in {
             if !styles.contains_key(&name) {
@@ -464,7 +464,7 @@ impl Rule {
                 log::warn!("{source}.styles_in contains duplicate style {name:?}; ignoring it");
                 continue;
             }
-            accepted.push(name);
+            input_styles.push(name);
         }
         Ok(Self {
             extension_suffixes: extensions
@@ -476,7 +476,7 @@ impl Rule {
                 .map(|filename| filename.to_lowercase())
                 .collect(),
             style_out,
-            styles_in: accepted,
+            styles_in: input_styles,
         })
     }
 
@@ -519,7 +519,13 @@ impl FileAnalysis {
 }
 
 impl Engine {
-    fn analyze(&self, rule: &Rule, input: &str, header: &str, target: Target) -> FileAnalysis {
+    fn analyze(
+        &self,
+        rule: &Rule,
+        input: &str,
+        header: &str,
+        target: HeaderTarget,
+    ) -> FileAnalysis {
         let offset = preamble_offset(input);
         let header_start = skip_blank_lines(input, offset);
         let eol = detect_eol(input);
@@ -559,7 +565,7 @@ impl Engine {
                 return FileAnalysis::Conflict;
             }
             let range = offset..end;
-            if target == Target::Absent {
+            if target == HeaderTarget::Absent {
                 return FileAnalysis::Remove(Replacement {
                     range,
                     text: String::new(),
@@ -582,7 +588,7 @@ impl Engine {
                 .is_some_and(|candidate| has_keywords(&candidate.body, &self.keywords))
         }) {
             FileAnalysis::Conflict
-        } else if target == Target::Absent {
+        } else if target == HeaderTarget::Absent {
             FileAnalysis::Clean
         } else {
             FileAnalysis::Add(Replacement {
