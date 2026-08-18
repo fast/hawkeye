@@ -201,13 +201,13 @@ cargo x lint
 
 Releases use `cargo-release` directly. `cargo release 7.0.0-alpha.1` previews the Alpha 1 release, and adding `--execute` performs the configured commit, crates.io publish, signed tag, and push.
 
-The virtual workspace keeps the product, integration corpus, and development tasks separate without introducing a `crates` directory for a single published package:
+The virtual workspace keeps the product and development tasks separate without introducing a `crates` directory for a single published package:
 
-- `hawkeye` is the only published package and contains the library and command-line binary;
-- `tests-integration` is an unpublished package containing complete repository corpora and Rust-driven integration tests;
+- `hawkeye` is the only published package and contains the library, command-line binary, and Cargo integration-test harness;
+- `tests-integration` contains complete repository corpora as test data and is not a Cargo package;
 - `xtask` is an unpublished development tool.
 
-Integration tests copy each corpus to a temporary directory, optionally create a real Git repository and history, snapshot the initial tree and reports, run `format`, snapshot the resulting tree, and verify that subsequent `check` and `format` runs are clean and idempotent. The root `licenserc.toml` excludes the entire `tests-integration` directory because those corpora intentionally contain missing, legacy, conflicting, ignored, BOM, CRLF, and otherwise non-canonical files.
+Integration tests copy each corpus to a temporary directory, optionally create a real Git repository and history, and run the actual Cargo-built `hawkeye` binary. Reports and resulting file contents are asserted directly beside each action instead of through generated snapshots. The root `licenserc.toml` excludes the entire `tests-integration` directory because those corpora intentionally contain missing, legacy, conflicting, ignored, BOM, CRLF, and otherwise non-canonical files.
 
 ## Minimum Rust version policy
 
