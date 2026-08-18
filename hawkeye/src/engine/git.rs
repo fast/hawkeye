@@ -86,16 +86,7 @@ impl GitRepo {
     }
 
     pub fn list_files(&self, scan_root: &Path) -> Result<Vec<PathBuf>, Error> {
-        let relative_root = scan_root.strip_prefix(&self.root).map_err(|_| {
-            Error::new(
-                ErrorKind::Unexpected,
-                format!(
-                    "files.root {} is outside repository {}",
-                    scan_root.display(),
-                    self.root.display()
-                ),
-            )
-        })?;
+        let relative_root = self.relative_scan_root(scan_root)?;
         let pathspec = if relative_root.as_os_str().is_empty() {
             OsString::from(".")
         } else {
@@ -360,16 +351,7 @@ impl GitRepo {
         scan_root: &Path,
         files: impl IntoIterator<Item = &'a Path>,
     ) -> Result<HashMap<PathBuf, GitFileHistory>, Error> {
-        let relative_root = scan_root.strip_prefix(&self.root).map_err(|_| {
-            Error::new(
-                ErrorKind::Unexpected,
-                format!(
-                    "files.root {} is outside repository {}",
-                    scan_root.display(),
-                    self.root.display()
-                ),
-            )
-        })?;
+        let relative_root = self.relative_scan_root(scan_root)?;
         let selected = files
             .into_iter()
             .map(|path| (git_path(&relative_root.join(path)), path.to_path_buf()))
@@ -397,6 +379,19 @@ impl GitRepo {
             started.elapsed()
         );
         Ok(history)
+    }
+
+    fn relative_scan_root<'a>(&self, scan_root: &'a Path) -> Result<&'a Path, Error> {
+        scan_root.strip_prefix(&self.root).map_err(|_| {
+            Error::new(
+                ErrorKind::Unexpected,
+                format!(
+                    "files.root {} is outside repository {}",
+                    scan_root.display(),
+                    self.root.display()
+                ),
+            )
+        })
     }
 
     fn has_head(&self) -> Result<bool, Error> {
