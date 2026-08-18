@@ -56,16 +56,22 @@ impl GitFileHistory {
 impl GitRepo {
     pub fn file_history<'a>(
         &self,
+        scan_root: &Path,
         files: impl IntoIterator<Item = &'a Path>,
     ) -> Result<HashMap<PathBuf, GitFileHistory>, Error> {
+        let relative_root = scan_root.strip_prefix(&self.root).map_err(|_| {
+            Error::new(
+                ErrorKind::Unexpected,
+                format!(
+                    "files.root {} is outside repository {}",
+                    scan_root.display(),
+                    self.root.display()
+                ),
+            )
+        })?;
         let selected = files
             .into_iter()
-            .map(|path| {
-                let relative = path
-                    .strip_prefix(&self.root)
-                    .expect("discovery only returns files inside the Git worktree");
-                (git_path(relative), path.to_path_buf())
-            })
+            .map(|path| (git_path(&relative_root.join(path)), path.to_path_buf()))
             .collect::<HashMap<_, _>>();
         if selected.is_empty() {
             return Ok(HashMap::new());

@@ -123,10 +123,18 @@ impl GitRepo {
                 }
             };
             let file_type = metadata.file_type();
-            if (file_type.is_file() || (file_type.is_symlink() && path.is_file()))
-                && path.starts_with(scan_root)
-            {
-                files.push(path);
+            if file_type.is_file() || (file_type.is_symlink() && path.is_file()) {
+                let relative = path.strip_prefix(scan_root).map_err(|_| {
+                    Error::new(
+                        ErrorKind::Unexpected,
+                        format!(
+                            "Git returned path outside files.root {}: {}",
+                            scan_root.display(),
+                            path.display()
+                        ),
+                    )
+                })?;
+                files.push(relative.to_path_buf());
             }
         }
         Ok(files)

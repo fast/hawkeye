@@ -250,17 +250,13 @@ impl Engine {
         let discovered = paths
             .into_iter()
             .map(|path| {
-                let relative = path
-                    .strip_prefix(&self.root)
-                    .expect("discovery only returns paths inside files.root")
-                    .to_path_buf();
-                let rule = self.rule_for(&relative);
-                (path, relative, rule)
+                let rule = self.rule_for(&path);
+                (path, rule)
             })
             .collect::<Vec<_>>();
         let supported = discovered
             .iter()
-            .filter_map(|(path, _, rule)| rule.is_some().then_some(path.as_path()))
+            .filter_map(|(path, rule)| rule.is_some().then_some(path.as_path()))
             .collect::<Vec<_>>();
         let git_history = if git.file_attrs == FeatureMode::Disable || supported.is_empty() {
             None
@@ -274,7 +270,7 @@ impl Engine {
                     return Err(Error::new(ErrorKind::Unsupported, message));
                 }
             } else {
-                Some(repo.file_history(supported)?)
+                Some(repo.file_history(&self.root, supported)?)
             }
         } else {
             debug_assert_ne!(git.file_attrs, FeatureMode::Enable);
@@ -285,7 +281,7 @@ impl Engine {
         };
         let mut edits = Vec::new();
 
-        for (path, relative, rule) in discovered {
+        for (relative, rule) in discovered {
             let Some(rule) = rule else {
                 report.files.push(FileReport {
                     path: relative,
@@ -294,6 +290,7 @@ impl Engine {
                 continue;
             };
 
+            let path = self.root.join(&relative);
             let original = fs::read(&path).map_err(|err| {
                 Error::new(
                     ErrorKind::Unexpected,
@@ -310,7 +307,9 @@ impl Engine {
             };
             let file_attrs = FileAttrs::new(
                 &path,
-                git_history.as_ref().and_then(|history| history.get(&path)),
+                git_history
+                    .as_ref()
+                    .and_then(|history| history.get(&relative)),
             )?;
             let header = self.render_header(&file_attrs)?;
             let analysis = self.analyze(rule, input, &header, target);

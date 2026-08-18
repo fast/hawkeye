@@ -36,10 +36,7 @@ impl Engine {
             && let Some(repo) = repo
         {
             for path in repo.list_files(&self.root)? {
-                let relative = path
-                    .strip_prefix(&self.root)
-                    .expect("Git discovery only returns paths inside files.root");
-                if self.selection.matched(relative, false).is_whitelist() {
+                if self.selection.matched(&path, false).is_whitelist() {
                     files.insert(path);
                 }
             }
@@ -66,17 +63,19 @@ impl Engine {
         if let Some(header_path) = &self.header_path {
             let mut selected = Vec::with_capacity(files.len());
             for path in files {
-                let is_header = same_file::is_same_file(&path, header_path).map_err(|err| {
-                    Error::new(
-                        ErrorKind::Unexpected,
-                        format!(
-                            "cannot compare {} with header template {}",
-                            path.display(),
-                            header_path.display()
-                        ),
-                    )
-                    .with_source(err)
-                })?;
+                let absolute_path = self.root.join(&path);
+                let is_header =
+                    same_file::is_same_file(&absolute_path, header_path).map_err(|err| {
+                        Error::new(
+                            ErrorKind::Unexpected,
+                            format!(
+                                "cannot compare {} with header template {}",
+                                absolute_path.display(),
+                                header_path.display()
+                            ),
+                        )
+                        .with_source(err)
+                    })?;
                 if !is_header {
                     selected.push(path);
                 }
@@ -158,12 +157,17 @@ fn walk(
         {
             continue;
         }
-        let path = entry.into_path();
-        let relative = path
-            .strip_prefix(root)
-            .expect("walker only yields paths inside files.root");
+        let relative = path.strip_prefix(root).map_err(|_| {
+            Error::new(
+                ErrorKind::Unexpected,
+                format!(
+                    "file walker returned path outside files.root: {}",
+                    path.display()
+                ),
+            )
+        })?;
         if selection.matched(relative, false).is_whitelist() {
-            files.insert(path);
+            files.insert(relative.to_path_buf());
         }
     }
     Ok(())
