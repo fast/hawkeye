@@ -55,7 +55,7 @@ use crate::template::HeaderTemplate;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct FileAttrs {
-    filename: Option<String>,
+    filename: String,
     disk_file_created_year: Option<i16>,
     disk_file_modified_year: Option<i16>,
     git_file_created_year: Option<i16>,
@@ -75,7 +75,9 @@ impl FileAttrs {
         Ok(Self {
             filename: path
                 .file_name()
-                .map(|name| name.to_string_lossy().into_owned()),
+                .expect("selected files have a filename")
+                .to_string_lossy()
+                .into_owned(),
             disk_file_created_year: metadata.created().ok().and_then(file_time_to_year),
             disk_file_modified_year: metadata.modified().ok().and_then(file_time_to_year),
             git_file_created_year: git.and_then(|history| history.created_year),
@@ -378,15 +380,13 @@ impl Engine {
             .iter()
             .find(|keyword| !folded.contains(keyword.as_str()))
         {
-            let message = match attrs.filename.as_deref() {
-                Some(filename) => format!(
+            let filename = &attrs.filename;
+            return Err(Error::new(
+                ErrorKind::ConfigInvalid,
+                format!(
                     "header template output for {filename:?} does not contain recognition keyword {keyword:?}"
                 ),
-                None => format!(
-                    "header template output does not contain recognition keyword {keyword:?}"
-                ),
-            };
-            return Err(Error::new(ErrorKind::ConfigInvalid, message));
+            ));
         }
         Ok(header)
     }
