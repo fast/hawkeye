@@ -29,8 +29,6 @@ use jiff::Timestamp;
 use jiff::tz::TimeZone;
 use serde::Serialize;
 
-use self::git::FileHistory;
-use self::git::Repository;
 use crate::Error;
 use crate::ErrorKind;
 use crate::builtin;
@@ -39,6 +37,8 @@ use crate::config::FeatureMode;
 use crate::config::GitConfig;
 use crate::config::RuleConfig;
 use crate::config::StyleConfig;
+use crate::engine::git::FileHistory;
+use crate::engine::git::Repository;
 use crate::report::FileOutcome;
 use crate::report::FileReport;
 use crate::report::Report;
