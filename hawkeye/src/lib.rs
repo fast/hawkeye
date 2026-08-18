@@ -12,7 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Library support for HawkEye.
+//! Check, format, and remove source-file license headers.
+//!
+//! Load a [`Config`], build an [`Engine`], and run the desired operation:
+//!
+//! ```no_run
+//! use hawkeye::Config;
+//! use hawkeye::Engine;
+//!
+//! # fn main() -> Result<(), hawkeye::Error> {
+//! let config = Config::load("licenserc.toml")?;
+//! let report = Engine::new(config)?.check()?;
+//! println!("checked {} files", report.files.len());
+//! # Ok(())
+//! # }
+//! ```
 
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![deny(missing_docs)]

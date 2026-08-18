@@ -91,7 +91,7 @@ enum HeaderTarget {
     Absent,
 }
 
-/// A reusable HawkEye runtime built from one configuration.
+/// A license-header processor built from one [`Config`].
 pub struct Engine {
     root: PathBuf,
     header_path: Option<PathBuf>,
@@ -114,7 +114,12 @@ struct Rule {
 }
 
 impl Engine {
-    /// Validates and builds an engine from parsed configuration.
+    /// Validates the configuration and builds an engine.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the configuration is inconsistent or a required path, template, or
+    /// style cannot be resolved.
     pub fn new(config: Config) -> Result<Self, Error> {
         config.validate()?;
 
@@ -248,17 +253,29 @@ impl Engine {
         })
     }
 
-    /// Reports the changes needed to make selected headers canonical.
+    /// Checks selected files without modifying them.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if selected files cannot be discovered, read, or analyzed.
     pub fn check(&self) -> Result<Report, Error> {
         Ok(self.edits(HeaderTarget::Present)?.report)
     }
 
-    /// Prepares edits that make selected headers canonical.
+    /// Prepares additions and replacements that make selected headers canonical.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if selected files cannot be discovered, read, or analyzed.
     pub fn format(&self) -> Result<Edits, Error> {
         self.edits(HeaderTarget::Present)
     }
 
-    /// Prepares edits that remove recognized headers from selected files.
+    /// Prepares removals for recognized headers.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if selected files cannot be discovered, read, or analyzed.
     pub fn remove(&self) -> Result<Edits, Error> {
         self.edits(HeaderTarget::Absent)
     }
@@ -400,7 +417,7 @@ impl Engine {
     }
 }
 
-/// File edits prepared by an [`Engine`].
+/// Pending file edits prepared by an [`Engine`].
 #[must_use = "edits have no effect until they are applied"]
 pub struct Edits {
     report: Report,
@@ -408,15 +425,19 @@ pub struct Edits {
 }
 
 impl Edits {
-    /// Returns the outcome for every selected file.
+    /// Discards the pending edits and returns their report.
     pub fn into_report(self) -> Report {
         self.report
     }
 
-    /// Applies every edit directly to its source file and returns the report.
+    /// Applies the pending edits and returns their report.
     ///
     /// Callers must ensure that selected files are not modified between preparing and applying the
     /// edits.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if a source file cannot be read or written.
     pub fn apply(self) -> Result<Report, Error> {
         for FileEdit { path, replacement } in self.files {
             let mut input = fs::read_to_string(&path).map_err(|err| {

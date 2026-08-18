@@ -14,7 +14,7 @@
 
 use std::fmt;
 
-/// A stable, actionable category of failures returned by HawkEye.
+/// A category of HawkEye errors.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub enum ErrorKind {
@@ -22,7 +22,7 @@ pub enum ErrorKind {
     ConfigInvalid,
     /// The requested operation cannot be performed for the current input or environment.
     Unsupported,
-    /// The operation failed in a way that callers cannot reliably recover from.
+    /// The operation failed unexpectedly.
     Unexpected,
 }
 
@@ -44,7 +44,7 @@ pub struct Error {
 }
 
 impl Error {
-    /// Returns the stable category that callers can act on.
+    /// Returns the error category.
     pub fn kind(&self) -> ErrorKind {
         self.kind
     }

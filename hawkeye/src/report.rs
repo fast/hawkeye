@@ -16,22 +16,22 @@ use std::path::PathBuf;
 
 use serde::Serialize;
 
-/// The planned outcome for one selected file.
+/// The outcome of an operation for one selected file.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub enum FileOutcome {
-    /// No change is needed.
+    /// The file already satisfies the requested operation.
     #[serde(rename = "clean")]
     Clean,
-    /// A canonical header should be added.
+    /// The operation requires adding a canonical header.
     #[serde(rename = "add")]
     Add,
-    /// A recognized header should be replaced.
+    /// The operation requires replacing a recognized header.
     #[serde(rename = "replace")]
     Replace,
-    /// A recognized header should be removed.
+    /// The operation requires removing a recognized header.
     #[serde(rename = "remove")]
     Remove,
-    /// The file looks licensed but no safe edit range is known.
+    /// A header-like comment cannot be edited safely.
     #[serde(rename = "conflict")]
     Conflict,
     /// The file has no rule or is not supported UTF-8 text.
@@ -39,18 +39,18 @@ pub enum FileOutcome {
     Unsupported,
 }
 
-/// One file entry in a report.
+/// The outcome for one selected file.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct FileReport {
     /// The path relative to `files.root`.
     pub path: PathBuf,
-    /// The planned outcome.
+    /// The operation outcome.
     pub outcome: FileOutcome,
 }
 
-/// A report produced by an engine command.
+/// The outcomes of an [`Engine`](crate::Engine) operation.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Report {
-    /// All selected file outcomes.
+    /// One entry for each selected file.
     pub files: Vec<FileReport>,
 }

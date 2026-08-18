@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! The strict HawkEye configuration model.
+//! HawkEye configuration types.
 //!
-//! [`Config`] contains every value represented directly by TOML. [`Config::load`]
-//! also anchors relative paths to the directory containing the loaded file.
+//! [`Config::load`] parses TOML and resolves relative paths. [`Config::validate`] checks
+//! relationships between the parsed fields.
 
 use std::collections::BTreeMap;
 use std::collections::HashMap;
@@ -28,7 +28,7 @@ use serde::Deserialize;
 use crate::Error;
 use crate::ErrorKind;
 
-/// A HawkEye configuration.
+/// Configuration for a HawkEye engine.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
@@ -52,7 +52,14 @@ pub struct Config {
 }
 
 impl Config {
-    /// Reads a config file and anchors its relative paths to that file.
+    /// Loads a config file and resolves relative paths from its directory.
+    ///
+    /// This method parses the file without performing semantic validation. Call [`Self::validate`]
+    /// to validate it directly, or pass it to [`Engine::new`](crate::Engine::new).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the file cannot be read, parsed, or resolved.
     pub fn load<P: AsRef<Path>>(path: P) -> Result<Self, Error> {
         let path = path.as_ref();
         let source = fs::read_to_string(path).map_err(|err| {
@@ -94,7 +101,14 @@ impl Config {
         Ok(config)
     }
 
-    /// Validates configuration invariants that do not require runtime resources.
+    /// Validates relationships between configuration fields.
+    ///
+    /// Resource-dependent checks, such as opening `files.root`, loading a header template, and
+    /// resolving style names, are performed by [`Engine::new`](crate::Engine::new).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ErrorKind::ConfigInvalid`] when one or more fields are inconsistent.
     pub fn validate(&self) -> Result<(), Error> {
         let mut validator = Validator::default();
         validator.header(&self.header);
@@ -114,17 +128,19 @@ impl Config {
     }
 }
 
-/// The header template source and the words used to recognize an old header.
+/// Header template and recognition settings.
+///
+/// Exactly one of `builtin`, `path`, or `text` must be set.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct HeaderConfig {
-    /// A built-in header resource key.
+    /// The built-in template key, when using a bundled header.
     pub builtin: Option<String>,
-    /// A template path anchored to the config file by [`Config::load`] when relative.
+    /// The template file, resolved from the config file by [`Config::load`] when relative.
     pub path: Option<PathBuf>,
-    /// An inline header template.
+    /// The inline template, when the header is stored in the config file.
     pub text: Option<String>,
-    /// Words that must occur in a structurally recognized header.
+    /// Case-insensitive words required in a recognized header; defaults to `"copyright"`.
     #[serde(default = "default_keywords")]
     pub keywords: Vec<String>,
 }
@@ -137,11 +153,12 @@ fn default_keywords() -> Vec<String> {
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct FilesConfig {
-    /// The root scanned by HawkEye, anchored to the config file by [`Config::load`] when relative.
+    /// The directory to scan, resolved from the config file by [`Config::load`] when relative;
+    /// defaults to `.`.
     pub root: PathBuf,
     /// Git-ignore-style inclusion patterns; an empty list selects all files.
     pub includes: Vec<String>,
-    /// Git-ignore-style exclusion patterns.
+    /// Git-ignore-style exclusion patterns applied after `includes`.
     pub excludes: Vec<String>,
 }
 
@@ -155,17 +172,17 @@ impl Default for FilesConfig {
     }
 }
 
-/// Whether a Git-backed capability is disabled, opportunistic, or required.
+/// Availability policy for a Git-backed feature.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
 pub enum FeatureMode {
-    /// Never use the capability.
+    /// Never use the feature.
     #[serde(rename = "disable")]
     Disable,
-    /// Use the capability when a Git repository is available.
+    /// Use the feature when a Git repository is available.
     #[serde(rename = "auto")]
     #[default]
     Auto,
-    /// Require the capability and fail when it cannot be initialized.
+    /// Require the feature and fail when it is unavailable.
     #[serde(rename = "enable")]
     Enable,
 }
@@ -184,9 +201,9 @@ impl FeatureMode {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct GitConfig {
-    /// How Git ignore files participate in discovery.
+    /// Controls Git-aware file discovery; defaults to [`FeatureMode::Auto`].
     pub ignore: FeatureMode,
-    /// How per-file Git attributes are populated for templates.
+    /// Controls Git-derived template attributes; defaults to [`FeatureMode::Disable`].
     pub file_attrs: FeatureMode,
 }
 
@@ -199,28 +216,28 @@ impl Default for GitConfig {
     }
 }
 
-/// A filename/extension rule and its accepted/output comment styles.
+/// File selectors and the comment styles used for matching and output.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct RuleConfig {
-    /// Suffixes matched after the final filename separator, without a leading dot.
+    /// Case-insensitive filename suffixes without a leading dot.
     #[serde(default)]
     pub extensions: Vec<String>,
     /// Complete filenames matched case-insensitively.
     #[serde(default)]
     pub filenames: Vec<String>,
-    /// The canonical style used for output.
+    /// The style written by `format`.
     pub style_out: String,
-    /// The complete set of structurally safe input styles, or the output style when empty.
+    /// The accepted input styles; an empty list means only `style_out`.
     #[serde(default)]
     pub styles_in: Vec<String>,
 }
 
-/// A syntax-only custom comment style.
+/// A custom comment style.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(tag = "kind", deny_unknown_fields)]
 pub enum StyleConfig {
-    /// Every logical header line is wrapped independently.
+    /// Wraps each header line independently.
     #[serde(rename = "line")]
     Line {
         /// Text written before every logical line.
@@ -233,7 +250,7 @@ pub enum StyleConfig {
         #[serde(default)]
         pad_lines: bool,
     },
-    /// One opening and closing delimiter encloses all logical lines.
+    /// Encloses all header lines between opening and closing delimiters.
     #[serde(rename = "block")]
     Block {
         /// Opening delimiter written on its own line.

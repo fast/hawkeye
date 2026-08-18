@@ -16,90 +16,87 @@
 [actions-badge]: https://github.com/korandoru/hawkeye/actions/workflows/ci.yml/badge.svg
 [actions-url]: https://github.com/korandoru/hawkeye/actions/workflows/ci.yml
 
-HawkEye checks, formats, and removes source-file license headers. The package in `hawkeye` publishes both the reusable `hawkeye` library and the `hawkeye` command-line binary; the repository root is a virtual Cargo workspace.
+HawkEye checks, formats, and removes source-file license headers. The crate provides both the `hawkeye` command-line tool and a Rust library.
 
-HawkEye v7 deliberately uses a new snake-case configuration contract. It does not accept v6 field aliases; migration tooling belongs in a separate tool rather than the runtime parser.
+## Getting started
 
-## Installation
-
-The v7 prerelease is distributed through crates.io and includes both the `hawkeye` library and command-line binary:
+Install the v7 prerelease from crates.io:
 
 ```shell
 cargo install hawkeye --version 7.0.0-alpha.1 --locked
 ```
 
-## Command line
-
-Unless `--config` is passed, HawkEye tries `licenserc.toml` and then `.licenserc.toml` in the current directory. It does not search parent directories.
-
-```shell
-# Report non-canonical files.
-hawkeye check
-
-# Apply safe additions and replacements.
-hawkeye format
-
-# Remove structurally recognized headers.
-hawkeye remove
-
-# Emit the stable data shape without a separate report version.
-hawkeye check --output-format json
-
-# Inspect file discovery, Git operations, and timing.
-RUST_LOG=hawkeye=debug hawkeye check
-```
-
-`check` exits with code 1 for a missing, non-canonical, or conflicting header. `format` and `remove` return 0 after applying safe changes unless conflicts remain; pass `--fail-on-change` to return 1 whenever files changed. All commands accept `--fail-on-unknown` to treat files without a rule and non-UTF-8 files as policy failures. Configuration, I/O, template, and Git failures use exit code 2.
-
-`--dry-run` suppresses writes. Reports are written to stdout; logs and errors are written to stderr.
-
-## Configuration
-
-This copyable example shows every configuration section and annotates the contract of each field.
+Add `licenserc.toml` to the project root. This minimal configuration uses the bundled Apache 2.0 header and the built-in file rules:
 
 ```toml
 [header]
-# Choose exactly one source. Built-in keys are opaque and case-sensitive.
 builtin = "Apache-2.0"
-# A relative path is resolved from the directory containing this config file.
+
+[props]
+copyright_owner = "Acme Developers"
+inception_year = 2026
+```
+
+Then check or update the project:
+
+```shell
+hawkeye check
+hawkeye format
+```
+
+## Command line
+
+| Command | Behavior |
+| --- | --- |
+| `hawkeye check` | Reports missing, non-canonical, and conflicting headers without writing files. |
+| `hawkeye format` | Adds missing headers and replaces recognized non-canonical headers. |
+| `hawkeye remove` | Removes recognized headers. |
+
+Without `--config`, HawkEye tries `licenserc.toml` and then `.licenserc.toml` in the current directory. It does not search parent directories.
+
+All commands support `--output-format json` and `--fail-on-unknown`. `format` and `remove` also support `--dry-run` and `--fail-on-change`. Reports go to stdout; logs and errors go to stderr. Set `RUST_LOG=hawkeye=debug` to inspect file discovery and Git processing.
+
+Exit code 0 means the selected policy passed. Exit code 1 means `check` found a required change or conflict, an edit command left a conflict, or an enabled failure option matched. Config, I/O, template, and Git errors use exit code 2.
+
+## Configuration
+
+The following example shows every configuration section. Field names are snake case and unknown fields are rejected.
+
+```toml
+[header]
+# Choose exactly one source. Built-in keys are case-sensitive.
+builtin = "Apache-2.0"
 # path = "HEADER.txt"
-# Inline text and files use the same MiniJinja syntax.
 # text = "Copyright {{ props.inception_year }} {{ props.copyright_owner }}"
 
-# All keywords must occur case-insensitively before a parsed comment can be
-# replaced or removed. The default is ["copyright"].
+# Every keyword must occur, case-insensitively, before an existing comment can
+# be replaced or removed. The default is ["copyright"].
 keywords = ["copyright"]
 
 [files]
-# A relative root is resolved from the directory containing this config file.
+# Relative paths are resolved from the directory containing this config file.
 root = "."
-# Patterns are relative to root. An empty list selects every discovered file.
+# An empty includes list selects every discovered file.
 includes = ["**/*.rs", "**/*.toml"]
-# Excludes are applied after includes. Negated patterns are not accepted.
 excludes = ["generated/**"]
 
 [props]
-# Arbitrary TOML values in this table are exposed to templates as `props`.
+# Arbitrary TOML values are exposed to the header template as `props`.
 copyright_owner = "Acme Developers"
 inception_year = 2026
 
 [git]
-# Each Git capability accepts "disable", "auto", or "enable".
-# `auto` uses Git when root is inside a worktree and otherwise falls back.
+# Both fields accept "disable", "auto", or "enable".
 ignore = "auto"
-# History traversal is opt-in because large repositories can make it expensive.
 file_attrs = "disable"
 
 [styles.quoted_line]
-# A line style wraps every logical header line independently.
 kind = "line"
 prefix = "<!-- "
 suffix = " -->"
-# Padding aligns non-empty suffixes at the same column.
 pad_lines = true
 
 [styles.quoted_block]
-# A block style writes start and end on separate lines.
 kind = "block"
 start = "<!--"
 prefix = "    "
@@ -107,79 +104,54 @@ suffix = ""
 end = "-->"
 
 [[rules]]
-# The first matching user rule wins; built-in rules are fallbacks.
-# Extensions omit the leading dot and may contain multiple segments.
+# User rules are matched in declaration order before built-in rules.
 extensions = ["rs", "d.ts"]
-# Filenames are complete basenames. Both selectors are case-insensitive.
 filenames = ["Cargo.toml"]
-# Exactly one style is used for canonical output.
+# format writes one canonical style.
 style_out = "doubleslash"
-# A non-empty list is the complete accepted input set and must include
-# style_out. Omitting this field or using [] defaults to [style_out].
+# An empty list accepts only style_out; otherwise list every accepted style.
 styles_in = ["doubleslash", "slashstar"]
 ```
 
-### Header
+### Headers and templates
 
-`header.builtin` is an opaque, case-sensitive resource key. v7 currently ships `Apache-2.0`, `Apache-2.0-ASF`, and `Elastic-2.0`; SPDX-like spelling is preserved instead of normalized to a Rust identifier.
+`header.builtin` accepts `Apache-2.0`, `Apache-2.0-ASF`, or `Elastic-2.0`. `header.path` loads a UTF-8 template, while `header.text` stores the same template inline. A template file is never selected as a source file.
 
-`header.path` loads a UTF-8 MiniJinja template. Relative paths use the directory containing the config file; absolute paths are accepted. The resolved template file is never selected as a source target, even when it is inside `files.root` and matches a rule. `header.text` stores the same template inline.
+Templates use MiniJinja with strict undefined values, auto-escaping disabled, and its standard built-in filters, tests, and functions. HawkEye does not enable template includes or external loaders. The template context contains:
 
-`header.keywords` defaults to `["copyright"]`. Every keyword must occur case-insensitively in a structurally parsed header before HawkEye may replace or remove it. This small semantic gate prevents an ordinary leading comment that happens to use the same comment syntax from becoming a deletion range.
+| Value | Meaning |
+| --- | --- |
+| `props` | The complete user-defined `[props]` table. |
+| `attrs.filename` | The current file name. |
+| `attrs.disk_file_created_year` | The filesystem creation year, or `null` when unavailable. |
+| `attrs.disk_file_modified_year` | The filesystem modification year, or `null` when unavailable. |
+| `attrs.git_file_created_year` | The first Git commit year for the path, or `null` when disabled or unavailable. |
+| `attrs.git_file_modified_year` | The last Git commit year, using the current year for dirty or untracked files. |
+| `attrs.git_authors` | Sorted distinct Git author names. |
 
-### Template context
+HawkEye never substitutes the current year for an unavailable value. Templates that need a fallback must express it explicitly.
 
-Templates receive two top-level objects: user-defined `props` and per-file `attrs`. MiniJinja runs with strict undefined values, no auto-escaping, and its standard built-in filters, tests, and functions. HawkEye does not register filesystem, process, network, dynamic loader, or include capabilities.
+### Files, rules, and styles
 
-`props` contains the values from the `[props]` TOML table. Built-in Apache and Elastic templates use `props.inception_year` and `props.copyright_owner`.
+`files.includes` and `files.excludes` use Git-ignore-style patterns relative to `files.root`; negated patterns are not accepted because inclusion and exclusion are separate lists. An empty `includes` list means all discovered files. `.git` is always excluded. File symlinks are followed, while directory symlinks are not traversed.
 
-`attrs` contains:
+Rules match complete filenames or case-insensitive filename suffixes. Extensions omit the leading dot and may contain multiple segments, such as `d.ts`. The first matching user rule wins; built-in rules are lower-priority fallbacks. Duplicate selectors are allowed and logged at debug level when shadowed.
 
-- `filename`: the file basename;
-- `disk_file_created_year`: filesystem creation year or `null` when unavailable;
-- `disk_file_modified_year`: filesystem modification year or `null` when unavailable;
-- `git_file_created_year`: earliest non-merge commit year for the current path or `null` when Git attributes are disabled;
-- `git_file_modified_year`: latest non-merge commit year, upgraded to the current year for a dirty or untracked file;
-- `git_authors`: sorted distinct Git author names, including the configured current user for dirty or untracked files.
+`style_out` is the canonical format written by HawkEye. `styles_in` lists formats that may be recognized and safely replaced or removed. When `styles_in` is empty, it defaults to `[style_out]`; a non-empty list must include `style_out`. Style names are case-sensitive. A custom style may override a built-in style and produces a warning. The bundled mappings are defined in [rules.toml](hawkeye/src/builtin/rules.toml) and [styles.toml](hawkeye/src/builtin/styles.toml).
 
-Unavailable values remain `null`; they are never silently replaced with the current year. A template can choose its own fallback explicitly.
+### Git integration
 
-### File discovery
+`git.ignore` defaults to `auto`: it uses the Git index and ignore rules inside a worktree and falls back to filesystem discovery outside one. Tracked files remain selected even when they match an ignore rule. Set the mode to `enable` to require a worktree or `disable` to use filesystem discovery unconditionally.
 
-`files.root` defaults to the directory containing the config file. Relative roots use that directory; absolute roots are accepted.
-
-`files.includes` and `files.excludes` are Git-ignore-style path filters relative to `files.root`, with `/` as the logical separator. An empty `includes` list means all files, after which excludes and rule selection still apply. `.git` is always excluded. HawkEye does not maintain another built-in list of generated or dependency directories.
-
-File symlinks are matched by their link path and formatting follows the link to its regular-file target without replacing the link itself. Directory symlinks are not traversed, and broken symlinks are ignored.
-
-`git.ignore` is `disable`, `auto`, or `enable` and defaults to `auto`. When a repository is available, HawkEye asks Git for tracked and non-ignored untracked files. This preserves Git's index semantics: a file force-added with `git add -f` remains selected even if it also matches `.gitignore`. Outside a repository, `auto` falls back to an ordinary filesystem walk because `.gitignore` has no repository context; `enable` requires `files.root` to be inside a Git worktree.
-
-Git-backed capabilities read repositories in-process and do not require a `git` executable at runtime.
-
-### Rules and styles
-
-The first matching rule wins. User rules are checked in declaration order, followed by HawkEye's built-in language rules as low-priority fallbacks, so an earlier user rule may intentionally override a later user rule or a built-in rule. `extensions` are exact case-insensitive suffixes without a leading dot, so `d.ts` directly supports a multi-segment extension. `filenames` are complete case-insensitive basenames. Rules do not use path globs.
-
-`style_out` is the one canonical output syntax. `styles_in` is the complete set of syntaxes that can be structurally recognized and safely replaced or removed. An empty list defaults to `[style_out]`; a non-empty list must include `style_out` so formatted output is accepted on the next run. If the leading text parses as a known comment header and contains all configured keywords but its style is not accepted by the rule, HawkEye reports `conflict` instead of guessing a deletion range.
-
-Custom line styles wrap each logical header line with `prefix` and `suffix`. `pad_lines = true` right-pads shorter lines so suffixes align; it requires a non-empty suffix. Custom block styles write `start` and `end` on their own lines and wrap body lines with `prefix` and `suffix`. A custom style with the same name as a built-in style overrides it and emits a warning; built-in rules then use the custom definition. Built-in style names derive from the v6 identifiers by lowercasing them and omitting the redundant `_style` suffix, such as `doubleslash`, `slashstar`, and `xml`.
-
-Built-in output styles include line comments for slash, hash, dash, percent, semicolon, apostrophe, bang, tilde, batch, and Haml syntaxes, plus block comments for C, XML, Lua, Pascal, Velocity, Mustache, MVEL, FreeMarker, JSP, ColdFusion, ASP, Swift banners, and AsciiDoc. The built-in filename and extension rules cover the corresponding v6 language set, while user rules always take precedence.
-
-### Git file attributes
-
-`git.file_attrs` is `disable`, `auto`, or `enable` and defaults to `disable` because history traversal has a cost. `auto` leaves attributes unavailable when no usable repository is found, while `enable` requires one. Once a repository is selected, both modes report Git operation failures rather than silently returning incomplete attributes.
-
-History walks the commits reachable from `HEAD` once per run. Each non-merge commit tree is compared with its sole parent, and only changes to selected paths are retained; skipping merge diffs avoids attributing a modification merely because histories joined. Rename detection is disabled, so a renamed path begins its own history. Dirty tracked files and files inside untracked directories use the current UTC year and current configured Git author.
-
-A shallow repository cannot provide truthful creation years. In that situation, `file_attrs = "enable"` fails with an instruction to fetch complete history; `auto` logs a warning and leaves Git-derived attributes unavailable instead of manufacturing years from the shallow boundary.
+`git.file_attrs` defaults to `disable` because walking repository history has a cost. `auto` populates attributes when complete history is available; `enable` also requires a usable repository and complete history. HawkEye reads Git repositories in-process and does not require a `git` executable at runtime.
 
 ## Library
 
-The library exposes the same behavior without shelling out to the CLI:
+The library exposes the same engine used by the command-line tool:
 
 ```rust
-use hawkeye::{Config, Engine};
+use hawkeye::Config;
+use hawkeye::Engine;
 
 let config = Config::load("licenserc.toml")?;
 let engine = Engine::new(config)?;
@@ -187,11 +159,17 @@ let report = engine.check()?;
 # Ok::<(), hawkeye::Error>(())
 ```
 
-`Config` is the Serde-facing TOML model, and `Config::load` anchors relative paths to the config file. `Config::validate` is available to callers that need to inspect a configuration before use; `Engine::new` always invokes it before building the resolved paths, compiled template, styles, and ordered rules. `Engine::check` returns a report without writes. `Engine::format` and `Engine::remove` return compact file edits for inspection or application. `Edits::apply` assumes exclusive access to the selected files and writes each replacement directly to the existing path, preserving hard links and other inode metadata.
+`Engine::check` never writes files. `Engine::format` and `Engine::remove` return pending `Edits`; call `Edits::apply` to write them or `Edits::into_report` to inspect the result without writing.
+
+## Compatibility
+
+HawkEye v7 uses a new snake-case configuration format and does not accept v6 field names. A v6 config must be migrated before use with v7.
+
+The minimum supported Rust version is 1.89.0. It may be raised in a minor release; patch releases preserve the minimum version of their corresponding minor release.
 
 ## Development
 
-Repository workflows are exposed through `cargo x`:
+Repository workflows use `cargo x`:
 
 ```shell
 cargo x build
@@ -199,22 +177,8 @@ cargo x test
 cargo x lint
 ```
 
-Releases use `cargo-release` directly. `cargo release 7.0.0-alpha.1` previews the Alpha 1 release, and adding `--execute` performs the configured commit, crates.io publish, signed tag, and push.
-
-The virtual workspace keeps the product and development tasks separate without introducing a `crates` directory for a single published package:
-
-- `hawkeye` is the only published package and contains the library, command-line binary, and Cargo integration-test harness;
-- `tests-integration` contains complete repository corpora as test data and is not a Cargo package;
-- `xtask` is an unpublished development tool.
-
-Integration tests copy each corpus to a temporary directory, optionally create a real Git repository and history, and run the actual Cargo-built `hawkeye` binary. Reports and resulting file contents are asserted directly beside each action instead of through generated snapshots. The root `licenserc.toml` excludes the entire `tests-integration` directory because those corpora intentionally contain missing, legacy, conflicting, ignored, BOM, CRLF, and otherwise non-canonical files.
-
-## Minimum Rust version policy
-
-The minimum supported Rust version is 1.89.0.
-
-The minimum supported Rust version may be increased in a minor release. Patch releases will preserve the minimum supported Rust version of their corresponding minor release.
+The integration suite lives in [`tests-integration`](tests-integration) and runs the Cargo-built binary against complete temporary repositories.
 
 ## License
 
-This project is licensed under [Apache License, Version 2.0][license-url].
+Licensed under the [Apache License, Version 2.0][license-url].
