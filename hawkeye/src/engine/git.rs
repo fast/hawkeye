@@ -122,7 +122,7 @@ impl GitRepo {
             let path = self.root.join(path_from_git_bytes(record));
             let metadata = match std::fs::symlink_metadata(&path) {
                 Ok(metadata) => metadata,
-                Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+                Err(err) if err.kind() == std::io::ErrorKind::NotFound => continue,
                 Err(err) => {
                     return Err(Error::new(
                         ErrorKind::Unexpected,
@@ -190,7 +190,7 @@ fn path_from_git_bytes(bytes: &[u8]) -> PathBuf {
 }
 
 impl GitRepo {
-    fn output<I, S>(&self, operation: &'static str, arguments: I) -> Result<Output, Error>
+    fn output<I, S>(&self, operation: &str, arguments: I) -> Result<Output, Error>
     where
         I: IntoIterator<Item = S>,
         S: AsRef<OsStr>,
@@ -229,10 +229,10 @@ impl GitRepo {
 
     fn read_stdout<I, S, Value>(
         &self,
-        operation: &'static str,
+        operation: &str,
         arguments: I,
-        input: Option<&[u8]>,
-        read: impl FnOnce(&mut dyn BufRead) -> Result<Value, Error>,
+        stdin: Option<&[u8]>,
+        parse: impl FnOnce(&mut dyn BufRead) -> Result<Value, Error>,
     ) -> Result<Value, Error>
     where
         I: IntoIterator<Item = S>,
@@ -250,7 +250,7 @@ impl GitRepo {
         let stderr_writer = stderr.try_clone().map_err(|err| {
             Error::new(ErrorKind::Unexpected, "cannot clone Git stderr buffer").with_source(err)
         })?;
-        let stdin = if let Some(input) = input {
+        let stdin = if let Some(input) = stdin {
             let mut file = tempfile::tempfile().map_err(|err| {
                 Error::new(ErrorKind::Unexpected, "cannot create Git stdin buffer").with_source(err)
             })?;
@@ -282,7 +282,7 @@ impl GitRepo {
             .stdout
             .take()
             .expect("Git stdout was configured as a pipe");
-        let parsed = read(&mut BufReader::new(stdout));
+        let parsed = parse(&mut BufReader::new(stdout));
         if parsed.is_err() {
             let _ = child.kill();
         }
@@ -378,16 +378,16 @@ impl GitRepo {
             return Ok(HashMap::new());
         }
 
-        let current_year = Timestamp::now().to_zoned(TimeZone::UTC).year();
+        let worktree_year = Timestamp::now().to_zoned(TimeZone::UTC).year();
         let started = Instant::now();
         let author = self.author_name()?;
         let mut history = self.read_history(&selected)?;
-        self.apply_worktree_status(&selected, current_year, author.as_deref(), &mut history)?;
+        self.apply_worktree_status(&selected, worktree_year, author.as_deref(), &mut history)?;
 
         for path in selected.values() {
             history.entry(path.clone()).or_insert_with(|| {
                 let mut history = GitFileHistory::default();
-                history.record_worktree(current_year, author.as_deref());
+                history.record_worktree(worktree_year, author.as_deref());
                 history
             });
         }
