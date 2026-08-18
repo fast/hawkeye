@@ -161,6 +161,12 @@ let report = engine.check()?;
 
 `Engine::check` never writes files. `Engine::format` and `Engine::remove` return pending `Edits`; call `Edits::apply` to write them or `Edits::into_report` to inspect the result without writing.
 
+The default `application` feature builds the command-line tool. Library-only users can omit its command-specific dependencies:
+
+```toml
+hawkeye = { version = "7.0.0-alpha.1", default-features = false }
+```
+
 ## Compatibility
 
 HawkEye v7 uses a new snake-case configuration format and does not accept v6 field names. A v6 config must be migrated before use with v7.

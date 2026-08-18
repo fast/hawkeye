@@ -14,7 +14,6 @@
 
 [package]
 description = "A license header checker and formatter."
-exclude = ["tests/**"]
 name = "hawkeye"
 version = "7.0.0-alpha.1"
 
@@ -32,23 +31,34 @@ rustdoc-args = ["--cfg", "docsrs"]
 [lib]
 path = "src/lib.rs"
 
+[features]
+application = ["dep:clap", "dep:exn", "dep:logforth", "dep:serde_json"]
+default = ["application"]
+
 [[bin]]
 name = "hawkeye"
 path = "src/bin/hawkeye/main.rs"
+required-features = ["application"]
+
+[[test]]
+name = "test"
+path = "tests/test.rs"
+required-features = ["application"]
 
 [dependencies]
-clap = { workspace = true }
-exn = { workspace = true }
 gix = { workspace = true }
 ignore = { workspace = true }
 jiff = { workspace = true }
 log = { workspace = true }
-logforth = { workspace = true }
 minijinja = { workspace = true }
 same-file = { workspace = true }
 serde = { workspace = true }
-serde_json = { workspace = true }
 toml = { workspace = true }
+
+clap = { workspace = true, optional = true }
+exn = { workspace = true, optional = true }
+logforth = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }

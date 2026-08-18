@@ -27,6 +27,9 @@
 //! # Ok(())
 //! # }
 //! ```
+//!
+//! The default `application` feature builds the `hawkeye` executable. Library-only users can
+//! disable default features to omit its command-specific dependencies.
 
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![deny(missing_docs)]

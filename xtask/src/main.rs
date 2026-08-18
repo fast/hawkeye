@@ -30,7 +30,7 @@ enum SubCommand {
     Build(CommandBuild),
     #[clap(about = "Run workspace quality checks.")]
     Lint(CommandLint),
-    #[clap(about = "Run workspace unit tests.")]
+    #[clap(about = "Run workspace tests.")]
     Test(CommandTest),
 }
 
@@ -99,10 +99,22 @@ fn make_build_cmd(locked: bool) -> StdCommand {
 
 fn make_test_cmd(no_capture: bool) -> StdCommand {
     let mut cmd = find_command("cargo");
-    cmd.args(["test", "--workspace", "--no-default-features"]);
+    cmd.args(["test", "--workspace", "--all-features"]);
     if no_capture {
         cmd.args(["--", "--nocapture"]);
     }
+    cmd
+}
+
+fn make_library_check_cmd() -> StdCommand {
+    let mut cmd = find_command("cargo");
+    cmd.args([
+        "check",
+        "--package",
+        "hawkeye",
+        "--lib",
+        "--no-default-features",
+    ]);
     cmd
 }
 
@@ -184,7 +196,10 @@ fn make_taplo_cmd(fix: bool) -> StdCommand {
 fn main() {
     match Command::parse().sub {
         SubCommand::Build(cmd) => run_command(make_build_cmd(cmd.locked)),
-        SubCommand::Test(cmd) => run_command(make_test_cmd(cmd.no_capture)),
+        SubCommand::Test(cmd) => {
+            run_command(make_library_check_cmd());
+            run_command(make_test_cmd(cmd.no_capture));
+        }
         SubCommand::Lint(cmd) => {
             run_command(make_clippy_cmd(cmd.fix));
             run_command(make_format_cmd(cmd.fix));
