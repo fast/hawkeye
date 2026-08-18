@@ -49,7 +49,7 @@ impl Engine {
             })
             .filter(|(_, candidate)| has_keywords(&candidate.body, &self.keywords));
 
-        let candidate = match unique_style_match(matches) {
+        let candidate = match unambiguous_match(matches) {
             Ok(candidate) => candidate,
             Err(()) => return FileAnalysis::Conflict,
         };
@@ -58,13 +58,14 @@ impl Engine {
             let end = skip_blank_lines(input, candidate.range.end);
             let candidate_lines = candidate.body.lines().count();
             let header_lines = header.lines().count();
-            if !safe_to_replace(&candidate.body, header, &self.keywords)
-                || (candidate_lines < header_lines
-                    && self
-                        .styles
-                        .values()
-                        .any(|style| style.parse(input, end).is_some()))
-            {
+            // A blank line can split a malformed header into independently parseable comments.
+            // Replacing only the first part would leave license text behind.
+            let split_header = candidate_lines < header_lines
+                && self
+                    .styles
+                    .values()
+                    .any(|style| style.parse(input, end).is_some());
+            if !safe_to_replace(&candidate.body, header, &self.keywords) || split_header {
                 return FileAnalysis::Conflict;
             }
             let range = offset..end;
@@ -103,7 +104,7 @@ impl Engine {
     }
 }
 
-fn unique_style_match<'a>(
+fn unambiguous_match<'a>(
     mut matches: impl Iterator<Item = (&'a str, StyleMatch)>,
 ) -> Result<Option<(&'a str, StyleMatch)>, ()> {
     let Some((style_name, first)) = matches.next() else {
@@ -123,6 +124,8 @@ fn has_keywords(body: &str, keywords: &[String]) -> bool {
 }
 
 fn safe_to_replace(candidate: &str, header: &str, keywords: &[String]) -> bool {
+    // Comment syntax finds the candidate range; this semantic check prevents an adjacent ordinary
+    // comment from being consumed merely because it uses the same style.
     candidate.lines().count() <= header.lines().count()
         && candidate
             .lines()
@@ -215,7 +218,6 @@ fn skip_blank_lines(input: &str, mut position: usize) -> usize {
     position
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
 struct StyleMatch {
     range: Range<usize>,
     body: String,
@@ -362,6 +364,8 @@ fn strip_affixes<'a>(
     suffix: &str,
     pad_lines: bool,
 ) -> Option<&'a str> {
+    // Rendering trims trailing whitespace when a line style has no suffix, including the padding
+    // at the end of a prefix for an empty logical line.
     let prefix_without_space = prefix.trim_end();
     let body = if line == prefix_without_space && suffix.is_empty() {
         ""
