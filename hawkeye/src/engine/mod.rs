@@ -406,19 +406,19 @@ impl Edits {
     /// Callers must ensure that selected files are not modified between preparing and applying the
     /// edits.
     pub fn apply(self) -> Result<Report, Error> {
-        for file in self.files {
-            let mut input = fs::read_to_string(&file.path).map_err(|err| {
+        for FileEdit { path, replacement } in self.files {
+            let mut input = fs::read_to_string(&path).map_err(|err| {
                 Error::new(
                     ErrorKind::Unexpected,
-                    format!("cannot read {}", file.path.display()),
+                    format!("cannot read {}", path.display()),
                 )
                 .with_source(err)
             })?;
-            file.replacement.apply(&mut input);
-            fs::write(&file.path, input).map_err(|err| {
+            input.replace_range(replacement.range, &replacement.value);
+            fs::write(&path, input).map_err(|err| {
                 Error::new(
                     ErrorKind::Unexpected,
-                    format!("cannot write {}", file.path.display()),
+                    format!("cannot write {}", path.display()),
                 )
                 .with_source(err)
             })?;
@@ -504,12 +504,6 @@ struct FileAnalysis {
 struct Replacement {
     range: Range<usize>,
     value: String,
-}
-
-impl Replacement {
-    fn apply(&self, input: &mut String) {
-        input.replace_range(self.range.clone(), &self.value);
-    }
 }
 
 impl Engine {
