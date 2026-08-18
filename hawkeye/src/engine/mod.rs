@@ -380,12 +380,6 @@ impl Engine {
         })
     }
 
-    fn style(&self, name: &str) -> &StyleConfig {
-        self.styles
-            .get(name)
-            .expect("resolved rules only refer to known styles")
-    }
-
     fn render_header(&self, attrs: &FileAttrs) -> Result<String, Error> {
         let header = self.template.render(&self.props, attrs)?;
         let folded = header.to_lowercase();

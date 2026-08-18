@@ -33,7 +33,7 @@ impl Engine {
         let header_start = skip_blank_lines(input, offset);
         let render = || {
             let eol = line_ending(input);
-            let mut rendered = self.style(&rule.style_out).render(header, eol);
+            let mut rendered = self.styles[&rule.style_out].render(header, eol);
             rendered.push_str(eol);
             rendered.push_str(eol);
             rendered
@@ -43,7 +43,7 @@ impl Engine {
             .styles_in
             .iter()
             .filter_map(|name| {
-                self.style(name)
+                self.styles[name]
                     .parse(input, header_start)
                     .map(|candidate| (name.as_str(), candidate))
             })
