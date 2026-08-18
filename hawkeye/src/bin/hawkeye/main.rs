@@ -13,8 +13,6 @@
 // limitations under the License.
 
 use std::fmt;
-use std::io;
-use std::io::Write;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
@@ -29,7 +27,6 @@ use hawkeye::Action;
 use hawkeye::Config;
 use hawkeye::Engine;
 use hawkeye::Outcome;
-use hawkeye::Report;
 use logforth::filter::rustlog::RustLogFilterBuilder;
 
 #[derive(Debug, Parser)]
@@ -106,21 +103,7 @@ fn do_main() -> Result<ExitCode, Error> {
         output_format,
         subcommand,
     } = Command::parse();
-    let (action, write, fail_on_unknown, reject_changes) = match subcommand {
-        SubcommandOptions::Check(options) => (Action::Check, false, options.fail_on_unknown, true),
-        SubcommandOptions::Format(options) => (
-            Action::Format,
-            !options.dry_run,
-            options.fail_on_unknown,
-            options.fail_on_change,
-        ),
-        SubcommandOptions::Remove(options) => (
-            Action::Remove,
-            !options.dry_run,
-            options.fail_on_unknown,
-            options.fail_on_change,
-        ),
-    };
+
     let config = match config {
         Some(path) => path,
         None => default_config()?,
@@ -128,83 +111,89 @@ fn do_main() -> Result<ExitCode, Error> {
     log::debug!("loading config from {}", config.display());
 
     let config = Config::load(config).or_raise(|| Error::new("cannot load config"))?;
-    let engine = Engine::new(config).or_raise(|| Error::new("cannot initialize HawkEye"))?;
-    let plan = engine
-        .plan(action)
-        .or_raise(|| Error::new("cannot analyze selected files"))?;
-    if write {
-        plan.apply()
-            .or_raise(|| Error::new("cannot apply planned file edits"))?;
-    }
-    let report = plan.report();
-    emit(&report, output_format)?;
-    let failed = report.files.iter().any(|file| match file.outcome {
-        Outcome::Clean => false,
-        Outcome::Add | Outcome::Replace | Outcome::Remove => reject_changes,
-        Outcome::Conflict => true,
-        Outcome::Unsupported => fail_on_unknown,
-    });
-    Ok(if failed {
-        ExitCode::FAILURE
-    } else {
-        ExitCode::SUCCESS
-    })
-}
+    let engine = Engine::new(config).or_raise(|| Error::new("cannot create engine"))?;
 
-fn emit(report: &Report, output_format: OutputFormat) -> Result<(), Error> {
+    let (report, fail_on_unknown, fail_on_change) = match subcommand {
+        SubcommandOptions::Check(options) => {
+            let make_error = || Error::new("failed to execute check command");
+            let plan = engine.plan(Action::Check).or_raise(make_error)?;
+            (plan.report(), options.fail_on_unknown, false)
+        }
+        SubcommandOptions::Format(options) => {
+            let make_error = || Error::new("failed to execute format command");
+            let plan = engine.plan(Action::Format).or_raise(make_error)?;
+            if !options.dry_run {
+                plan.apply().or_raise(make_error)?;
+            }
+            (
+                plan.report(),
+                options.fail_on_unknown,
+                options.fail_on_change,
+            )
+        }
+        SubcommandOptions::Remove(options) => {
+            let make_error = || Error::new("failed to execute remove command");
+            let plan = engine.plan(Action::Remove).or_raise(make_error)?;
+            if !options.dry_run {
+                plan.apply().or_raise(make_error)?;
+            }
+            (
+                plan.report(),
+                options.fail_on_unknown,
+                options.fail_on_change,
+            )
+        }
+    };
+
     match output_format {
-        OutputFormat::Human => {
-            emit_human(report).or_raise(|| Error::new("cannot write human-readable report"))?
-        }
         OutputFormat::Json => {
-            let mut stdout = io::stdout().lock();
-            serde_json::to_writer_pretty(&mut stdout, &report)
-                .or_raise(|| Error::new("cannot serialize JSON report"))?;
-            writeln!(stdout).or_raise(|| Error::new("cannot write JSON report"))?;
+            let report = serde_json::to_string_pretty(&report).unwrap();
+            println!("{report}");
+        }
+        OutputFormat::Human => {
+            for file in &report.files {
+                let label = match file.outcome {
+                    Outcome::Clean => continue,
+                    Outcome::Add => "add",
+                    Outcome::Replace => "replace",
+                    Outcome::Remove => "remove",
+                    Outcome::Conflict => "conflict",
+                    Outcome::Unsupported => "unsupported",
+                };
+                println!("{label:>11}  {}", file.path.display());
+            }
+
+            let files = report.files.len();
+            let mut changes = 0;
+            let mut conflicts = 0;
+            let mut unsupported = 0;
+            for file in &report.files {
+                match file.outcome {
+                    Outcome::Clean => continue,
+                    Outcome::Add | Outcome::Replace | Outcome::Remove => changes += 1,
+                    Outcome::Conflict => conflicts += 1,
+                    Outcome::Unsupported => unsupported += 1,
+                }
+            }
+            println!(
+                "{files} files, {changes} changes, {conflicts} conflicts, {unsupported} unsupported"
+            );
         }
     }
-    Ok(())
-}
 
-fn emit_human(report: &Report) -> io::Result<()> {
-    let mut stdout = io::stdout().lock();
-    let mut changes = 0;
-    let mut conflicts = 0;
-    let mut unsupported = 0;
-    for file in &report.files {
-        let label = match file.outcome {
-            Outcome::Clean => continue,
-            Outcome::Add => {
-                changes += 1;
-                "add"
-            }
-            Outcome::Replace => {
-                changes += 1;
-                "replace"
-            }
-            Outcome::Remove => {
-                changes += 1;
-                "remove"
-            }
-            Outcome::Conflict => {
-                conflicts += 1;
-                "conflict"
-            }
-            Outcome::Unsupported => {
-                unsupported += 1;
-                "unsupported"
-            }
+    for file in report.files {
+        let failed = match file.outcome {
+            Outcome::Clean => false,
+            Outcome::Add | Outcome::Replace | Outcome::Remove => fail_on_change,
+            Outcome::Conflict => true,
+            Outcome::Unsupported => fail_on_unknown,
         };
-        writeln!(stdout, "{label:>11}  {}", file.path.display())?;
+
+        if failed {
+            return Ok(ExitCode::FAILURE);
+        }
     }
-    writeln!(
-        stdout,
-        "{} files, {} changes, {} conflicts, {} unsupported",
-        report.files.len(),
-        changes,
-        conflicts,
-        unsupported,
-    )
+    Ok(ExitCode::SUCCESS)
 }
 
 fn default_config() -> Result<PathBuf, Error> {

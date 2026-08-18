@@ -36,7 +36,7 @@ impl fmt::Display for ErrorKind {
     }
 }
 
-/// An error returned by HawkEye's library API.
+/// An error returned by a HawkEye operation.
 pub struct Error {
     kind: ErrorKind,
     message: String,
