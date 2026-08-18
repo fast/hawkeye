@@ -32,7 +32,7 @@ impl Engine {
         let offset = preamble_offset(input);
         let header_start = skip_blank_lines(input, offset);
         let render = || {
-            let eol = detect_eol(input);
+            let eol = line_ending(input);
             let mut rendered = self.style(&rule.style_out).render(header, eol);
             rendered.push_str(eol);
             rendered.push_str(eol);
@@ -138,7 +138,10 @@ fn safe_to_replace(candidate: &str, header: &str, keywords: &[String]) -> bool {
             })
 }
 
-fn detect_eol(input: &str) -> &'static str {
+fn line_ending(input: &str) -> &'static str {
+    // Follow the first line ending, as formatter "auto" modes commonly do. This controls only
+    // generated header text; the untouched source body is never normalized. A one-line file uses
+    // LF as the portable default.
     if input
         .find('\n')
         .is_some_and(|index| index > 0 && input.as_bytes()[index - 1] == b'\r')

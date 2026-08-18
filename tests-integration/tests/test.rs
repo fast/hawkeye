@@ -81,6 +81,36 @@ fn preambles_and_line_endings_lifecycle() {
 }
 
 #[test]
+fn generated_headers_follow_the_first_line_ending() {
+    let project = tempfile::tempdir().expect("create mixed-line-ending project");
+    fs::write(
+        project.path().join("licenserc.toml"),
+        r#"[header]
+text = "Copyright 2026 Acme"
+
+[files]
+includes = ["**/*.rs"]
+
+[git]
+ignore = "disable"
+"#,
+    )
+    .expect("write configuration");
+    fs::write(
+        project.path().join("main.rs"),
+        b"fn first() {}\r\nfn second() {}\n",
+    )
+    .expect("write source with mixed line endings");
+
+    let formatted = hawkeye(project.path(), ["format"]);
+    assert_exit(&formatted, 0);
+    assert_eq!(
+        fs::read(project.path().join("main.rs")).expect("read formatted source"),
+        b"// Copyright 2026 Acme\r\n\r\nfn first() {}\r\nfn second() {}\n"
+    );
+}
+
+#[test]
 fn conflicting_header_lifecycle() {
     let project = case("conflict");
     assert_format_lifecycle("conflict", project.path(), true);
