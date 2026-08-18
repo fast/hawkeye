@@ -1,0 +1,148 @@
+# Copyright 2026 FastLabs Developers
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: Python
+
+on:
+  pull_request:
+    branches: [ main ]
+  push:
+    tags: [ 'v*.*.*' ]
+
+permissions:
+  contents: read
+
+jobs:
+  hook:
+    name: Test pre-commit hook
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@1.89.0
+      - uses: astral-sh/setup-uv@v10
+      - name: Run hook
+        run: uvx --from pre-commit pre-commit try-repo . hawkeye-format --all-files
+        env:
+          RUSTUP_TOOLCHAIN: 1.89.0
+
+  linux:
+    name: Build Linux wheel
+    if: ${{ startsWith(github.ref, 'refs/tags/') }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [ x86_64, aarch64 ]
+        manylinux: [ '2014', musllinux_1_2 ]
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build wheel
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.target }}
+          args: --release --out dist
+          manylinux: ${{ matrix.manylinux }}
+          rust-toolchain: 1.89.0
+      - uses: actions/upload-artifact@v7
+        with:
+          name: wheels-linux-${{ matrix.manylinux }}-${{ matrix.target }}
+          path: dist
+
+  macos:
+    name: Build macOS wheel
+    if: ${{ startsWith(github.ref, 'refs/tags/') }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15-intel
+            target: x86_64
+          - runner: macos-14
+            target: aarch64
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build wheel
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.target }}
+          args: --release --out dist
+          rust-toolchain: 1.89.0
+      - uses: actions/upload-artifact@v7
+        with:
+          name: wheels-macos-${{ matrix.target }}
+          path: dist
+
+  windows:
+    name: Build Windows wheel
+    if: ${{ startsWith(github.ref, 'refs/tags/') }}
+    runs-on: windows-2022
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build wheel
+        uses: PyO3/maturin-action@v1
+        with:
+          target: x64
+          args: --release --out dist
+          rust-toolchain: 1.89.0
+      - uses: actions/upload-artifact@v7
+        with:
+          name: wheels-windows-x64
+          path: dist
+
+  sdist:
+    name: Build source distribution
+    if: ${{ startsWith(github.ref, 'refs/tags/') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build source distribution
+        uses: PyO3/maturin-action@v1
+        with:
+          command: sdist
+          args: --out dist
+      - uses: actions/upload-artifact@v7
+        with:
+          name: wheels-sdist
+          path: dist
+
+  publish:
+    name: Publish Python package
+    if: ${{ startsWith(github.ref, 'refs/tags/') }}
+    needs: [ linux, macos, windows, sdist ]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      attestations: write
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: wheels-*
+          path: dist
+          merge-multiple: true
+      - name: Attest packages
+        uses: actions/attest@v4
+        with:
+          subject-path: 'dist/*'
+      - uses: astral-sh/setup-uv@v10
+      - name: Publish to PyPI
+        run: uv publish --trusted-publishing always dist/*
