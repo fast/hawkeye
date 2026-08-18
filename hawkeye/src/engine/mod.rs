@@ -709,35 +709,34 @@ fn skip_blank_lines(input: &str, mut position: usize) -> usize {
 impl Engine {
     fn discover(&self, repo: Option<&GitRepo>) -> Result<Vec<PathBuf>, Error> {
         let started = Instant::now();
-        let mut files = BTreeSet::new();
-
-        if self.git.ignore != FeatureMode::Disable
+        let files = if self.git.ignore != FeatureMode::Disable
             && let Some(repo) = repo
         {
-            for path in repo.list_files(&self.root)? {
-                if self.selection.matched(&path, false).is_whitelist() {
-                    files.insert(path);
-                }
-            }
+            let files = repo
+                .list_files(&self.root)?
+                .into_iter()
+                .filter(|path| self.selection.matched(path, false).is_whitelist())
+                .collect::<BTreeSet<_>>();
             log::debug!(
                 "selected {} files through the Git index in {:?}",
                 files.len(),
                 started.elapsed()
             );
+            files
         } else {
-            walk(
+            let files = walk(
                 &self.root,
                 &self.selection,
                 &self.exclusions,
                 self.git.ignore,
-                &mut files,
             )?;
             log::debug!(
                 "selected {} files through a filesystem walk in {:?}",
                 files.len(),
                 started.elapsed()
             );
-        }
+            files
+        };
 
         if let Some(header_path) = &self.header_path {
             let mut selected = Vec::with_capacity(files.len());
@@ -799,12 +798,12 @@ fn compile_patterns(
     Ok((selection, exclusions))
 }
 
-fn selection_error(source: ignore::Error) -> Error {
+fn selection_error(err: ignore::Error) -> Error {
     Error::new(
         ErrorKind::ConfigInvalid,
         "invalid files.includes or files.excludes pattern",
     )
-    .with_source(source)
+    .with_source(err)
 }
 
 fn walk(
@@ -812,9 +811,9 @@ fn walk(
     selection: &Override,
     exclusions: &Override,
     git_ignore: FeatureMode,
-    files: &mut BTreeSet<PathBuf>,
-) -> Result<(), Error> {
+) -> Result<BTreeSet<PathBuf>, Error> {
     let use_git_ignore = git_ignore != FeatureMode::Disable;
+    let mut files = BTreeSet::new();
     let walker = WalkBuilder::new(root)
         .hidden(false)
         .ignore(false)
@@ -849,7 +848,7 @@ fn walk(
             files.insert(relative.to_path_buf());
         }
     }
-    Ok(())
+    Ok(files)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
