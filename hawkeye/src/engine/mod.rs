@@ -39,8 +39,6 @@ use crate::report::Report;
 use crate::report::Status;
 use crate::style::Style;
 use crate::template::HeaderTemplate;
-use crate::writer::validate_source;
-use crate::writer::write_atomic;
 
 /// A reusable HawkEye runtime built from one configuration.
 pub struct Engine {
@@ -269,12 +267,10 @@ impl Engine {
                 .map(|edit| edit.apply(input))
                 .filter(|output| output.as_bytes() != original)
                 .map(String::into_bytes);
-            let original = updated.as_ref().map(|_| original);
             files.push(PlannedFile {
                 absolute_path: path,
                 relative_path: relative,
                 status: analysis.status,
-                original,
                 updated,
             });
         }
@@ -334,23 +330,21 @@ impl Plan {
         }
     }
 
-    /// Checks every input, then applies each edit with an atomic same-directory replacement.
+    /// Writes every planned edit directly to its source file.
     ///
-    /// A stale input found during the initial check prevents all writes. The complete multi-file
-    /// operation is not transactional: a file changed concurrently during the write phase can
-    /// fail after earlier replacements have completed.
+    /// Callers must ensure that selected files are not modified between planning and applying.
     pub fn apply(&self) -> Result<(), Error> {
         for file in &self.files {
-            let (Some(original), Some(_)) = (&file.original, &file.updated) else {
+            let Some(updated) = &file.updated else {
                 continue;
             };
-            validate_source(&file.absolute_path, original)?;
-        }
-        for file in &self.files {
-            let (Some(original), Some(updated)) = (&file.original, &file.updated) else {
-                continue;
-            };
-            write_atomic(&file.absolute_path, original, updated)?;
+            fs::write(&file.absolute_path, updated).map_err(|err| {
+                Error::new(
+                    ErrorKind::Unexpected,
+                    format!("cannot write {}", file.absolute_path.display()),
+                )
+                .with_source(err)
+            })?;
         }
         Ok(())
     }
@@ -361,7 +355,6 @@ struct PlannedFile {
     absolute_path: PathBuf,
     relative_path: PathBuf,
     status: Status,
-    original: Option<Vec<u8>>,
     updated: Option<Vec<u8>>,
 }
 
@@ -371,7 +364,6 @@ impl PlannedFile {
             absolute_path,
             relative_path,
             status: Status::Unsupported,
-            original: None,
             updated: None,
         }
     }

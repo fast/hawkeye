@@ -26,7 +26,6 @@ mod git;
 mod report;
 mod style;
 mod template;
-mod writer;
 
 pub use self::config::Config;
 pub use self::config::FeatureMode;

@@ -760,35 +760,33 @@ includes = ["["]
 }
 
 #[test]
-fn plan_checks_every_input_before_writing_any_file() {
-    let project = tempfile::tempdir().expect("create stale plan project");
+fn format_preserves_hard_links() {
+    let project = tempfile::tempdir().expect("create hard-link project");
     fs::write(
         project.path().join("licenserc.toml"),
         r#"[header]
 text = "Copyright 2026 Acme"
 
 [files]
-includes = ["**/*.rs"]
+includes = ["source.rs"]
+
+[git]
+ignore = "disable"
 "#,
     )
     .expect("write configuration");
-    fs::write(project.path().join("a.rs"), "fn a() {}\n").expect("write first source");
-    fs::write(project.path().join("b.rs"), "fn b() {}\n").expect("write second source");
+    let target = project.path().join("target.txt");
+    let source = project.path().join("source.rs");
+    fs::write(&target, "fn main() {}\n").expect("write hard-link target");
+    fs::hard_link(&target, &source).expect("create source hard link");
 
-    let config = Config::load(project.path().join("licenserc.toml")).expect("load configuration");
-    let engine = Engine::new(config).expect("initialize engine");
-    let plan = engine.plan(Mode::Format).expect("plan format");
-    fs::write(project.path().join("b.rs"), "fn b_changed() {}\n")
-        .expect("change second source after planning");
-
-    let error = plan.apply().expect_err("stale plan must fail");
-    assert_eq!(error.kind(), ErrorKind::StalePlan);
-    assert!(error.to_string().contains("b.rs"));
-    assert_eq!(read_normalized(project.path().join("a.rs")), "fn a() {}\n");
+    let formatted = hawkeye(project.path(), ["format"]);
+    assert_exit(&formatted, 0);
     assert_eq!(
-        read_normalized(project.path().join("b.rs")),
-        "fn b_changed() {}\n"
+        read_normalized(&target),
+        "// Copyright 2026 Acme\n\nfn main() {}\n"
     );
+    assert_eq!(read_normalized(&source), read_normalized(&target));
 }
 
 fn assert_format_lifecycle(name: &str, project: &Path, conflict: bool) {

@@ -22,8 +22,6 @@ pub enum ErrorKind {
     ConfigInvalid,
     /// The requested operation cannot be performed for the current input or environment.
     Unsupported,
-    /// A file changed after the operation was planned; callers may create a new plan and retry.
-    StalePlan,
     /// The operation failed in a way that callers cannot reliably recover from.
     Unexpected,
 }
@@ -33,7 +31,6 @@ impl fmt::Display for ErrorKind {
         formatter.write_str(match self {
             Self::ConfigInvalid => "ConfigInvalid",
             Self::Unsupported => "Unsupported",
-            Self::StalePlan => "StalePlan",
             Self::Unexpected => "Unexpected",
         })
     }
