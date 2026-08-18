@@ -117,7 +117,7 @@ repos:
       - id: hawkeye-format
 ```
 
-The Python hook needs a Rust toolchain when its environment is created for the first time. Use `hawkeye-format-docker` instead when Docker is the preferred runtime.
+The hooks pass only the files selected by pre-commit. The Python hook needs a Rust toolchain when its environment is created for the first time. Use `hawkeye-format-docker` instead when Docker is the preferred runtime.
 
 ## Configuration
 
