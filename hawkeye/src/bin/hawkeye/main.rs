@@ -327,9 +327,9 @@ fn path_from_bytes(value: Vec<u8>) -> Result<PathBuf, Error> {
 
 #[cfg(not(unix))]
 fn path_from_bytes(value: Vec<u8>) -> Result<PathBuf, Error> {
-    String::from_utf8(value)
-        .map(PathBuf::from)
-        .map_err(|err| Error::new(format!("path list contains non-UTF-8 data: {err}")))
+    let value = String::from_utf8(value)
+        .map_err(|err| Error::new(format!("path list contains non-UTF-8 data: {err}")))?;
+    Ok(value.into())
 }
 
 fn default_config() -> Result<PathBuf, Error> {
