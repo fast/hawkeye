@@ -334,14 +334,26 @@ impl Engine {
                     .and_then(|history| history.get(&relative_path)),
             )?;
             let header = self.render_header(&file_attrs)?;
-            let (outcome, replacement) = self.analyze(rule, input, &header, target).into_parts();
+            let outcome = match self.analyze(rule, input, &header, target) {
+                FileAnalysis::Clean => FileOutcome::Clean,
+                FileAnalysis::Add(replacement) => {
+                    file_edits.push(FileEdit { path, replacement });
+                    FileOutcome::Add
+                }
+                FileAnalysis::Replace(replacement) => {
+                    file_edits.push(FileEdit { path, replacement });
+                    FileOutcome::Replace
+                }
+                FileAnalysis::Remove(replacement) => {
+                    file_edits.push(FileEdit { path, replacement });
+                    FileOutcome::Remove
+                }
+                FileAnalysis::Conflict => FileOutcome::Conflict,
+            };
             report.files.push(FileReport {
                 path: relative_path,
                 outcome,
             });
-            if let Some(replacement) = replacement {
-                file_edits.push(FileEdit { path, replacement });
-            }
         }
 
         Ok(Edits {
@@ -492,16 +504,4 @@ enum FileAnalysis {
     Replace(Replacement),
     Remove(Replacement),
     Conflict,
-}
-
-impl FileAnalysis {
-    fn into_parts(self) -> (FileOutcome, Option<Replacement>) {
-        match self {
-            Self::Clean => (FileOutcome::Clean, None),
-            Self::Add(replacement) => (FileOutcome::Add, Some(replacement)),
-            Self::Replace(replacement) => (FileOutcome::Replace, Some(replacement)),
-            Self::Remove(replacement) => (FileOutcome::Remove, Some(replacement)),
-            Self::Conflict => (FileOutcome::Conflict, None),
-        }
-    }
 }
