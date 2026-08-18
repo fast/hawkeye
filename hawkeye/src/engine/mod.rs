@@ -66,7 +66,7 @@ impl FileAttrs {
         Ok(Self {
             filename: path
                 .file_name()
-                .expect("selected files have a filename")
+                .expect("selected files must have a filename")
                 .to_string_lossy()
                 .into_owned(),
             disk_file_created_year: metadata.created().ok().and_then(file_time_to_year),
@@ -107,7 +107,7 @@ pub struct Engine {
 
 #[derive(Debug, Clone)]
 struct Rule {
-    extension_suffixes: BTreeSet<String>,
+    extensions: BTreeSet<String>,
     filenames: BTreeSet<String>,
     style_out: String,
     styles_in: Vec<String>,
@@ -228,6 +228,12 @@ impl Engine {
             .collect::<Result<Vec<_>, Error>>()?;
         log::debug!("resolved {} styles and {} rules", styles.len(), rules.len());
 
+        let keywords = header
+            .keywords
+            .into_iter()
+            .map(|keyword| keyword.to_lowercase())
+            .collect();
+
         Ok(Self {
             root,
             header_path,
@@ -235,11 +241,7 @@ impl Engine {
             exclusions,
             props,
             git,
-            keywords: header
-                .keywords
-                .into_iter()
-                .map(|keyword| keyword.to_lowercase())
-                .collect(),
+            keywords,
             template,
             styles,
             rules,
@@ -308,9 +310,8 @@ impl Engine {
             debug_assert_ne!(self.git.file_attrs, FeatureMode::Enable);
             None
         };
-        let mut report = Report {
-            files: Vec::with_capacity(selected.len()),
-        };
+
+        let mut files = Vec::with_capacity(selected.len());
         let mut file_edits = Vec::new();
 
         for (relative_path, rule) in selected {
@@ -319,7 +320,7 @@ impl Engine {
                     "{} has no matching rule; reporting it as unsupported",
                     relative_path.display()
                 );
-                report.files.push(FileReport {
+                files.push(FileReport {
                     path: relative_path,
                     outcome: FileOutcome::Unsupported,
                 });
@@ -339,7 +340,7 @@ impl Engine {
                     "{} is not UTF-8 text; reporting it as unsupported",
                     relative_path.display()
                 );
-                report.files.push(FileReport {
+                files.push(FileReport {
                     path: relative_path,
                     outcome: FileOutcome::Unsupported,
                 });
@@ -368,14 +369,14 @@ impl Engine {
                 }
                 FileAnalysis::Conflict => FileOutcome::Conflict,
             };
-            report.files.push(FileReport {
+            files.push(FileReport {
                 path: relative_path,
                 outcome,
             });
         }
 
         Ok(Edits {
-            report,
+            report: Report { files },
             files: file_edits,
         })
     }
@@ -388,11 +389,11 @@ impl Engine {
             .iter()
             .find(|keyword| !folded.contains(keyword.as_str()))
         {
-            let filename = &attrs.filename;
             return Err(Error::new(
                 ErrorKind::ConfigInvalid,
                 format!(
-                    "header template output for {filename:?} does not contain recognition keyword {keyword:?}"
+                    "header template output for {:?} does not contain recognition keyword {:?}",
+                    attrs.filename, keyword,
                 ),
             ));
         }
@@ -403,12 +404,16 @@ impl Engine {
 /// File edits prepared by an [`Engine`].
 #[must_use = "edits have no effect until they are applied"]
 pub struct Edits {
-    /// The outcome for every selected file.
-    pub report: Report,
+    report: Report,
     files: Vec<FileEdit>,
 }
 
 impl Edits {
+    /// Returns the outcome for every selected file.
+    pub fn into_report(self) -> Report {
+        self.report
+    }
+
     /// Applies every edit directly to its source file and returns the report.
     ///
     /// Callers must ensure that selected files are not modified between preparing and applying the
@@ -450,16 +455,17 @@ impl Rule {
             extensions,
             filenames,
             style_out,
-            styles_in,
+            styles_in: configured_styles_in,
         } = config;
-        let styles_in = if styles_in.is_empty() {
+
+        let configured_styles_in = if configured_styles_in.is_empty() {
             vec![style_out.clone()]
         } else {
-            styles_in
+            configured_styles_in
         };
-        let mut input_styles = Vec::with_capacity(styles_in.len());
+        let mut styles_in = Vec::with_capacity(configured_styles_in.len());
         let mut seen = BTreeSet::new();
-        for name in styles_in {
+        for name in configured_styles_in {
             if !styles.contains_key(&name) {
                 return Err(Error::new(
                     ErrorKind::ConfigInvalid,
@@ -470,10 +476,10 @@ impl Rule {
                 log::warn!("{source}.styles_in contains duplicate style {name:?}; ignoring it");
                 continue;
             }
-            input_styles.push(name);
+            styles_in.push(name);
         }
         Ok(Self {
-            extension_suffixes: extensions
+            extensions: extensions
                 .into_iter()
                 .map(|extension| format!(".{}", extension.to_lowercase()))
                 .collect(),
@@ -482,7 +488,7 @@ impl Rule {
                 .map(|filename| filename.to_lowercase())
                 .collect(),
             style_out,
-            styles_in: input_styles,
+            styles_in,
         })
     }
 
@@ -493,7 +499,7 @@ impl Rule {
         let filename = filename.to_string_lossy().to_lowercase();
         self.filenames.contains(&filename)
             || self
-                .extension_suffixes
+                .extensions
                 .iter()
                 .any(|extension| filename.ends_with(extension))
     }

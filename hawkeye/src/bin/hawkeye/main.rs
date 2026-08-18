@@ -124,7 +124,7 @@ fn do_main() -> Result<ExitCode, Error> {
             let make_error = || Error::new("failed to execute format command");
             let edits = engine.format().or_raise(make_error)?;
             let report = if options.dry_run {
-                edits.report
+                edits.into_report()
             } else {
                 edits.apply().or_raise(make_error)?
             };
@@ -134,7 +134,7 @@ fn do_main() -> Result<ExitCode, Error> {
             let make_error = || Error::new("failed to execute remove command");
             let edits = engine.remove().or_raise(make_error)?;
             let report = if options.dry_run {
-                edits.report
+                edits.into_report()
             } else {
                 edits.apply().or_raise(make_error)?
             };
