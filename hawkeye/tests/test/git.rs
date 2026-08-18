@@ -240,6 +240,32 @@ ignore = "disable"
     }
 }
 
+#[cfg(target_os = "linux")]
+#[test]
+fn git_discovery_accepts_non_utf8_repository_roots() {
+    use std::os::unix::ffi::OsStringExt;
+
+    let project = Project::named(OsString::from_vec(b"repository-\xff".to_vec()));
+    project.write(
+        "licenserc.toml",
+        r#"[header]
+text = "Copyright 2026 Acme"
+
+[files]
+includes = ["**/*.rs"]
+
+[git]
+ignore = "enable"
+"#,
+    );
+    project.write("main.rs", "fn main() {}\n");
+    project.git(["init", "-b", "main"]);
+
+    let checked = project.run(["check", "--output-format=json"]);
+    assert_exit(&checked, 1);
+    assert_report(&checked, &[("main.rs", "add")]);
+}
+
 #[test]
 fn shallow_history_is_required_only_for_supported_files() {
     let project = Project::new();

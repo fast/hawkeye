@@ -30,8 +30,17 @@ pub struct Project {
 
 impl Project {
     pub fn new() -> Self {
+        Self::with_name("worktree")
+    }
+
+    #[cfg(target_os = "linux")]
+    pub fn named(name: impl AsRef<Path>) -> Self {
+        Self::with_name(name)
+    }
+
+    fn with_name(name: impl AsRef<Path>) -> Self {
         let temporary = tempfile::tempdir().expect("create temporary project");
-        let root = temporary.path().join("worktree");
+        let root = temporary.path().join(name);
         fs::create_dir(&root).expect("create project root");
         // Host-level aliases, excludes, signing, and identity must not change fixture behavior.
         let git_config = temporary.path().join("gitconfig");
