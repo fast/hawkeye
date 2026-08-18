@@ -153,11 +153,13 @@ fn do_main() -> Result<ExitCode, Error> {
 
     match output_format {
         OutputFormat::Json => {
-            let make_error = || Error::new("cannot output JSON report");
+            let mut output = serde_json::to_vec_pretty(&report)
+                .or_raise(|| Error::new("cannot serialize JSON report"))?;
+            output.push(b'\n');
 
+            let make_error = || Error::new("cannot output JSON report");
             let mut stdout = io::stdout().lock();
-            serde_json::to_writer_pretty(&mut stdout, &report).or_raise(make_error)?;
-            stdout.write_all(b"\n").or_raise(make_error)?;
+            stdout.write_all(&output).or_raise(make_error)?;
         }
         OutputFormat::Human => {
             let make_error = || Error::new("cannot output human-readable report");
