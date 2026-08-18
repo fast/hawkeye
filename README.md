@@ -173,18 +173,6 @@ HawkEye v7 uses a new snake-case configuration format and does not accept v6 fie
 
 The minimum supported Rust version is 1.89.0. It may be raised in a minor release; patch releases preserve the minimum version of their corresponding minor release.
 
-## Development
-
-Repository workflows use `cargo x`:
-
-```shell
-cargo x build
-cargo x test
-cargo x lint
-```
-
-The integration suite lives in [`hawkeye/tests`](hawkeye/tests) and runs the Cargo-built binary against complete temporary repositories.
-
 ## License
 
 Licensed under the [Apache License, Version 2.0][license-url].
