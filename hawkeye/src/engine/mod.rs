@@ -331,7 +331,7 @@ impl Plan {
                 .files
                 .iter()
                 .map(|file| FileOutcome {
-                    path: file.relative_path.to_string_lossy().into_owned(),
+                    path: file.relative_path.clone(),
                     outcome: file.outcome,
                 })
                 .collect(),

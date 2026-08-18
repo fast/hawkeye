@@ -195,7 +195,7 @@ fn emit_human(report: &Report) -> io::Result<()> {
                 "unsupported"
             }
         };
-        writeln!(stdout, "{label:>11}  {}", file.path)?;
+        writeln!(stdout, "{label:>11}  {}", file.path.display())?;
     }
     writeln!(
         stdout,

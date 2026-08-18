@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::path::PathBuf;
+
 use serde::Serialize;
 
 /// The planned outcome for one selected file.
@@ -35,8 +37,8 @@ pub enum Outcome {
 /// The outcome for one path.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct FileOutcome {
-    /// The display path relative to `files.root`.
-    pub path: String,
+    /// The path relative to `files.root`.
+    pub path: PathBuf,
     /// The planned outcome.
     pub outcome: Outcome,
 }
