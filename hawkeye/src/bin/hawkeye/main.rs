@@ -190,7 +190,7 @@ fn emit_human(report: &Report) -> io::Result<()> {
         };
         writeln!(stdout, "{label:>11}  {}", file.path)?;
     }
-    let changed = report
+    let changes = report
         .files
         .iter()
         .filter(|file| {
@@ -212,9 +212,9 @@ fn emit_human(report: &Report) -> io::Result<()> {
         .count();
     writeln!(
         stdout,
-        "{} files, {} changed, {} conflicts, {} unsupported",
+        "{} files, {} changes, {} conflicts, {} unsupported",
         report.files.len(),
-        changed,
+        changes,
         conflicts,
         unsupported,
     )

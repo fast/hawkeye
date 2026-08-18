@@ -229,6 +229,37 @@ ignore = "disable"
 }
 
 #[test]
+fn human_report_counts_planned_changes() {
+    let project = tempfile::tempdir().expect("create human report project");
+    fs::write(
+        project.path().join("licenserc.toml"),
+        r#"[header]
+text = "Copyright 2026 Acme"
+
+[files]
+includes = ["**/*.rs"]
+
+[git]
+ignore = "disable"
+"#,
+    )
+    .expect("write configuration");
+    fs::write(project.path().join("main.rs"), "fn main() {}\n").expect("write source");
+
+    let checked = hawkeye(project.path(), ["check"]);
+    assert_exit(&checked, 1);
+    assert!(
+        stdout(&checked).ends_with("1 files, 1 changes, 0 conflicts, 0 unsupported\n"),
+        "{}",
+        stdout(&checked)
+    );
+    assert_eq!(
+        read_normalized(project.path().join("main.rs")),
+        "fn main() {}\n"
+    );
+}
+
+#[test]
 fn git_history_branches_dirty_files_and_untracked_directories() {
     let project = case("git-history");
     setup_history_repository(project.path());
