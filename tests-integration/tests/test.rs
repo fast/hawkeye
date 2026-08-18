@@ -763,7 +763,9 @@ includes = ["**/*.rs"]
     let formatted = hawkeye(project.path(), ["format", "--output-format=json"]);
     assert_exit(&formatted, 2);
     assert!(
-        stderr(&formatted).contains("does not contain recognition keyword \"copyright\""),
+        stderr(&formatted).contains(
+            "header template output for \"main.rs\" does not contain recognition keyword \"copyright\""
+        ),
         "{}",
         stderr(&formatted)
     );
