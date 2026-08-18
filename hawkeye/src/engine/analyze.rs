@@ -12,14 +12,30 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::Analysis;
-use super::Edit;
+use std::ops::Range;
+
 use super::Engine;
 use super::Rule;
 use super::Target;
 use super::lines;
-use super::style::Candidate;
+use super::style::StyleMatch;
 use crate::report::FileOutcome;
+
+pub struct FileAnalysis {
+    pub outcome: FileOutcome,
+    pub replacement: Option<Replacement>,
+}
+
+pub struct Replacement {
+    range: Range<usize>,
+    value: String,
+}
+
+impl Replacement {
+    pub fn apply(&self, input: &mut String) {
+        input.replace_range(self.range.clone(), &self.value);
+    }
+}
 
 impl Engine {
     pub(super) fn analyze(
@@ -28,7 +44,7 @@ impl Engine {
         input: &str,
         header: &str,
         target: Target,
-    ) -> Analysis {
+    ) -> FileAnalysis {
         let offset = preamble_offset(input);
         let header_start = skip_blank_lines(input, offset);
         let eol = detect_eol(input);
@@ -39,7 +55,7 @@ impl Engine {
             value
         };
 
-        let candidates = rule
+        let matches = rule
             .styles_in
             .iter()
             .filter_map(|name| {
@@ -50,12 +66,12 @@ impl Engine {
             .filter(|(_, candidate)| has_keywords(&candidate.body, &self.keywords))
             .collect::<Vec<_>>();
 
-        let candidate = match unique_candidate(candidates) {
+        let candidate = match unique_style_match(matches) {
             Ok(candidate) => candidate,
             Err(()) => {
-                return Analysis {
+                return FileAnalysis {
                     outcome: FileOutcome::Conflict,
-                    edit: None,
+                    replacement: None,
                 };
             }
         };
@@ -71,18 +87,18 @@ impl Engine {
                         .values()
                         .any(|style| style.parse(input, end).is_some()))
             {
-                return Analysis {
+                return FileAnalysis {
                     outcome: FileOutcome::Conflict,
-                    edit: None,
+                    replacement: None,
                 };
             }
             let range = offset..end;
             if target == Target::Absent {
-                return Analysis {
+                return FileAnalysis {
                     outcome: FileOutcome::Remove,
-                    edit: Some(Edit {
+                    replacement: Some(Replacement {
                         range,
-                        replacement: String::new(),
+                        value: String::new(),
                     }),
                 };
             }
@@ -90,16 +106,16 @@ impl Engine {
                 && candidate.body == header
                 && input.get(range.clone()) == Some(rendered.as_str());
             if clean {
-                Analysis {
+                FileAnalysis {
                     outcome: FileOutcome::Clean,
-                    edit: None,
+                    replacement: None,
                 }
             } else {
-                Analysis {
+                FileAnalysis {
                     outcome: FileOutcome::Replace,
-                    edit: Some(Edit {
+                    replacement: Some(Replacement {
                         range,
-                        replacement: rendered,
+                        value: rendered,
                     }),
                 }
             }
@@ -108,33 +124,33 @@ impl Engine {
                 .parse(input, header_start)
                 .is_some_and(|candidate| has_keywords(&candidate.body, &self.keywords))
         }) {
-            Analysis {
+            FileAnalysis {
                 outcome: FileOutcome::Conflict,
-                edit: None,
+                replacement: None,
             }
         } else if target == Target::Absent {
-            Analysis {
+            FileAnalysis {
                 outcome: FileOutcome::Clean,
-                edit: None,
+                replacement: None,
             }
         } else {
-            Analysis {
+            FileAnalysis {
                 outcome: FileOutcome::Add,
-                edit: Some(Edit {
+                replacement: Some(Replacement {
                     range: offset..header_start,
-                    replacement: rendered,
+                    value: rendered,
                 }),
             }
         }
     }
 }
 
-fn unique_candidate(candidates: Vec<(&str, Candidate)>) -> Result<Option<(&str, Candidate)>, ()> {
-    let mut candidates = candidates.into_iter();
-    let Some((style_name, first)) = candidates.next() else {
+fn unique_style_match(matches: Vec<(&str, StyleMatch)>) -> Result<Option<(&str, StyleMatch)>, ()> {
+    let mut matches = matches.into_iter();
+    let Some((style_name, first)) = matches.next() else {
         return Ok(None);
     };
-    for (_, candidate) in candidates {
+    for (_, candidate) in matches {
         if candidate.range != first.range || candidate.body != first.body {
             return Err(());
         }

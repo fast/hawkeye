@@ -33,7 +33,7 @@ pub enum Style {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Candidate {
+pub struct StyleMatch {
     pub range: Range<usize>,
     pub body: String,
 }
@@ -127,7 +127,7 @@ impl Style {
         output
     }
 
-    pub fn parse(&self, input: &str, start: usize) -> Option<Candidate> {
+    pub fn parse(&self, input: &str, start: usize) -> Option<StyleMatch> {
         match self {
             Self::Line {
                 prefix,
@@ -150,7 +150,7 @@ fn parse_line_style(
     prefix: &str,
     suffix: &str,
     pad_lines: bool,
-) -> Option<Candidate> {
+) -> Option<StyleMatch> {
     let mut end = start;
     let mut body = Vec::new();
     for (line, raw_range) in lines::iter(input, start) {
@@ -163,7 +163,7 @@ fn parse_line_style(
     if body.is_empty() {
         None
     } else {
-        Some(Candidate {
+        Some(StyleMatch {
             range: start..end,
             body: body.join("\n"),
         })
@@ -177,7 +177,7 @@ fn parse_block_style(
     prefix: &str,
     suffix: &str,
     closing: &str,
-) -> Option<Candidate> {
+) -> Option<StyleMatch> {
     let mut lines = lines::iter(input, start);
     let (first, _) = lines.next()?;
     if first != opening {
@@ -188,7 +188,7 @@ fn parse_block_style(
     for (content, raw_range) in lines {
         if content == closing {
             let end = raw_range.start + content.len();
-            return Some(Candidate {
+            return Some(StyleMatch {
                 range: start..end,
                 body: body.join("\n"),
             });

@@ -22,12 +22,13 @@ mod style;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::fs;
-use std::ops::Range;
 use std::path::Path;
 use std::path::PathBuf;
 
 use ignore::overrides::Override;
 
+use self::analyze::FileAnalysis;
+use self::analyze::Replacement;
 pub use self::attrs::FileAttrs;
 use self::git::GitRepo;
 use self::style::Style;
@@ -69,22 +70,6 @@ struct Rule {
     filenames: BTreeSet<String>,
     style_out: String,
     styles_in: Vec<String>,
-}
-
-struct Analysis {
-    outcome: FileOutcome,
-    edit: Option<Edit>,
-}
-
-struct Edit {
-    range: Range<usize>,
-    replacement: String,
-}
-
-impl Edit {
-    fn apply(&self, input: &mut String) {
-        input.replace_range(self.range.clone(), &self.replacement);
-    }
 }
 
 impl Engine {
@@ -246,8 +231,8 @@ impl Engine {
                 Err(err) => return Err(err),
             }
         };
-        let paths = self.discover(repo.as_ref())?;
-        let discovered = paths
+        let relative_paths = self.discover(repo.as_ref())?;
+        let discovered = relative_paths
             .into_iter()
             .map(|path| {
                 let rule = self.rule_for(&path);
@@ -279,7 +264,7 @@ impl Engine {
         let mut report = Report {
             files: Vec::with_capacity(discovered.len()),
         };
-        let mut edits = Vec::new();
+        let mut file_edits = Vec::new();
 
         for (relative, rule) in discovered {
             let Some(rule) = rule else {
@@ -312,19 +297,22 @@ impl Engine {
                     .and_then(|history| history.get(&relative)),
             )?;
             let header = self.render_header(&file_attrs)?;
-            let analysis = self.analyze(rule, input, &header, target);
+            let FileAnalysis {
+                outcome,
+                replacement,
+            } = self.analyze(rule, input, &header, target);
             report.files.push(FileReport {
                 path: relative,
-                outcome: analysis.outcome,
+                outcome,
             });
-            if let Some(edit) = analysis.edit {
-                edits.push(FileEdit { path, edit });
+            if let Some(replacement) = replacement {
+                file_edits.push(FileEdit { path, replacement });
             }
         }
 
         Ok(Edits {
             report,
-            files: edits,
+            files: file_edits,
         })
     }
 
@@ -380,7 +368,7 @@ impl Edits {
                 )
                 .with_source(err)
             })?;
-            file.edit.apply(&mut input);
+            file.replacement.apply(&mut input);
             fs::write(&file.path, input).map_err(|err| {
                 Error::new(
                     ErrorKind::Unexpected,
@@ -395,7 +383,7 @@ impl Edits {
 
 struct FileEdit {
     path: PathBuf,
-    edit: Edit,
+    replacement: Replacement,
 }
 
 impl Rule {
