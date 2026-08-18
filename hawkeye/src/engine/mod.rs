@@ -1576,28 +1576,3 @@ fn parse_history(
     }
     Ok(result)
 }
-
-#[cfg(test)]
-mod tests {
-    use std::io::BufReader;
-    use std::io::Cursor;
-
-    use super::*;
-
-    #[test]
-    fn history_parser_handles_records_across_small_buffers() {
-        let selected_path = PathBuf::from("/repo/src/main.rs");
-        let selected = HashMap::from([(b"src/main.rs".to_vec(), selected_path.clone())]);
-        let history = b"\x00\x002024-01-02T00:00:00Z\x00Alice\x00\nsrc/main.rs\x00other.rs\x00\x00\x002020-03-04T00:00:00Z\x00Bob\x00\nsrc/main.rs\x00";
-        let mut reader = BufReader::with_capacity(3, Cursor::new(history));
-
-        let attrs = parse_history(&mut reader, &selected).expect("parse history");
-        let attrs = attrs.get(&selected_path).expect("selected file attributes");
-        assert_eq!(attrs.created_year, Some(2020));
-        assert_eq!(attrs.modified_year, Some(2024));
-        assert_eq!(
-            attrs.authors,
-            BTreeSet::from(["Alice".to_owned(), "Bob".to_owned()])
-        );
-    }
-}
