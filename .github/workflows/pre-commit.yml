@@ -12,13 +12,28 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-[header]
-builtin = "Apache-2.0"
+name: Pre-commit
 
-[files]
-excludes = [".github/workflows/release.yml", "hawkeye/tests/cases/**"]
-includes = ["**/*.rs", "**/*.toml", "**/*.yaml", "**/*.yml"]
+on:
+  pull_request:
+    branches: [ main ]
 
-[props]
-copyright_owner = "FastLabs Developers"
-inception_year = 2026
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.number || github.run_id }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test hook
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@1.89.0
+      - uses: astral-sh/setup-uv@v10.0.1
+      - run: uvx --from pre-commit pre-commit try-repo . hawkeye-format --all-files
+        env:
+          RUSTUP_TOOLCHAIN: 1.89.0

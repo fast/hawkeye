@@ -12,13 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-[header]
-builtin = "Apache-2.0"
+FROM rust:1.89.0-trixie AS builder
 
-[files]
-excludes = [".github/workflows/release.yml", "hawkeye/tests/cases/**"]
-includes = ["**/*.rs", "**/*.toml", "**/*.yaml", "**/*.yml"]
+ENV RUSTUP_TOOLCHAIN=1.89.0
+WORKDIR /src
+COPY . .
+RUN cargo build --locked --release --package hawkeye --bin hawkeye
 
-[props]
-copyright_owner = "FastLabs Developers"
-inception_year = 2026
+FROM gcr.io/distroless/cc-debian13
+
+COPY --from=builder /src/target/release/hawkeye /usr/local/bin/hawkeye
+WORKDIR /workspace
+ENTRYPOINT ["/usr/local/bin/hawkeye"]

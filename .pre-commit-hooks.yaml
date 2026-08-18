@@ -12,13 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-[header]
-builtin = "Apache-2.0"
+- id: hawkeye-format
+  name: HawkEye
+  description: Format license headers with HawkEye.
+  entry: hawkeye format
+  language: python
+  pass_filenames: false
+  require_serial: true
 
-[files]
-excludes = [".github/workflows/release.yml", "hawkeye/tests/cases/**"]
-includes = ["**/*.rs", "**/*.toml", "**/*.yaml", "**/*.yml"]
-
-[props]
-copyright_owner = "FastLabs Developers"
-inception_year = 2026
+- id: hawkeye-format-docker
+  name: HawkEye (Docker)
+  description: Format license headers with the HawkEye container.
+  entry: hawkeye format
+  language: docker
+  pass_filenames: false
+  require_serial: true
