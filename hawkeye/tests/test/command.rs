@@ -151,6 +151,62 @@ ignore = "enable"
 }
 
 #[test]
+fn requested_paths_outside_root_are_quietly_ignored() {
+    let project = Project::empty();
+    project.write(
+        "licenserc.toml",
+        r#"[header]
+text = "Copyright 2026 Acme"
+
+[files]
+root = "source"
+includes = ["**/*.rs"]
+
+[git]
+ignore = "disable"
+"#,
+    );
+    project.write("source/selected.rs", "fn selected() {}\n");
+    project.write("outside.rs", "fn outside() {}\n");
+
+    let formatted = project.run(["format", "outside.rs", "--output-format=json"]);
+    assert_exit(&formatted, 0);
+    assert_report(&formatted, &[]);
+    assert!(stderr(&formatted).is_empty());
+    assert_eq!(project.read("outside.rs"), "fn outside() {}\n");
+}
+
+#[test]
+fn requested_directories_respect_git_ignore() {
+    let project = Project::empty();
+    project.write(
+        "licenserc.toml",
+        r#"[header]
+text = "Copyright 2026 Acme"
+
+[files]
+includes = ["**/*.rs"]
+
+[git]
+ignore = "enable"
+"#,
+    );
+    project.write(".gitignore", "ignored/\n");
+    project.write("ignored/inside.rs", "fn ignored() {}\n");
+    project.write("visible/inside.rs", "fn visible() {}\n");
+    project.git(["init", "--initial-branch=main"]);
+
+    let directories = project.run(["format", "ignored", "visible", "--output-format=json"]);
+    assert_exit(&directories, 0);
+    assert_report(&directories, &[("visible/inside.rs", "add")]);
+    assert_eq!(project.read("ignored/inside.rs"), "fn ignored() {}\n");
+
+    let direct = project.run(["format", "ignored/inside.rs", "--output-format=json"]);
+    assert_exit(&direct, 0);
+    assert_report(&direct, &[("ignored/inside.rs", "add")]);
+}
+
+#[test]
 fn explicit_files_bypass_git_ignore_but_obey_config_filters() {
     let project = Project::empty();
     project.write(

@@ -95,8 +95,8 @@ enum HeaderTarget {
 pub struct Engine {
     root: PathBuf,
     header_path: Option<PathBuf>,
-    selection: Override,
-    exclusions: Override,
+    file_filter: Override,
+    walk_filter: Override,
     props: BTreeMap<String, toml::Value>,
     git: GitConfig,
     keywords: Vec<String>,
@@ -153,8 +153,8 @@ impl Engine {
             git.ignore,
             git.file_attrs
         );
-        let (selection, exclusions) =
-            discovery::compile_patterns(&root, &files.includes, &files.excludes)?;
+        let (file_filter, walk_filter) =
+            discovery::compile_file_filters(&root, &files.includes, &files.excludes)?;
 
         let (template, header_path) = if let Some(content) = header.text {
             (HeaderTemplate::new(content)?, None)
@@ -242,8 +242,8 @@ impl Engine {
         Ok(Self {
             root,
             header_path,
-            selection,
-            exclusions,
+            file_filter,
+            walk_filter,
             props,
             git,
             keywords,
@@ -264,13 +264,19 @@ impl Engine {
 
     /// Checks only the requested files and directories without modifying them.
     ///
-    /// Relative paths are resolved against `files.root`. An empty slice selects no files.
+    /// Relative paths are resolved against `files.root`. Direct files bypass Git ignore rules,
+    /// while directories use normal discovery. All paths still obey `files.root`,
+    /// `files.includes`, and `files.excludes`; missing or out-of-root paths are skipped. An empty
+    /// iterator selects no files.
     ///
     /// # Errors
     ///
     /// Returns an error if selected files cannot be discovered, read, or analyzed.
-    pub fn check_paths(&self, paths: &[PathBuf]) -> Result<Report, Error> {
-        Ok(self.edits(HeaderTarget::Present, Some(paths))?.report)
+    pub fn check_paths(
+        &self,
+        paths: impl IntoIterator<Item = impl AsRef<Path>>,
+    ) -> Result<Report, Error> {
+        Ok(self.edits_for_paths(HeaderTarget::Present, paths)?.report)
     }
 
     /// Prepares additions and replacements that make selected headers canonical.
@@ -284,13 +290,16 @@ impl Engine {
 
     /// Prepares additions and replacements for only the requested files and directories.
     ///
-    /// Relative paths are resolved against `files.root`. An empty slice selects no files.
+    /// Path selection follows [`Self::check_paths`].
     ///
     /// # Errors
     ///
     /// Returns an error if selected files cannot be discovered, read, or analyzed.
-    pub fn format_paths(&self, paths: &[PathBuf]) -> Result<Edits, Error> {
-        self.edits(HeaderTarget::Present, Some(paths))
+    pub fn format_paths(
+        &self,
+        paths: impl IntoIterator<Item = impl AsRef<Path>>,
+    ) -> Result<Edits, Error> {
+        self.edits_for_paths(HeaderTarget::Present, paths)
     }
 
     /// Prepares removals for recognized headers.
@@ -304,13 +313,28 @@ impl Engine {
 
     /// Prepares removals for recognized headers in only the requested files and directories.
     ///
-    /// Relative paths are resolved against `files.root`. An empty slice selects no files.
+    /// Path selection follows [`Self::check_paths`].
     ///
     /// # Errors
     ///
     /// Returns an error if selected files cannot be discovered, read, or analyzed.
-    pub fn remove_paths(&self, paths: &[PathBuf]) -> Result<Edits, Error> {
-        self.edits(HeaderTarget::Absent, Some(paths))
+    pub fn remove_paths(
+        &self,
+        paths: impl IntoIterator<Item = impl AsRef<Path>>,
+    ) -> Result<Edits, Error> {
+        self.edits_for_paths(HeaderTarget::Absent, paths)
+    }
+
+    fn edits_for_paths(
+        &self,
+        target: HeaderTarget,
+        paths: impl IntoIterator<Item = impl AsRef<Path>>,
+    ) -> Result<Edits, Error> {
+        let paths = paths
+            .into_iter()
+            .map(|path| path.as_ref().to_owned())
+            .collect::<Vec<_>>();
+        self.edits(target, Some(&paths))
     }
 
     fn edits(
@@ -340,15 +364,15 @@ impl Engine {
                 Err(err) => return Err(err),
             }
         };
-        let paths = self.discover(repo.as_ref(), requested_paths)?;
-        let selected = paths
+        let paths = self.discover_files(repo.as_ref(), requested_paths)?;
+        let files_with_rules = paths
             .into_iter()
             .map(|path| {
                 let rule = self.rules.iter().find(|rule| rule.matches(&path));
                 (path, rule)
             })
             .collect::<Vec<_>>();
-        let supported = selected
+        let supported = files_with_rules
             .iter()
             .filter_map(|(path, rule)| rule.is_some().then_some(path.as_path()))
             .collect::<Vec<_>>();
@@ -371,10 +395,10 @@ impl Engine {
             None
         };
 
-        let mut files = Vec::with_capacity(selected.len());
+        let mut files = Vec::with_capacity(files_with_rules.len());
         let mut file_edits = Vec::new();
 
-        for (relative_path, rule) in selected {
+        for (relative_path, rule) in files_with_rules {
             let Some(rule) = rule else {
                 log::debug!(
                     "{} has no matching rule; reporting it as unsupported",

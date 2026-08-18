@@ -12,17 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::env;
-#[cfg(unix)]
-use std::ffi::OsString;
+mod paths;
+
 use std::fmt;
-use std::fs;
 use std::io;
-use std::io::Read;
 use std::io::Write;
-#[cfg(unix)]
-use std::os::unix::ffi::OsStringExt;
-use std::path::Path;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
@@ -39,6 +33,8 @@ use hawkeye::Config;
 use hawkeye::Engine;
 use hawkeye::FileOutcome;
 use logforth::filter::rustlog::RustLogFilterBuilder;
+
+use crate::paths::PathOptions;
 
 #[derive(Debug, Parser)]
 #[command(version, about)]
@@ -78,7 +74,7 @@ enum SubcommandOptions {
 #[derive(Debug, Args)]
 struct CheckOptions {
     #[command(flatten)]
-    selection: SelectionOptions,
+    paths: PathOptions,
 
     /// Fail when selected files have no rule or are not UTF-8 text.
     #[arg(long)]
@@ -88,7 +84,7 @@ struct CheckOptions {
 #[derive(Debug, Args)]
 struct EditOptions {
     #[command(flatten)]
-    selection: SelectionOptions,
+    paths: PathOptions,
 
     /// Show changes without writing them.
     #[arg(long)]
@@ -101,38 +97,6 @@ struct EditOptions {
     /// Exit unsuccessfully if this command changes any files.
     #[arg(long)]
     fail_on_change: bool,
-}
-
-#[derive(Debug, Args)]
-struct SelectionOptions {
-    /// Files and directories to process.
-    #[arg(value_name = "PATH")]
-    paths: Vec<PathBuf>,
-
-    /// Read paths to process from a file, or stdin with `-`.
-    #[arg(long, value_name = "FILE")]
-    files_from: Option<PathBuf>,
-}
-
-impl SelectionOptions {
-    fn resolve(mut self) -> Result<Option<Vec<PathBuf>>, Error> {
-        if self.paths.is_empty() && self.files_from.is_none() {
-            return Ok(None);
-        }
-
-        if let Some(path) = self.files_from {
-            self.paths.extend(read_paths_from(&path)?);
-        }
-
-        let current_dir = env::current_dir()
-            .map_err(|err| Error::new(format!("cannot resolve the current directory: {err}")))?;
-        for path in &mut self.paths {
-            if path.is_relative() {
-                *path = current_dir.join(&*path);
-            }
-        }
-        Ok(Some(self.paths))
-    }
 }
 
 fn main() -> ExitCode {
@@ -164,9 +128,9 @@ fn do_main() -> Result<ExitCode, Error> {
 
     let (report, fail_on_change, fail_on_unknown) = match subcommand {
         SubcommandOptions::Check(options) => {
-            let paths = options.selection.resolve()?;
+            let paths = options.paths.into_paths()?;
             let make_error = || Error::new("failed to execute check command");
-            let report = match paths.as_deref() {
+            let report = match paths {
                 Some(paths) => engine.check_paths(paths),
                 None => engine.check(),
             }
@@ -174,9 +138,9 @@ fn do_main() -> Result<ExitCode, Error> {
             (report, true, options.fail_on_unknown)
         }
         SubcommandOptions::Format(options) => {
-            let paths = options.selection.resolve()?;
+            let paths = options.paths.into_paths()?;
             let make_error = || Error::new("failed to execute format command");
-            let edits = match paths.as_deref() {
+            let edits = match paths {
                 Some(paths) => engine.format_paths(paths),
                 None => engine.format(),
             }
@@ -189,9 +153,9 @@ fn do_main() -> Result<ExitCode, Error> {
             (report, options.fail_on_change, options.fail_on_unknown)
         }
         SubcommandOptions::Remove(options) => {
-            let paths = options.selection.resolve()?;
+            let paths = options.paths.into_paths()?;
             let make_error = || Error::new("failed to execute remove command");
-            let edits = match paths.as_deref() {
+            let edits = match paths {
                 Some(paths) => engine.remove_paths(paths),
                 None => engine.remove(),
             }
@@ -287,49 +251,6 @@ fn emit_error(err: &Exn<Error>) {
     let mut stderr = io::stderr().lock();
     let _ = writeln!(stderr, "error: {}", err.frame().error());
     let _ = write_causes(&mut stderr, err.frame(), 1);
-}
-
-fn read_paths_from(path: &Path) -> Result<Vec<PathBuf>, Error> {
-    let mut content = Vec::new();
-    if path == Path::new("-") {
-        io::stdin()
-            .read_to_end(&mut content)
-            .map_err(|err| Error::new(format!("cannot read paths from stdin: {err}")))?;
-    } else {
-        content = fs::read(path).map_err(|err| {
-            Error::new(format!("cannot read paths from {}: {err}", path.display()))
-        })?;
-    }
-
-    let nul_separated = content.contains(&b'\0');
-    let mut paths = Vec::new();
-    for mut value in content.split(|byte| {
-        if nul_separated {
-            *byte == b'\0'
-        } else {
-            *byte == b'\n'
-        }
-    }) {
-        if !nul_separated && value.last() == Some(&b'\r') {
-            value = &value[..value.len() - 1];
-        }
-        if !value.is_empty() {
-            paths.push(path_from_bytes(value.to_vec())?);
-        }
-    }
-    Ok(paths)
-}
-
-#[cfg(unix)]
-fn path_from_bytes(value: Vec<u8>) -> Result<PathBuf, Error> {
-    Ok(PathBuf::from(OsString::from_vec(value)))
-}
-
-#[cfg(not(unix))]
-fn path_from_bytes(value: Vec<u8>) -> Result<PathBuf, Error> {
-    let value = String::from_utf8(value)
-        .map_err(|err| Error::new(format!("path list contains non-UTF-8 data: {err}")))?;
-    Ok(value.into())
 }
 
 fn default_config() -> Result<PathBuf, Error> {

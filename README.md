@@ -74,7 +74,7 @@ hawkeye check src/lib.rs src/bin
 git diff --name-only -z origin/main | hawkeye check --files-from -
 ```
 
-Command-line paths are resolved from the current directory. They still obey `files.root`, `files.includes`, and `files.excludes`; an explicitly named file bypasses Git ignore rules, while a named directory uses normal discovery. Missing paths and paths outside `files.root` are skipped with a warning. An explicitly supplied empty list selects no files.
+Command-line paths are resolved from the current directory. They still obey `files.root`, `files.includes`, and `files.excludes`; an explicitly named file bypasses Git ignore rules, while a named directory uses normal discovery. Missing paths are skipped with a warning, while paths outside `files.root` are ignored as out of scope. An explicitly supplied empty list selects no files.
 
 Without `--config`, HawkEye tries `licenserc.toml` and then `.licenserc.toml` in the current directory. It does not search parent directories.
 
@@ -220,7 +220,7 @@ let report = engine.check()?;
 # Ok::<(), hawkeye::Error>(())
 ```
 
-`Engine::check` never writes files. `Engine::format` and `Engine::remove` return pending `Edits`; call `Edits::apply` to write them or `Edits::into_report` to inspect the result without writing. The corresponding `check_paths`, `format_paths`, and `remove_paths` methods process only requested files and directories.
+`Engine::check` never writes files. `Engine::format` and `Engine::remove` return pending `Edits`; call `Edits::apply` to write them or `Edits::into_report` to inspect the result without writing. The corresponding `check_paths`, `format_paths`, and `remove_paths` methods accept strings, `Path`s, or `PathBuf`s and process only requested files and directories.
 
 The default `application` feature builds the command-line tool. Library-only users can omit its command-specific dependencies:
 
