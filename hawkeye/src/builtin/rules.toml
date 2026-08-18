@@ -42,14 +42,14 @@ extensions = [
   "v",
   "sv",
 ]
-style_out = "slash_block"
-styles_in = ["slash_block", "slash_line"]
+style_out = "slashstar_style"
+styles_in = ["slashstar_style", "doubleslash_style"]
 
 [[rules]]
 extensions = ["mbt", "rs", "zig"]
 filenames = ["go.mod"]
-style_out = "slash_line"
-styles_in = ["slash_line", "slash_block"]
+style_out = "doubleslash_style"
+styles_in = ["doubleslash_style", "slashstar_style"]
 
 [[rules]]
 extensions = [
@@ -71,11 +71,11 @@ filenames = [
   "Dockerfile",
   "Makefile",
 ]
-style_out = "hash_line"
+style_out = "script_style"
 
 [[rules]]
 extensions = ["adb", "ads", "e", "sql"]
-style_out = "dash_line"
+style_out = "doubledashes_style"
 
 [[rules]]
 extensions = [
@@ -99,89 +99,89 @@ extensions = [
   "xsl",
   "xslt",
 ]
-style_out = "xml_block"
-styles_in = ["xml_block", "xml_line"]
+style_out = "xml_style"
+styles_in = ["xml_style", "xml_per_line"]
 
 [[rules]]
 extensions = ["asm", "clj", "cljs", "el"]
-style_out = "semicolon_line"
+style_out = "semicolon_style"
 
 [[rules]]
 extensions = ["f"]
-style_out = "bang_line"
+style_out = "exclamation_style"
 
 [[rules]]
 extensions = ["erl", "hrl"]
-style_out = "percent3_line"
+style_out = "percent3_style"
 
 [[rules]]
 extensions = ["cls", "sty", "tex"]
-style_out = "percent_line"
+style_out = "percent_style"
 
 [[rules]]
 extensions = ["bas", "vba"]
-style_out = "apostrophe_line"
+style_out = "apostrophe_style"
 
 [[rules]]
 extensions = ["bat", "cmd"]
-style_out = "rem_line"
+style_out = "batch"
 
 [[rules]]
 extensions = ["pas"]
-style_out = "brace_star_block"
+style_out = "bracesstar_style"
 
 [[rules]]
 extensions = ["vm"]
-style_out = "hash_star_block"
+style_out = "sharpstar_style"
 
 [[rules]]
 extensions = ["mustache"]
-style_out = "mustache_block"
+style_out = "mustache_style"
 
 [[rules]]
 extensions = ["mv"]
-style_out = "mvel_block"
+style_out = "mvel_style"
 
 [[rules]]
 extensions = ["ftl"]
-style_out = "freemarker_block"
-styles_in = ["freemarker_block", "freemarker_alt_block"]
+style_out = "ftl"
+styles_in = ["ftl", "ftl_alt"]
 
 [[rules]]
 extensions = ["jsp"]
-style_out = "jsp_block"
+style_out = "dynascript_style"
 
 [[rules]]
 extensions = ["cfc", "cfm"]
-style_out = "coldfusion_block"
+style_out = "dynascript3_style"
 
 [[rules]]
 extensions = ["asp"]
-style_out = "asp_block"
+style_out = "asp"
 
 [[rules]]
 extensions = ["php"]
-style_out = "slash_block"
-styles_in = ["slash_block", "slash_line"]
+style_out = "slashstar_style"
+styles_in = ["slashstar_style", "doubleslash_style"]
 
 [[rules]]
 extensions = ["lua"]
-style_out = "lua_block"
+style_out = "lua"
 
 [[rules]]
 extensions = ["adoc"]
-style_out = "asciidoc_block"
+style_out = "asciidoc_style"
 
 [[rules]]
 extensions = ["pkl"]
 filenames = ["PklProject"]
-style_out = "swift_banner"
-styles_in = ["swift_banner", "slash_line"]
+style_out = "line_block_style"
+styles_in = ["line_block_style", "doubleslash_style"]
 
 [[rules]]
 extensions = ["haml", "scaml"]
-style_out = "haml_line"
+style_out = "haml_style"
 
 [[rules]]
 extensions = ["apt"]
-style_out = "tilde2_line"
+style_out = "doubletilde_style"

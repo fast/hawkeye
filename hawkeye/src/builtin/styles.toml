@@ -12,149 +12,149 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-[styles.slash_line]
+[styles.doubleslash_style]
 kind = "line"
 prefix = "// "
 
-[styles.triple_slash_line]
+[styles.tripleslash_style]
 kind = "line"
 prefix = "/// "
 
-[styles.hash_line]
+[styles.script_style]
 kind = "line"
 prefix = "# "
 
-[styles.dash_line]
+[styles.doubledashes_style]
 kind = "line"
 prefix = "-- "
 
-[styles.percent_line]
+[styles.percent_style]
 kind = "line"
 prefix = "% "
 
-[styles.percent3_line]
+[styles.percent3_style]
 kind = "line"
 prefix = "%%% "
 
-[styles.semicolon_line]
+[styles.semicolon_style]
 kind = "line"
 prefix = "; "
 
-[styles.apostrophe_line]
+[styles.apostrophe_style]
 kind = "line"
 prefix = "' "
 
-[styles.bang_line]
+[styles.exclamation_style]
 kind = "line"
 prefix = "! "
 
-[styles.bang3_line]
+[styles.exclamation3_style]
 kind = "line"
 prefix = "!!! "
 
-[styles.tilde2_line]
+[styles.doubletilde_style]
 kind = "line"
 prefix = "~~ "
 
-[styles.rem_line]
+[styles.batch]
 kind = "line"
 prefix = "@REM "
 
-[styles.haml_line]
+[styles.haml_style]
 kind = "line"
 prefix = "-# "
 
-[styles.xml_line]
+[styles.xml_per_line]
 kind = "line"
 prefix = "<!-- "
 suffix = " -->"
 pad_lines = true
 
-[styles.slash_block]
+[styles.slashstar_style]
 kind = "block"
 start = "/*"
 prefix = " * "
 end = " */"
 
-[styles.javadoc_block]
+[styles.javadoc_style]
 kind = "block"
 start = "/**"
 prefix = " * "
 end = " */"
 
-[styles.xml_block]
+[styles.xml_style]
 kind = "block"
 start = "<!--"
 prefix = "    "
 end = "-->"
 
-[styles.lua_block]
+[styles.lua]
 kind = "block"
 start = "--[["
 prefix = "    "
 end = "]]"
 
-[styles.brace_star_block]
+[styles.bracesstar_style]
 kind = "block"
 start = "{*"
 prefix = " * "
 end = " *}"
 
-[styles.hash_star_block]
+[styles.sharpstar_style]
 kind = "block"
 start = "#*"
 prefix = " * "
 end = " *#"
 
-[styles.mustache_block]
+[styles.mustache_style]
 kind = "block"
 start = "{{!"
 prefix = "    "
 end = "}}"
 
-[styles.mvel_block]
+[styles.mvel_style]
 kind = "block"
 start = "@comment{"
 prefix = "  "
 end = "}"
 
-[styles.freemarker_block]
+[styles.ftl]
 kind = "block"
 start = "<#--"
 prefix = "    "
 end = "-->"
 
-[styles.freemarker_alt_block]
+[styles.ftl_alt]
 kind = "block"
 start = "[#--"
 prefix = "    "
 end = "--]"
 
-[styles.jsp_block]
+[styles.dynascript_style]
 kind = "block"
 start = "<%--"
 prefix = "    "
 end = "--%>"
 
-[styles.coldfusion_block]
+[styles.dynascript3_style]
 kind = "block"
 start = "<!---"
 prefix = "    "
 end = "--->"
 
-[styles.asp_block]
+[styles.asp]
 kind = "block"
 start = "<%"
 prefix = "' "
 end = "%>"
 
-[styles.swift_banner]
+[styles.line_block_style]
 kind = "block"
 start = "//===----------------------------------------------------------------------===//"
 prefix = "// "
 end = "//===----------------------------------------------------------------------===//"
 
-[styles.asciidoc_block]
+[styles.asciidoc_style]
 kind = "block"
 start = "////"
 prefix = "// "

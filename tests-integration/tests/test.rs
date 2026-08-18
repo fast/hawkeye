@@ -604,7 +604,7 @@ fn custom_styles_override_builtin_styles_with_a_warning() {
         r##"[header]
 text = "Copyright 2026 Acme"
 
-[styles.slash_line]
+[styles.doubleslash_style]
 kind = "line"
 prefix = "# "
 "##,
@@ -615,8 +615,9 @@ prefix = "# "
     let formatted = hawkeye(project.path(), ["format"]);
     assert_exit(&formatted, 0);
     assert!(
-        stderr(&formatted)
-            .contains("custom style \"slash_line\" overrides a built-in style of the same name"),
+        stderr(&formatted).contains(
+            "custom style \"doubleslash_style\" overrides a built-in style of the same name"
+        ),
         "{}",
         stderr(&formatted)
     );
@@ -639,7 +640,7 @@ includes = ["**/*.widget"]
 
 [[rules]]
 extensions = ["widget"]
-style_out = "hash_line"
+style_out = "script_style"
 "#,
     )
     .expect("write configuration");
@@ -662,8 +663,8 @@ text = "Copyright 2026 Acme"
 
 [[rules]]
 extensions = ["widget"]
-style_out = "slash_line"
-styles_in = ["slash_block"]
+style_out = "doubleslash_style"
+styles_in = ["slashstar_style"]
 "#,
     )
     .expect("write incomplete configuration");
@@ -687,8 +688,8 @@ includes = ["**/*.widget"]
 
 [[rules]]
 extensions = ["widget"]
-style_out = "slash_line"
-styles_in = ["slash_line", "slash_block", "slash_block"]
+style_out = "doubleslash_style"
+styles_in = ["doubleslash_style", "slashstar_style", "slashstar_style"]
 "#,
     )
     .expect("write duplicate configuration");
@@ -696,8 +697,9 @@ styles_in = ["slash_line", "slash_block", "slash_block"]
     let formatted = hawkeye(project.path(), ["format"]);
     assert_exit(&formatted, 0);
     assert!(
-        stderr(&formatted)
-            .contains("rules[0].styles_in contains duplicate style \"slash_block\"; ignoring it")
+        stderr(&formatted).contains(
+            "rules[0].styles_in contains duplicate style \"slashstar_style\"; ignoring it"
+        )
     );
 }
 
@@ -714,15 +716,15 @@ includes = ["**/*.widget", "**/*.rs"]
 
 [[rules]]
 extensions = ["WIDGET"]
-style_out = "hash_line"
+style_out = "script_style"
 
 [[rules]]
 extensions = ["widget"]
-style_out = "slash_line"
+style_out = "doubleslash_style"
 
 [[rules]]
 extensions = ["rs"]
-style_out = "hash_line"
+style_out = "script_style"
 "#,
     )
     .expect("write ordered rules");

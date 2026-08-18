@@ -113,10 +113,10 @@ extensions = ["rs", "d.ts"]
 # Filenames are complete basenames. Both selectors are case-insensitive.
 filenames = ["Cargo.toml"]
 # Exactly one style is used for canonical output.
-style_out = "slash_line"
+style_out = "doubleslash_style"
 # A non-empty list is the complete accepted input set and must include
 # style_out. Omitting this field or using [] defaults to [style_out].
-styles_in = ["slash_line", "slash_block"]
+styles_in = ["doubleslash_style", "slashstar_style"]
 ```
 
 ### Header
@@ -162,7 +162,7 @@ The first matching rule wins. User rules are checked in declaration order, follo
 
 `style_out` is the one canonical output syntax. `styles_in` is the complete set of syntaxes that can be structurally recognized and safely replaced or removed. An empty list defaults to `[style_out]`; a non-empty list must include `style_out` so formatted output is accepted on the next run. If the leading text parses as a known comment header and contains all configured keywords but its style is not accepted by the rule, HawkEye reports `conflict` instead of guessing a deletion range.
 
-Custom line styles wrap each logical header line with `prefix` and `suffix`. `pad_lines = true` right-pads shorter lines so suffixes align; it requires a non-empty suffix. Custom block styles write `start` and `end` on their own lines and wrap body lines with `prefix` and `suffix`. A custom style with the same name as a built-in style overrides it and emits a warning; built-in rules then use the custom definition.
+Custom line styles wrap each logical header line with `prefix` and `suffix`. `pad_lines = true` right-pads shorter lines so suffixes align; it requires a non-empty suffix. Custom block styles write `start` and `end` on their own lines and wrap body lines with `prefix` and `suffix`. A custom style with the same name as a built-in style overrides it and emits a warning; built-in rules then use the custom definition. Built-in style names preserve their v6 identifiers normalized to lowercase, such as `doubleslash_style`, `slashstar_style`, and `xml_style`.
 
 Built-in output styles include line comments for slash, hash, dash, percent, semicolon, apostrophe, bang, tilde, batch, and Haml syntaxes, plus block comments for C, XML, Lua, Pascal, Velocity, Mustache, MVEL, FreeMarker, JSP, ColdFusion, ASP, Swift banners, and AsciiDoc. The built-in filename and extension rules cover the corresponding v6 language set, while user rules always take precedence.
 

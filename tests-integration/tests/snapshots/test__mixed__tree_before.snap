@@ -36,8 +36,8 @@ year = 2026␊
 [[rules]]␊
 extensions = ["rs", "d.ts"]␊
 filenames = ["Makefile"]␊
-style_out = "slash_line"␊
-styles_in = ["slash_line", "slash_block"]␊
+style_out = "doubleslash_style"␊
+styles_in = ["doubleslash_style", "slashstar_style"]␊
 === not_ignored_without_repository.rs ===
 fn selected_without_a_repository() {}␊
 === notes.txt ===
