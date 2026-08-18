@@ -140,6 +140,14 @@ impl Engine {
                 format!("files.root is not a directory: {}", root.display()),
             ));
         }
+        log::debug!(
+            "configured file selection: root={}, includes={:?}, excludes={:?}, git.ignore={:?}, git.file_attrs={:?}",
+            root.display(),
+            files.includes,
+            files.excludes,
+            git.ignore,
+            git.file_attrs
+        );
         let (selection, exclusions) =
             discovery::compile_patterns(&root, &files.includes, &files.excludes)?;
 
@@ -218,6 +226,7 @@ impl Engine {
                 Rule::new(&source, rule, &styles)
             })
             .collect::<Result<Vec<_>, Error>>()?;
+        log::debug!("resolved {} styles and {} rules", styles.len(), rules.len());
 
         Ok(Self {
             root,
@@ -268,8 +277,9 @@ impl Engine {
                 Err(err) => return Err(err),
             }
         };
-        let selected = self
-            .discover(repo.as_ref())?
+        let paths = self.discover(repo.as_ref())?;
+        log::trace!("selected files: {paths:?}");
+        let selected = paths
             .into_iter()
             .map(|path| {
                 let rule = self.rules.iter().find(|rule| rule.matches(&path));
@@ -305,6 +315,10 @@ impl Engine {
 
         for (relative_path, rule) in selected {
             let Some(rule) = rule else {
+                log::debug!(
+                    "{} has no matching rule; reporting it as unsupported",
+                    relative_path.display()
+                );
                 report.files.push(FileReport {
                     path: relative_path,
                     outcome: FileOutcome::Unsupported,
@@ -321,6 +335,10 @@ impl Engine {
                 .with_source(err)
             })?;
             let Ok(input) = std::str::from_utf8(&original) else {
+                log::debug!(
+                    "{} is not UTF-8 text; reporting it as unsupported",
+                    relative_path.display()
+                );
                 report.files.push(FileReport {
                     path: relative_path,
                     outcome: FileOutcome::Unsupported,

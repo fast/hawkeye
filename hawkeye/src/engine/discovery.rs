@@ -30,7 +30,7 @@ use crate::config::FeatureMode;
 impl Engine {
     pub(super) fn discover(&self, repo: Option<&GitRepo>) -> Result<Vec<PathBuf>, Error> {
         let started = Instant::now();
-        let files = if self.git.ignore != FeatureMode::Disable
+        let (files, source) = if self.git.ignore != FeatureMode::Disable
             && let Some(repo) = repo
         {
             let files = repo
@@ -38,12 +38,7 @@ impl Engine {
                 .into_iter()
                 .filter(|path| self.selection.matched(path, false).is_whitelist())
                 .collect::<BTreeSet<_>>();
-            log::debug!(
-                "selected {} files through the Git index in {:?}",
-                files.len(),
-                started.elapsed()
-            );
-            files
+            (files, "the Git index")
         } else {
             let files = walk(
                 &self.root,
@@ -51,15 +46,10 @@ impl Engine {
                 &self.exclusions,
                 self.git.ignore,
             )?;
-            log::debug!(
-                "selected {} files through a filesystem walk in {:?}",
-                files.len(),
-                started.elapsed()
-            );
-            files
+            (files, "a filesystem walk")
         };
 
-        if let Some(header_path) = &self.header_path {
+        let files = if let Some(header_path) = &self.header_path {
             let mut selected = Vec::with_capacity(files.len());
             for path in files {
                 let absolute_path = self.root.join(&path);
@@ -79,9 +69,16 @@ impl Engine {
                     selected.push(path);
                 }
             }
-            return Ok(selected);
-        }
-        Ok(files.into_iter().collect())
+            selected
+        } else {
+            files.into_iter().collect()
+        };
+        log::debug!(
+            "selected {} files through {source} in {:?}",
+            files.len(),
+            started.elapsed()
+        );
+        Ok(files)
     }
 }
 

@@ -325,6 +325,37 @@ ignore = "disable"
 }
 
 #[test]
+fn debug_logs_explain_unsupported_files() {
+    let project = tempfile::tempdir().expect("create unsupported file project");
+    fs::write(
+        project.path().join("licenserc.toml"),
+        r#"[header]
+text = "Copyright 2026 Acme"
+
+[files]
+includes = ["binary.rs", "notes.txt"]
+
+[git]
+ignore = "disable"
+"#,
+    )
+    .expect("write configuration");
+    fs::write(project.path().join("binary.rs"), [0xff]).expect("write non-UTF-8 source");
+    fs::write(project.path().join("notes.txt"), "notes\n").expect("write unknown source");
+
+    let checked = Command::new(hawkeye_binary())
+        .args(["check"])
+        .current_dir(project.path())
+        .env("RUST_LOG", "hawkeye=debug")
+        .output()
+        .expect("run hawkeye with debug logging");
+    assert_exit(&checked, 0);
+    let logs = stderr(&checked);
+    assert!(logs.contains("binary.rs is not UTF-8 text; reporting it as unsupported"));
+    assert!(logs.contains("notes.txt has no matching rule; reporting it as unsupported"));
+}
+
+#[test]
 fn git_history_branches_dirty_files_and_untracked_directories() {
     let project = case("git-history");
     setup_history_repository(project.path());
