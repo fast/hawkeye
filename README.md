@@ -34,10 +34,10 @@ cargo install hawkeye --version 7.0.0-alpha.1 --locked
 
 Prebuilt releases cover the following platforms:
 
-| Distribution | Platforms |
-| --- | --- |
+| Distribution   | Platforms                                                                                               |
+| -------------- | ------------------------------------------------------------------------------------------------------- |
 | cargo-binstall | macOS and Linux on x86-64 or ARM64, plus Windows on x86-64; Linux archives support both glibc and musl. |
-| Docker image | Linux on amd64 or arm64. |
+| Docker image   | Linux on amd64 or arm64.                                                                                |
 
 ## Getting started
 
@@ -61,11 +61,11 @@ hawkeye format
 
 ## Command line
 
-| Command | Behavior |
-| --- | --- |
-| `hawkeye check` | Reports missing, non-canonical, and conflicting headers without writing files. |
-| `hawkeye format` | Adds missing headers and replaces recognized non-canonical headers. |
-| `hawkeye remove` | Removes recognized headers. |
+| Command          | Behavior                                                                       |
+| ---------------- | ------------------------------------------------------------------------------ |
+| `hawkeye check`  | Reports missing, non-canonical, and conflicting headers without writing files. |
+| `hawkeye format` | Adds missing headers and replaces recognized non-canonical headers.            |
+| `hawkeye remove` | Removes recognized headers.                                                    |
 
 Without `--config`, HawkEye tries `licenserc.toml` and then `.licenserc.toml` in the current directory. It does not search parent directories.
 
@@ -171,15 +171,15 @@ styles_in = ["doubleslash", "slashstar"]
 
 Templates use MiniJinja with strict undefined values, auto-escaping disabled, and its standard built-in filters, tests, and functions. HawkEye does not enable template includes or external loaders. The template context contains:
 
-| Value | Meaning |
-| --- | --- |
-| `props` | The complete user-defined `[props]` table. |
-| `attrs.filename` | The current file name. |
-| `attrs.disk_file_created_year` | The filesystem creation year, or `null` when unavailable. |
-| `attrs.disk_file_modified_year` | The filesystem modification year, or `null` when unavailable. |
-| `attrs.git_file_created_year` | The first Git commit year for the path, or `null` when disabled or unavailable. |
-| `attrs.git_file_modified_year` | The last Git commit year, using the current year for dirty or untracked files. |
-| `attrs.git_authors` | Sorted distinct Git author names. |
+| Value                           | Meaning                                                                         |
+| ------------------------------- | ------------------------------------------------------------------------------- |
+| `props`                         | The complete user-defined `[props]` table.                                      |
+| `attrs.filename`                | The current file name.                                                          |
+| `attrs.disk_file_created_year`  | The filesystem creation year, or `null` when unavailable.                       |
+| `attrs.disk_file_modified_year` | The filesystem modification year, or `null` when unavailable.                   |
+| `attrs.git_file_created_year`   | The first Git commit year for the path, or `null` when disabled or unavailable. |
+| `attrs.git_file_modified_year`  | The last Git commit year, using the current year for dirty or untracked files.  |
+| `attrs.git_authors`             | Sorted distinct Git author names.                                               |
 
 HawkEye never substitutes the current year for an unavailable value. Templates that need a fallback must express it explicitly.
 
