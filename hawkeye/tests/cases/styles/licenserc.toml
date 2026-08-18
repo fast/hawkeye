@@ -1,0 +1,28 @@
+[header]
+text = """
+Copyright 2026 Acme
+Licensed under Example
+"""
+
+[files]
+excludes = ["licenserc.toml"]
+
+[styles.box_line]
+kind = "line"
+pad_lines = true
+prefix = "<!-- "
+suffix = " -->"
+
+[styles.fenced_block]
+end = "*>"
+kind = "block"
+prefix = "  "
+start = "<*"
+
+[[rules]]
+extensions = ["line"]
+style_out = "box_line"
+
+[[rules]]
+extensions = ["block"]
+style_out = "fenced_block"

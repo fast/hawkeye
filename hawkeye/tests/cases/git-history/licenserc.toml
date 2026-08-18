@@ -1,0 +1,10 @@
+[header]
+text = "Copyright {{ attrs.git_file_created_year }}-{{ attrs.git_file_modified_year }} {{ attrs.git_authors | join(', ') }}"
+
+[files]
+excludes = ["other.rs"]
+includes = ["**/*.rs"]
+
+[git]
+file_attrs = "enable"
+ignore = "disable"

@@ -1,7 +1,0 @@
-# Copyright (c) 2022-2025, Example, All Rights Reserved.
-
-inlineHeader = "Copyright (c) 2022-2025, Example, All Rights Reserved."
-
-baseDir = "."
-includes = ["*.py"]
-excludes = ["*.expected"]

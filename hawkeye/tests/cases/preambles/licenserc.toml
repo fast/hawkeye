@@ -1,0 +1,13 @@
+[header]
+text = "Copyright 2026 Acme Labs"
+
+[files]
+excludes = ["licenserc.toml"]
+includes = [
+  "**/*.cs",
+  "**/*.php",
+  "**/*.py",
+  "**/*.rs",
+  "**/*.xml",
+  "**/*.yaml",
+]

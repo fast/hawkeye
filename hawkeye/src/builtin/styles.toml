@@ -1,0 +1,161 @@
+# Copyright 2026 FastLabs Developers
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+[styles.doubleslash]
+kind = "line"
+prefix = "// "
+
+[styles.tripleslash]
+kind = "line"
+prefix = "/// "
+
+[styles.script]
+kind = "line"
+prefix = "# "
+
+[styles.doubledashes]
+kind = "line"
+prefix = "-- "
+
+[styles.percent]
+kind = "line"
+prefix = "% "
+
+[styles.percent3]
+kind = "line"
+prefix = "%%% "
+
+[styles.semicolon]
+kind = "line"
+prefix = "; "
+
+[styles.apostrophe]
+kind = "line"
+prefix = "' "
+
+[styles.exclamation]
+kind = "line"
+prefix = "! "
+
+[styles.exclamation3]
+kind = "line"
+prefix = "!!! "
+
+[styles.doubletilde]
+kind = "line"
+prefix = "~~ "
+
+[styles.batch]
+kind = "line"
+prefix = "@REM "
+
+[styles.haml]
+kind = "line"
+prefix = "-# "
+
+[styles.xml_per_line]
+kind = "line"
+prefix = "<!-- "
+suffix = " -->"
+pad_lines = true
+
+[styles.slashstar]
+kind = "block"
+start = "/*"
+prefix = " * "
+end = " */"
+
+[styles.javadoc]
+kind = "block"
+start = "/**"
+prefix = " * "
+end = " */"
+
+[styles.xml]
+kind = "block"
+start = "<!--"
+prefix = "    "
+end = "-->"
+
+[styles.lua]
+kind = "block"
+start = "--[["
+prefix = "    "
+end = "]]"
+
+[styles.bracesstar]
+kind = "block"
+start = "{*"
+prefix = " * "
+end = " *}"
+
+[styles.sharpstar]
+kind = "block"
+start = "#*"
+prefix = " * "
+end = " *#"
+
+[styles.mustache]
+kind = "block"
+start = "{{!"
+prefix = "    "
+end = "}}"
+
+[styles.mvel]
+kind = "block"
+start = "@comment{"
+prefix = "  "
+end = "}"
+
+[styles.ftl]
+kind = "block"
+start = "<#--"
+prefix = "    "
+end = "-->"
+
+[styles.ftl_alt]
+kind = "block"
+start = "[#--"
+prefix = "    "
+end = "--]"
+
+[styles.dynascript]
+kind = "block"
+start = "<%--"
+prefix = "    "
+end = "--%>"
+
+[styles.dynascript3]
+kind = "block"
+start = "<!---"
+prefix = "    "
+end = "--->"
+
+[styles.asp]
+kind = "block"
+start = "<%"
+prefix = "' "
+end = "%>"
+
+[styles.line_block]
+kind = "block"
+start = "//===----------------------------------------------------------------------===//"
+prefix = "// "
+end = "//===----------------------------------------------------------------------===//"
+
+[styles.asciidoc]
+kind = "block"
+start = "////"
+prefix = "// "
+end = "////"

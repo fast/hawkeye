@@ -1,9 +1,0 @@
-baseDir = "."
-headerPath = "license.txt"
-
-excludes = ["*.toml", "*.expected"]
-
-additionalHeaders = ["style.toml"]
-
-[mapping.CS_TEST_STYLE]
-extensions = ["cs"]

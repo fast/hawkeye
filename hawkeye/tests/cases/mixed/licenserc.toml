@@ -1,0 +1,19 @@
+[header]
+keywords = ["copyright", "sequence"]
+text = """
+Copyright {{ props.year }} {{ props.owner }}
+Sequence {{ range(1, 4) | join("-") }}
+"""
+
+[files]
+excludes = [".gitignore", "licenserc.toml", "excluded/**"]
+
+[props]
+owner = "Acme Labs"
+year = 2026
+
+[[rules]]
+extensions = ["rs", "d.ts"]
+filenames = ["Makefile"]
+style_out = "doubleslash"
+styles_in = ["doubleslash", "slashstar"]

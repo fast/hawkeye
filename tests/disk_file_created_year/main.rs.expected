@@ -1,5 +1,0 @@
-// Copyright <CURRENT_YEAR>
-
-fn main() {
-    println!("Hello, world!");
-}

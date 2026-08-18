@@ -1,1 +1,0 @@
-Copyright {{attrs.git_file_created_year if attrs.git_file_created_year else attrs.disk_file_created_year }}

@@ -1,8 +1,0 @@
-baseDir = "."
-headerPath = "license.txt"
-
-excludes = ["licenserc.toml", "*.expected"]
-
-[properties]
-inceptionYear = 2024
-copyrightOwner = "Mike Delaney <dev@mldelaney.io>"
