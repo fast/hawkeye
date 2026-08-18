@@ -201,6 +201,33 @@ ignore = "enable"
     assert_eq!(report["files"][0]["outcome"], "add");
 }
 
+#[cfg(unix)]
+#[test]
+fn report_paths_preserve_backslashes_in_unix_filenames() {
+    let project = tempfile::tempdir().expect("create report path project");
+    fs::write(
+        project.path().join("licenserc.toml"),
+        r#"[header]
+text = "Copyright 2026 Acme"
+
+[files]
+includes = ["**/*.rs"]
+
+[git]
+ignore = "disable"
+"#,
+    )
+    .expect("write configuration");
+    fs::write(project.path().join(r"back\slash.rs"), "fn main() {}\n")
+        .expect("write source with a backslash in its name");
+
+    let checked = hawkeye(project.path(), ["check", "--output-format=json"]);
+    assert_exit(&checked, 1);
+    let report = json(&checked);
+    assert_eq!(report["files"][0]["path"], r"back\slash.rs");
+    assert_eq!(report["files"][0]["outcome"], "add");
+}
+
 #[test]
 fn git_history_branches_dirty_files_and_untracked_directories() {
     let project = case("git-history");

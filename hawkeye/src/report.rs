@@ -12,11 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::path::Path;
-use std::path::PathBuf;
-
 use serde::Serialize;
-use serde::Serializer;
 
 /// The planned outcome for one selected file.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -40,8 +36,7 @@ pub enum Outcome {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct FileOutcome {
     /// The path relative to `files.root`.
-    #[serde(serialize_with = "serialize_path")]
-    pub path: PathBuf,
+    pub path: String,
     /// The planned outcome.
     pub outcome: Outcome,
 }
@@ -51,14 +46,4 @@ pub struct FileOutcome {
 pub struct Report {
     /// All selected file outcomes.
     pub files: Vec<FileOutcome>,
-}
-
-fn serialize_path<SerializerType>(
-    path: &Path,
-    serializer: SerializerType,
-) -> Result<SerializerType::Ok, SerializerType::Error>
-where
-    SerializerType: Serializer,
-{
-    serializer.serialize_str(&path.to_string_lossy().replace('\\', "/"))
 }

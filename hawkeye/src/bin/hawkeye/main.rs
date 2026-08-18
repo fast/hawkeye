@@ -188,8 +188,7 @@ fn emit_human(report: &Report) -> io::Result<()> {
             Outcome::Conflict => "conflict",
             Outcome::Unsupported => "unsupported",
         };
-        let path = file.path.to_string_lossy().replace('\\', "/");
-        writeln!(stdout, "{label:>11}  {path}")?;
+        writeln!(stdout, "{label:>11}  {}", file.path)?;
     }
     let changed = report
         .files
