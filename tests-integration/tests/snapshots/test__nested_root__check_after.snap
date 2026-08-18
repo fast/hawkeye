@@ -5,9 +5,8 @@ expression: "&report"
 {
   "files": [
     {
-      "changed": false,
-      "path": "main.rs",
-      "status": "clean"
+      "outcome": "clean",
+      "path": "main.rs"
     }
   ]
 }

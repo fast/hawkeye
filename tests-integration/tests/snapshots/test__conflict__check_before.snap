@@ -5,14 +5,12 @@ expression: "&report"
 {
   "files": [
     {
-      "changed": false,
-      "path": "foreign.rs",
-      "status": "conflict"
+      "outcome": "conflict",
+      "path": "foreign.rs"
     },
     {
-      "changed": false,
-      "path": "ordinary.rs",
-      "status": "missing"
+      "outcome": "add",
+      "path": "ordinary.rs"
     }
   ]
 }

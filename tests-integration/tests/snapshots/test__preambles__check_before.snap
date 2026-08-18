@@ -5,29 +5,24 @@ expression: "&report"
 {
   "files": [
     {
-      "changed": false,
-      "path": "bom.cs",
-      "status": "missing"
+      "outcome": "add",
+      "path": "bom.cs"
     },
     {
-      "changed": false,
-      "path": "document.xml",
-      "status": "missing"
+      "outcome": "add",
+      "path": "document.xml"
     },
     {
-      "changed": false,
-      "path": "document.yaml",
-      "status": "missing"
+      "outcome": "add",
+      "path": "document.yaml"
     },
     {
-      "changed": false,
-      "path": "script.py",
-      "status": "missing"
+      "outcome": "add",
+      "path": "script.py"
     },
     {
-      "changed": false,
-      "path": "windows.rs",
-      "status": "missing"
+      "outcome": "add",
+      "path": "windows.rs"
     }
   ]
 }

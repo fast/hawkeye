@@ -12,100 +12,45 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::fmt;
 use std::path::Path;
 use std::path::PathBuf;
 
 use serde::Serialize;
 use serde::Serializer;
 
-/// A HawkEye operation.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Mode {
-    /// Report non-compliant files without planning writes.
-    Check,
-    /// Insert or normalize headers.
-    Format,
-    /// Remove structurally recognized headers.
-    Remove,
-}
-
-/// The result of analyzing one selected file.
+/// The planned outcome for one selected file.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-pub enum Status {
-    /// The file already contains the canonical header.
-    #[serde(rename = "clean")]
+#[serde(rename_all = "snake_case")]
+pub enum Outcome {
+    /// No change is needed.
     Clean,
-    /// No recognized header was found.
-    #[serde(rename = "missing")]
-    Missing,
-    /// A recognized header differs in content, style, or spacing.
-    #[serde(rename = "replaceable")]
-    Replaceable,
+    /// A canonical header should be added.
+    Add,
+    /// A recognized header should be replaced.
+    Replace,
+    /// A recognized header should be removed.
+    Remove,
     /// The file looks licensed but no safe edit range is known.
-    #[serde(rename = "conflict")]
     Conflict,
     /// The file has no rule or is not supported UTF-8 text.
-    #[serde(rename = "unsupported")]
     Unsupported,
 }
 
-impl Status {
-    /// Returns whether `check` treats this state as non-compliant.
-    pub fn is_violation(self) -> bool {
-        matches!(self, Self::Missing | Self::Replaceable | Self::Conflict)
-    }
-}
-
-impl fmt::Display for Status {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(match self {
-            Self::Clean => "clean",
-            Self::Missing => "missing",
-            Self::Replaceable => "replaceable",
-            Self::Conflict => "conflict",
-            Self::Unsupported => "unsupported",
-        })
-    }
-}
-
-/// The deterministic outcome for one path.
+/// The outcome for one path.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct FileOutcome {
     /// The path relative to `files.root`.
     #[serde(serialize_with = "serialize_path")]
     pub path: PathBuf,
-    /// The analysis status.
-    pub status: Status,
-    /// Whether the requested operation planned a modification.
-    pub changed: bool,
+    /// The planned outcome.
+    pub outcome: Outcome,
 }
 
-/// A path-sorted operation report.
+/// A report produced from a plan.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Report {
-    /// All selected file outcomes in path order.
+    /// All selected file outcomes.
     pub files: Vec<FileOutcome>,
-}
-
-impl Report {
-    /// Returns the number of planned or applied changes.
-    pub fn changed(&self) -> usize {
-        self.files.iter().filter(|file| file.changed).count()
-    }
-
-    /// Returns whether check found a policy violation.
-    pub fn has_violations(&self) -> bool {
-        self.files.iter().any(|file| file.status.is_violation())
-    }
-
-    /// Counts outcomes with a specific status.
-    pub fn count(&self, status: Status) -> usize {
-        self.files
-            .iter()
-            .filter(|file| file.status == status)
-            .count()
-    }
 }
 
 fn serialize_path<SerializerType>(

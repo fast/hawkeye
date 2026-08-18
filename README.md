@@ -179,11 +179,11 @@ A shallow repository cannot provide truthful creation years. In that situation, 
 The library exposes the same behavior without shelling out to the CLI:
 
 ```rust
-use hawkeye::{Config, Engine, Mode};
+use hawkeye::{Action, Config, Engine};
 
 let config = Config::load("licenserc.toml")?;
 let engine = Engine::new(config)?;
-let plan = engine.plan(Mode::Check)?;
+let plan = engine.plan(Action::Check)?;
 let report = plan.report();
 # Ok::<(), hawkeye::Error>(())
 ```

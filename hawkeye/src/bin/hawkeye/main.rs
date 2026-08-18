@@ -25,11 +25,11 @@ use clap::ValueEnum;
 use exn::Result;
 use exn::ResultExt;
 use exn::bail;
+use hawkeye::Action;
 use hawkeye::Config;
 use hawkeye::Engine;
-use hawkeye::Mode;
+use hawkeye::Outcome;
 use hawkeye::Report;
-use hawkeye::Status;
 use logforth::filter::rustlog::RustLogFilterBuilder;
 
 #[derive(Debug, Parser)]
@@ -114,48 +114,59 @@ fn do_main() -> Result<ExitCode, Error> {
     match cmd.subcommand {
         SubcommandOptions::Check(options) => {
             let plan = engine
-                .plan(Mode::Check)
+                .plan(Action::Check)
                 .or_raise(|| Error::new("cannot analyze selected files"))?;
             let report = plan.report();
-            emit(Mode::Check, &report, cmd.output_format)?;
-            let failed = report.has_violations()
-                || (options.fail_on_unknown && report.count(Status::Unsupported) > 0);
+            emit(&report, cmd.output_format)?;
+            let failed = report.files.iter().any(|file| {
+                matches!(
+                    file.outcome,
+                    Outcome::Add | Outcome::Replace | Outcome::Conflict
+                ) || (options.fail_on_unknown && file.outcome == Outcome::Unsupported)
+            });
             Ok(policy_exit(failed))
         }
         SubcommandOptions::Format(options) => {
-            edit(&engine, Mode::Format, options, cmd.output_format)
+            edit(&engine, Action::Format, options, cmd.output_format)
         }
         SubcommandOptions::Remove(options) => {
-            edit(&engine, Mode::Remove, options, cmd.output_format)
+            edit(&engine, Action::Remove, options, cmd.output_format)
         }
     }
 }
 
 fn edit(
     engine: &Engine,
-    mode: Mode,
+    action: Action,
     options: EditOptions,
     output_format: OutputFormat,
 ) -> Result<ExitCode, Error> {
     let plan = engine
-        .plan(mode)
+        .plan(action)
         .or_raise(|| Error::new("cannot analyze selected files"))?;
     if !options.dry_run {
         plan.apply()
             .or_raise(|| Error::new("cannot apply planned file edits"))?;
     }
     let report = plan.report();
-    emit(mode, &report, output_format)?;
-    let failed = report.count(Status::Conflict) > 0
-        || (options.fail_on_unknown && report.count(Status::Unsupported) > 0)
-        || (options.fail_on_change && report.changed() > 0);
+    emit(&report, output_format)?;
+    let failed = report.files.iter().any(|file| {
+        file.outcome == Outcome::Conflict
+            || (options.fail_on_unknown && file.outcome == Outcome::Unsupported)
+            || (options.fail_on_change
+                && matches!(
+                    file.outcome,
+                    Outcome::Add | Outcome::Replace | Outcome::Remove
+                ))
+    });
     Ok(policy_exit(failed))
 }
 
-fn emit(mode: Mode, report: &Report, output_format: OutputFormat) -> Result<(), Error> {
+fn emit(report: &Report, output_format: OutputFormat) -> Result<(), Error> {
     match output_format {
-        OutputFormat::Human => emit_human(mode, report)
-            .or_raise(|| Error::new("cannot write human-readable report"))?,
+        OutputFormat::Human => {
+            emit_human(report).or_raise(|| Error::new("cannot write human-readable report"))?
+        }
         OutputFormat::Json => {
             let mut stdout = io::stdout().lock();
             serde_json::to_writer_pretty(&mut stdout, &report)
@@ -166,35 +177,47 @@ fn emit(mode: Mode, report: &Report, output_format: OutputFormat) -> Result<(), 
     Ok(())
 }
 
-fn emit_human(mode: Mode, report: &Report) -> io::Result<()> {
+fn emit_human(report: &Report) -> io::Result<()> {
     let mut stdout = io::stdout().lock();
     for file in &report.files {
-        let label = if file.changed {
-            match (mode, file.status) {
-                (Mode::Remove, _) => "remove",
-                (_, Status::Missing) => "add",
-                _ => "replace",
-            }
-        } else {
-            match file.status {
-                Status::Clean => continue,
-                Status::Missing if mode == Mode::Remove => continue,
-                Status::Missing => "missing",
-                Status::Replaceable => "replaceable",
-                Status::Conflict => "conflict",
-                Status::Unsupported => "unsupported",
-            }
+        let label = match file.outcome {
+            Outcome::Clean => continue,
+            Outcome::Add => "add",
+            Outcome::Replace => "replace",
+            Outcome::Remove => "remove",
+            Outcome::Conflict => "conflict",
+            Outcome::Unsupported => "unsupported",
         };
         let path = file.path.to_string_lossy().replace('\\', "/");
         writeln!(stdout, "{label:>11}  {path}")?;
     }
+    let changed = report
+        .files
+        .iter()
+        .filter(|file| {
+            matches!(
+                file.outcome,
+                Outcome::Add | Outcome::Replace | Outcome::Remove
+            )
+        })
+        .count();
+    let conflicts = report
+        .files
+        .iter()
+        .filter(|file| file.outcome == Outcome::Conflict)
+        .count();
+    let unsupported = report
+        .files
+        .iter()
+        .filter(|file| file.outcome == Outcome::Unsupported)
+        .count();
     writeln!(
         stdout,
         "{} files, {} changed, {} conflicts, {} unsupported",
         report.files.len(),
-        report.changed(),
-        report.count(Status::Conflict),
-        report.count(Status::Unsupported),
+        changed,
+        conflicts,
+        unsupported,
     )
 }
 

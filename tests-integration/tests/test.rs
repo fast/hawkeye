@@ -20,11 +20,11 @@ use std::process::Command;
 use std::process::Output;
 use std::sync::OnceLock;
 
+use hawkeye::Action;
 use hawkeye::Config;
 use hawkeye::Engine;
 use hawkeye::ErrorKind;
-use hawkeye::Mode;
-use hawkeye::Status;
+use hawkeye::Outcome;
 use jiff::Timestamp;
 use jiff::tz::TimeZone;
 use serde_json::Value;
@@ -137,7 +137,7 @@ ignore = "enable"
     .expect("write required Git configuration");
     let config = Config::load(&config_path).expect("load required Git configuration");
     let engine = Engine::new(config).expect("initialize required Git engine");
-    let error = match engine.plan(Mode::Check) {
+    let error = match engine.plan(Action::Check) {
         Ok(_) => panic!("required Git discovery must reject a non-Git directory"),
         Err(error) => error,
     };
@@ -160,11 +160,11 @@ ignore = "auto"
     let config = Config::load(&config_path).expect("load automatic Git configuration");
     let plan = Engine::new(config)
         .expect("initialize automatic Git engine")
-        .plan(Mode::Check)
+        .plan(Action::Check)
         .expect("fall back to filesystem discovery");
     let report = plan.report();
     assert_eq!(report.files.len(), 1);
-    assert_eq!(report.files[0].status, Status::Missing);
+    assert_eq!(report.files[0].outcome, Outcome::Add);
 }
 
 #[cfg(target_os = "linux")]
@@ -198,7 +198,7 @@ ignore = "enable"
     assert_exit(&checked, 1);
     let report = json(&checked);
     assert_eq!(report["files"][0]["path"], "main.rs");
-    assert_eq!(report["files"][0]["status"], "missing");
+    assert_eq!(report["files"][0]["outcome"], "add");
 }
 
 #[test]
@@ -297,7 +297,7 @@ ignore = "disable"
     assert_exit(&empty, 0);
     let report = json(&empty);
     assert_eq!(report["files"].as_array().map(Vec::len), Some(1));
-    assert_eq!(report["files"][0]["status"], "unsupported");
+    assert_eq!(report["files"][0]["outcome"], "unsupported");
 }
 
 #[test]
@@ -586,8 +586,7 @@ includes = ["**/*.rs"]
     let formatted = hawkeye(project.path(), ["format", "--output-format=json"]);
     assert_exit(&formatted, 1);
     let report = json(&formatted);
-    assert_eq!(report["files"][0]["status"], "conflict");
-    assert_eq!(report["files"][0]["changed"], false);
+    assert_eq!(report["files"][0]["outcome"], "conflict");
     assert_eq!(read_normalized(project.path().join("main.rs")), source);
 }
 
@@ -620,8 +619,7 @@ includes = ["**/*.rs"]
         let result = hawkeye(project.path(), [command, "--output-format=json"]);
         assert_exit(&result, 1);
         let report = json(&result);
-        assert_eq!(report["files"][0]["status"], "conflict");
-        assert_eq!(report["files"][0]["changed"], false);
+        assert_eq!(report["files"][0]["outcome"], "conflict");
         assert_eq!(read_normalized(project.path().join("main.rs")), source);
     }
 }
@@ -1048,7 +1046,7 @@ fn changed_files(report: &Value) -> usize {
         .as_array()
         .expect("files array")
         .iter()
-        .filter(|file| file["changed"] == true)
+        .filter(|file| matches!(file["outcome"].as_str(), Some("add" | "replace" | "remove")))
         .count()
 }
 

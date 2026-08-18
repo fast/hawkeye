@@ -12,18 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use super::Action;
 use super::Analysis;
 use super::Edit;
 use super::Engine;
 use super::Rule;
-use crate::report::Mode;
-use crate::report::Status;
+use crate::report::Outcome;
 use crate::style::Candidate;
 use crate::style::next_line;
 use crate::style::skip_blank_lines;
 
 impl Engine {
-    pub(super) fn analyze(&self, rule: &Rule, input: &str, header: &str, mode: Mode) -> Analysis {
+    pub(super) fn analyze(
+        &self,
+        rule: &Rule,
+        input: &str,
+        header: &str,
+        action: Action,
+    ) -> Analysis {
         let offset = preamble_offset(input);
         let eol = detect_eol(input);
         let rendered = {
@@ -47,7 +53,7 @@ impl Engine {
             Ok(candidate) => candidate,
             Err(()) => {
                 return Analysis {
-                    status: Status::Conflict,
+                    outcome: Outcome::Conflict,
                     edit: None,
                 };
             }
@@ -64,15 +70,15 @@ impl Engine {
                         .any(|style| style.extract(input, candidate.range.end).is_some()))
             {
                 return Analysis {
-                    status: Status::Conflict,
+                    outcome: Outcome::Conflict,
                     edit: None,
                 };
             }
             let end = skip_blank_lines(input, candidate.range.end);
             let range = candidate.range.start..end;
-            if mode == Mode::Remove {
+            if action == Action::Remove {
                 return Analysis {
-                    status: Status::Replaceable,
+                    outcome: Outcome::Remove,
                     edit: Some(Edit {
                         range,
                         replacement: String::new(),
@@ -84,13 +90,13 @@ impl Engine {
                 && input.get(range.clone()) == Some(rendered.as_str());
             if clean {
                 Analysis {
-                    status: Status::Clean,
+                    outcome: Outcome::Clean,
                     edit: None,
                 }
             } else {
                 Analysis {
-                    status: Status::Replaceable,
-                    edit: (mode == Mode::Format).then_some(Edit {
+                    outcome: Outcome::Replace,
+                    edit: (action == Action::Format).then_some(Edit {
                         range,
                         replacement: rendered,
                     }),
@@ -102,14 +108,19 @@ impl Engine {
                 .is_some_and(|candidate| has_keywords(&candidate.body, &self.keywords))
         }) {
             Analysis {
-                status: Status::Conflict,
+                outcome: Outcome::Conflict,
+                edit: None,
+            }
+        } else if action == Action::Remove {
+            Analysis {
+                outcome: Outcome::Clean,
                 edit: None,
             }
         } else {
             let leading_end = skip_blank_lines(input, offset);
             Analysis {
-                status: Status::Missing,
-                edit: (mode == Mode::Format).then_some(Edit {
+                outcome: Outcome::Add,
+                edit: (action == Action::Format).then_some(Edit {
                     range: offset..leading_end,
                     replacement: rendered,
                 }),

@@ -5,34 +5,28 @@ expression: "&report"
 {
   "files": [
     {
-      "changed": true,
-      "path": "Makefile",
-      "status": "missing"
+      "outcome": "add",
+      "path": "Makefile"
     },
     {
-      "changed": true,
-      "path": "app.rs",
-      "status": "missing"
+      "outcome": "add",
+      "path": "app.rs"
     },
     {
-      "changed": true,
-      "path": "legacy.rs",
-      "status": "replaceable"
+      "outcome": "replace",
+      "path": "legacy.rs"
     },
     {
-      "changed": true,
-      "path": "not_ignored_without_repository.rs",
-      "status": "missing"
+      "outcome": "add",
+      "path": "not_ignored_without_repository.rs"
     },
     {
-      "changed": false,
-      "path": "notes.txt",
-      "status": "unsupported"
+      "outcome": "unsupported",
+      "path": "notes.txt"
     },
     {
-      "changed": true,
-      "path": "types.d.ts",
-      "status": "missing"
+      "outcome": "add",
+      "path": "types.d.ts"
     }
   ]
 }

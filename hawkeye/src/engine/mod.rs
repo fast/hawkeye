@@ -34,11 +34,21 @@ use crate::config::GitConfig;
 use crate::config::RuleConfig;
 use crate::git::GitRepo;
 use crate::report::FileOutcome;
-use crate::report::Mode;
+use crate::report::Outcome;
 use crate::report::Report;
-use crate::report::Status;
 use crate::style::Style;
 use crate::template::HeaderTemplate;
+
+/// The action to plan for selected files.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Action {
+    /// Report the changes needed to make headers canonical.
+    Check,
+    /// Add or replace headers to make them canonical.
+    Format,
+    /// Remove recognized headers.
+    Remove,
+}
 
 /// A reusable HawkEye runtime built from one configuration.
 pub struct Engine {
@@ -63,7 +73,7 @@ struct Rule {
 }
 
 struct Analysis {
-    status: Status,
+    outcome: Outcome,
     edit: Option<Edit>,
 }
 
@@ -217,7 +227,7 @@ impl Engine {
     }
 
     /// Discovers and analyzes files without modifying the filesystem.
-    pub fn plan(&self, mode: Mode) -> Result<Plan, Error> {
+    pub fn plan(&self, action: Action) -> Result<Plan, Error> {
         let git = self.git;
         let repo = GitRepo::discover(&self.root, git.ignore.combine(git.file_attrs))?;
         let paths = self.discover(repo.as_ref())?;
@@ -260,7 +270,7 @@ impl Engine {
             };
             let file_attrs = attrs.for_file(&path)?;
             let header = self.render_header(&file_attrs)?;
-            let analysis = self.analyze(rule, input, &header, mode);
+            let analysis = self.analyze(rule, input, &header, action);
             let updated = analysis
                 .edit
                 .as_ref()
@@ -270,12 +280,11 @@ impl Engine {
             files.push(PlannedFile {
                 absolute_path: path,
                 relative_path: relative,
-                status: analysis.status,
+                outcome: analysis.outcome,
                 updated,
             });
         }
 
-        files.sort_by(|left, right| left.relative_path.cmp(&right.relative_path));
         Ok(Plan { files })
     }
 
@@ -309,7 +318,7 @@ impl Engine {
     }
 }
 
-/// A complete, deterministic operation plan produced before any file is written.
+/// A complete plan produced before any file is written.
 pub struct Plan {
     files: Vec<PlannedFile>,
 }
@@ -323,8 +332,7 @@ impl Plan {
                 .iter()
                 .map(|file| FileOutcome {
                     path: file.relative_path.clone(),
-                    status: file.status,
-                    changed: file.updated.is_some(),
+                    outcome: file.outcome,
                 })
                 .collect(),
         }
@@ -354,7 +362,7 @@ impl Plan {
 struct PlannedFile {
     absolute_path: PathBuf,
     relative_path: PathBuf,
-    status: Status,
+    outcome: Outcome,
     updated: Option<Vec<u8>>,
 }
 
@@ -363,7 +371,7 @@ impl PlannedFile {
         Self {
             absolute_path,
             relative_path,
-            status: Status::Unsupported,
+            outcome: Outcome::Unsupported,
             updated: None,
         }
     }
