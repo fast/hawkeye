@@ -343,10 +343,7 @@ impl Engine {
                     .and_then(|history| history.get(&relative)),
             )?;
             let header = self.render_header(&file_attrs)?;
-            let FileAnalysis {
-                outcome,
-                replacement,
-            } = self.analyze(rule, input, &header, target);
+            let (outcome, replacement) = self.analyze(rule, input, &header, target).into_parts();
             report.files.push(FileReport {
                 path: relative,
                 outcome,
@@ -414,7 +411,7 @@ impl Edits {
                 )
                 .with_source(err)
             })?;
-            input.replace_range(replacement.range, &replacement.value);
+            input.replace_range(replacement.range, &replacement.text);
             fs::write(&path, input).map_err(|err| {
                 Error::new(
                     ErrorKind::Unexpected,
@@ -496,14 +493,29 @@ impl Rule {
     }
 }
 
-struct FileAnalysis {
-    outcome: FileOutcome,
-    replacement: Option<Replacement>,
-}
-
 struct Replacement {
     range: Range<usize>,
-    value: String,
+    text: String,
+}
+
+enum FileAnalysis {
+    Clean,
+    Add(Replacement),
+    Replace(Replacement),
+    Remove(Replacement),
+    Conflict,
+}
+
+impl FileAnalysis {
+    fn into_parts(self) -> (FileOutcome, Option<Replacement>) {
+        match self {
+            Self::Clean => (FileOutcome::Clean, None),
+            Self::Add(replacement) => (FileOutcome::Add, Some(replacement)),
+            Self::Replace(replacement) => (FileOutcome::Replace, Some(replacement)),
+            Self::Remove(replacement) => (FileOutcome::Remove, Some(replacement)),
+            Self::Conflict => (FileOutcome::Conflict, None),
+        }
+    }
 }
 
 impl Engine {
@@ -530,12 +542,7 @@ impl Engine {
 
         let candidate = match unique_style_match(matches) {
             Ok(candidate) => candidate,
-            Err(()) => {
-                return FileAnalysis {
-                    outcome: FileOutcome::Conflict,
-                    replacement: None,
-                };
-            }
+            Err(()) => return FileAnalysis::Conflict,
         };
 
         if let Some((style_name, candidate)) = candidate {
@@ -549,60 +556,39 @@ impl Engine {
                         .values()
                         .any(|style| style.parse(input, end).is_some()))
             {
-                return FileAnalysis {
-                    outcome: FileOutcome::Conflict,
-                    replacement: None,
-                };
+                return FileAnalysis::Conflict;
             }
             let range = offset..end;
             if target == Target::Absent {
-                return FileAnalysis {
-                    outcome: FileOutcome::Remove,
-                    replacement: Some(Replacement {
-                        range,
-                        value: String::new(),
-                    }),
-                };
+                return FileAnalysis::Remove(Replacement {
+                    range,
+                    text: String::new(),
+                });
             }
             let clean = style_name == rule.style_out
                 && candidate.body == header
                 && input.get(range.clone()) == Some(rendered.as_str());
             if clean {
-                FileAnalysis {
-                    outcome: FileOutcome::Clean,
-                    replacement: None,
-                }
+                FileAnalysis::Clean
             } else {
-                FileAnalysis {
-                    outcome: FileOutcome::Replace,
-                    replacement: Some(Replacement {
-                        range,
-                        value: rendered,
-                    }),
-                }
+                FileAnalysis::Replace(Replacement {
+                    range,
+                    text: rendered,
+                })
             }
         } else if self.styles.values().any(|style| {
             style
                 .parse(input, header_start)
                 .is_some_and(|candidate| has_keywords(&candidate.body, &self.keywords))
         }) {
-            FileAnalysis {
-                outcome: FileOutcome::Conflict,
-                replacement: None,
-            }
+            FileAnalysis::Conflict
         } else if target == Target::Absent {
-            FileAnalysis {
-                outcome: FileOutcome::Clean,
-                replacement: None,
-            }
+            FileAnalysis::Clean
         } else {
-            FileAnalysis {
-                outcome: FileOutcome::Add,
-                replacement: Some(Replacement {
-                    range: offset..header_start,
-                    value: rendered,
-                }),
-            }
+            FileAnalysis::Add(Replacement {
+                range: offset..header_start,
+                text: rendered,
+            })
         }
     }
 }
