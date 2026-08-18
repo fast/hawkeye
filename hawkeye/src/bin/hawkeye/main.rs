@@ -114,19 +114,11 @@ fn do_main() -> Result<ExitCode, Error> {
     let config = Config::load(config).or_raise(|| Error::new("cannot load config"))?;
     let engine = Engine::new(config).or_raise(|| Error::new("cannot create engine"))?;
 
-    let (report, failed) = match subcommand {
+    let (report, fail_on_change, fail_on_unknown) = match subcommand {
         SubcommandOptions::Check(options) => {
             let make_error = || Error::new("failed to execute check command");
             let report = engine.check().or_raise(make_error)?;
-            let failed = report.files.iter().any(|file| match file.outcome {
-                FileOutcome::Clean => false,
-                FileOutcome::Add
-                | FileOutcome::Replace
-                | FileOutcome::Remove
-                | FileOutcome::Conflict => true,
-                FileOutcome::Unsupported => options.fail_on_unknown,
-            });
-            (report, failed)
+            (report, true, options.fail_on_unknown)
         }
         SubcommandOptions::Format(options) => {
             let make_error = || Error::new("failed to execute format command");
@@ -136,15 +128,7 @@ fn do_main() -> Result<ExitCode, Error> {
             } else {
                 edits.apply().or_raise(make_error)?
             };
-            let failed = report.files.iter().any(|file| match file.outcome {
-                FileOutcome::Clean => false,
-                FileOutcome::Add | FileOutcome::Replace | FileOutcome::Remove => {
-                    options.fail_on_change
-                }
-                FileOutcome::Conflict => true,
-                FileOutcome::Unsupported => options.fail_on_unknown,
-            });
-            (report, failed)
+            (report, options.fail_on_change, options.fail_on_unknown)
         }
         SubcommandOptions::Remove(options) => {
             let make_error = || Error::new("failed to execute remove command");
@@ -154,27 +138,29 @@ fn do_main() -> Result<ExitCode, Error> {
             } else {
                 edits.apply().or_raise(make_error)?
             };
-            let failed = report.files.iter().any(|file| match file.outcome {
-                FileOutcome::Clean => false,
-                FileOutcome::Add | FileOutcome::Replace | FileOutcome::Remove => {
-                    options.fail_on_change
-                }
-                FileOutcome::Conflict => true,
-                FileOutcome::Unsupported => options.fail_on_unknown,
-            });
-            (report, failed)
+            (report, options.fail_on_change, options.fail_on_unknown)
         }
     };
 
-    let make_write_error = || Error::new("cannot write report to stdout");
-    let mut stdout = io::stdout().lock();
+    let failed = report.files.iter().any(|file| match file.outcome {
+        FileOutcome::Clean => false,
+        FileOutcome::Add | FileOutcome::Replace | FileOutcome::Remove => fail_on_change,
+        FileOutcome::Conflict => true,
+        FileOutcome::Unsupported => fail_on_unknown,
+    });
+
     match output_format {
         OutputFormat::Json => {
-            let report = serde_json::to_string_pretty(&report)
-                .or_raise(|| Error::new("cannot serialize JSON report"))?;
-            writeln!(stdout, "{report}").or_raise(make_write_error)?;
+            let make_error = || Error::new("cannot output JSON report");
+
+            let mut stdout = io::stdout().lock();
+            serde_json::to_writer_pretty(&mut stdout, &report).or_raise(make_error)?;
+            stdout.write_all(b"\n").or_raise(make_error)?;
         }
         OutputFormat::Human => {
+            let make_error = || Error::new("cannot output human-readable report");
+
+            let mut stdout = io::stdout().lock();
             for file in &report.files {
                 let label = match file.outcome {
                     FileOutcome::Clean => continue,
@@ -184,8 +170,7 @@ fn do_main() -> Result<ExitCode, Error> {
                     FileOutcome::Conflict => "conflict",
                     FileOutcome::Unsupported => "unsupported",
                 };
-                writeln!(stdout, "{label:>11}  {}", file.path.display())
-                    .or_raise(make_write_error)?;
+                writeln!(stdout, "{label:>11}  {}", file.path.display()).or_raise(make_error)?;
             }
 
             let files = report.files.len();
@@ -204,7 +189,7 @@ fn do_main() -> Result<ExitCode, Error> {
                 stdout,
                 "{files} files, {changes} changes, {conflicts} conflicts, {unsupported} unsupported"
             )
-            .or_raise(make_write_error)?;
+            .or_raise(make_error)?;
         }
     }
 
