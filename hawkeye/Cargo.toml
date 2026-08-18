@@ -43,9 +43,9 @@ jiff = { workspace = true }
 log = { workspace = true }
 logforth = { workspace = true }
 minijinja = { workspace = true }
+same-file = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-same-file = { workspace = true }
 tempfile = { workspace = true }
 toml = { workspace = true }
 

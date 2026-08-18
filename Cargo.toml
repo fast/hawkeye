@@ -37,9 +37,9 @@ jiff = { version = "0.2.35", default-features = false, features = ["std"] }
 log = { version = "0.4.28", features = ["kv_serde", "serde"] }
 logforth = { version = "0.30.1", features = ["starter-log"] }
 minijinja = { version = "2.23.0" }
+same-file = { version = "1.0.6" }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = { version = "1.0.151" }
-same-file = { version = "1.0.6" }
 tempfile = { version = "3.27.0" }
 toml = { version = "1.1.4" }
 which = { version = "8.0.4" }
