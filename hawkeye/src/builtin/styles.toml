@@ -12,47 +12,47 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-[styles.doubleslash_style]
+[styles.doubleslash]
 kind = "line"
 prefix = "// "
 
-[styles.tripleslash_style]
+[styles.tripleslash]
 kind = "line"
 prefix = "/// "
 
-[styles.script_style]
+[styles.script]
 kind = "line"
 prefix = "# "
 
-[styles.doubledashes_style]
+[styles.doubledashes]
 kind = "line"
 prefix = "-- "
 
-[styles.percent_style]
+[styles.percent]
 kind = "line"
 prefix = "% "
 
-[styles.percent3_style]
+[styles.percent3]
 kind = "line"
 prefix = "%%% "
 
-[styles.semicolon_style]
+[styles.semicolon]
 kind = "line"
 prefix = "; "
 
-[styles.apostrophe_style]
+[styles.apostrophe]
 kind = "line"
 prefix = "' "
 
-[styles.exclamation_style]
+[styles.exclamation]
 kind = "line"
 prefix = "! "
 
-[styles.exclamation3_style]
+[styles.exclamation3]
 kind = "line"
 prefix = "!!! "
 
-[styles.doubletilde_style]
+[styles.doubletilde]
 kind = "line"
 prefix = "~~ "
 
@@ -60,7 +60,7 @@ prefix = "~~ "
 kind = "line"
 prefix = "@REM "
 
-[styles.haml_style]
+[styles.haml]
 kind = "line"
 prefix = "-# "
 
@@ -70,19 +70,19 @@ prefix = "<!-- "
 suffix = " -->"
 pad_lines = true
 
-[styles.slashstar_style]
+[styles.slashstar]
 kind = "block"
 start = "/*"
 prefix = " * "
 end = " */"
 
-[styles.javadoc_style]
+[styles.javadoc]
 kind = "block"
 start = "/**"
 prefix = " * "
 end = " */"
 
-[styles.xml_style]
+[styles.xml]
 kind = "block"
 start = "<!--"
 prefix = "    "
@@ -94,25 +94,25 @@ start = "--[["
 prefix = "    "
 end = "]]"
 
-[styles.bracesstar_style]
+[styles.bracesstar]
 kind = "block"
 start = "{*"
 prefix = " * "
 end = " *}"
 
-[styles.sharpstar_style]
+[styles.sharpstar]
 kind = "block"
 start = "#*"
 prefix = " * "
 end = " *#"
 
-[styles.mustache_style]
+[styles.mustache]
 kind = "block"
 start = "{{!"
 prefix = "    "
 end = "}}"
 
-[styles.mvel_style]
+[styles.mvel]
 kind = "block"
 start = "@comment{"
 prefix = "  "
@@ -130,13 +130,13 @@ start = "[#--"
 prefix = "    "
 end = "--]"
 
-[styles.dynascript_style]
+[styles.dynascript]
 kind = "block"
 start = "<%--"
 prefix = "    "
 end = "--%>"
 
-[styles.dynascript3_style]
+[styles.dynascript3]
 kind = "block"
 start = "<!---"
 prefix = "    "
@@ -148,13 +148,13 @@ start = "<%"
 prefix = "' "
 end = "%>"
 
-[styles.line_block_style]
+[styles.line_block]
 kind = "block"
 start = "//===----------------------------------------------------------------------===//"
 prefix = "// "
 end = "//===----------------------------------------------------------------------===//"
 
-[styles.asciidoc_style]
+[styles.asciidoc]
 kind = "block"
 start = "////"
 prefix = "// "

@@ -15,5 +15,5 @@ year = 2026
 [[rules]]
 extensions = ["rs", "d.ts"]
 filenames = ["Makefile"]
-style_out = "doubleslash_style"
-styles_in = ["doubleslash_style", "slashstar_style"]
+style_out = "doubleslash"
+styles_in = ["doubleslash", "slashstar"]

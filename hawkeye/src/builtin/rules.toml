@@ -42,14 +42,14 @@ extensions = [
   "v",
   "sv",
 ]
-style_out = "slashstar_style"
-styles_in = ["slashstar_style", "doubleslash_style"]
+style_out = "slashstar"
+styles_in = ["slashstar", "doubleslash"]
 
 [[rules]]
 extensions = ["mbt", "rs", "zig"]
 filenames = ["go.mod"]
-style_out = "doubleslash_style"
-styles_in = ["doubleslash_style", "slashstar_style"]
+style_out = "doubleslash"
+styles_in = ["doubleslash", "slashstar"]
 
 [[rules]]
 extensions = [
@@ -71,11 +71,11 @@ filenames = [
   "Dockerfile",
   "Makefile",
 ]
-style_out = "script_style"
+style_out = "script"
 
 [[rules]]
 extensions = ["adb", "ads", "e", "sql"]
-style_out = "doubledashes_style"
+style_out = "doubledashes"
 
 [[rules]]
 extensions = [
@@ -99,28 +99,28 @@ extensions = [
   "xsl",
   "xslt",
 ]
-style_out = "xml_style"
-styles_in = ["xml_style", "xml_per_line"]
+style_out = "xml"
+styles_in = ["xml", "xml_per_line"]
 
 [[rules]]
 extensions = ["asm", "clj", "cljs", "el"]
-style_out = "semicolon_style"
+style_out = "semicolon"
 
 [[rules]]
 extensions = ["f"]
-style_out = "exclamation_style"
+style_out = "exclamation"
 
 [[rules]]
 extensions = ["erl", "hrl"]
-style_out = "percent3_style"
+style_out = "percent3"
 
 [[rules]]
 extensions = ["cls", "sty", "tex"]
-style_out = "percent_style"
+style_out = "percent"
 
 [[rules]]
 extensions = ["bas", "vba"]
-style_out = "apostrophe_style"
+style_out = "apostrophe"
 
 [[rules]]
 extensions = ["bat", "cmd"]
@@ -128,19 +128,19 @@ style_out = "batch"
 
 [[rules]]
 extensions = ["pas"]
-style_out = "bracesstar_style"
+style_out = "bracesstar"
 
 [[rules]]
 extensions = ["vm"]
-style_out = "sharpstar_style"
+style_out = "sharpstar"
 
 [[rules]]
 extensions = ["mustache"]
-style_out = "mustache_style"
+style_out = "mustache"
 
 [[rules]]
 extensions = ["mv"]
-style_out = "mvel_style"
+style_out = "mvel"
 
 [[rules]]
 extensions = ["ftl"]
@@ -149,11 +149,11 @@ styles_in = ["ftl", "ftl_alt"]
 
 [[rules]]
 extensions = ["jsp"]
-style_out = "dynascript_style"
+style_out = "dynascript"
 
 [[rules]]
 extensions = ["cfc", "cfm"]
-style_out = "dynascript3_style"
+style_out = "dynascript3"
 
 [[rules]]
 extensions = ["asp"]
@@ -161,8 +161,8 @@ style_out = "asp"
 
 [[rules]]
 extensions = ["php"]
-style_out = "slashstar_style"
-styles_in = ["slashstar_style", "doubleslash_style"]
+style_out = "slashstar"
+styles_in = ["slashstar", "doubleslash"]
 
 [[rules]]
 extensions = ["lua"]
@@ -170,18 +170,18 @@ style_out = "lua"
 
 [[rules]]
 extensions = ["adoc"]
-style_out = "asciidoc_style"
+style_out = "asciidoc"
 
 [[rules]]
 extensions = ["pkl"]
 filenames = ["PklProject"]
-style_out = "line_block_style"
-styles_in = ["line_block_style", "doubleslash_style"]
+style_out = "line_block"
+styles_in = ["line_block", "doubleslash"]
 
 [[rules]]
 extensions = ["haml", "scaml"]
-style_out = "haml_style"
+style_out = "haml"
 
 [[rules]]
 extensions = ["apt"]
-style_out = "doubletilde_style"
+style_out = "doubletilde"
