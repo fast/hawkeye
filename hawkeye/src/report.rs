@@ -48,7 +48,7 @@ pub struct FileReport {
     pub outcome: FileOutcome,
 }
 
-/// A report produced from a plan.
+/// A report produced by an engine command.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Report {
     /// All selected file outcomes.

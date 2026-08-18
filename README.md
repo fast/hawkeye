@@ -179,16 +179,15 @@ A shallow repository cannot provide truthful creation years. In that situation, 
 The library exposes the same behavior without shelling out to the CLI:
 
 ```rust
-use hawkeye::{Action, Config, Engine};
+use hawkeye::{Config, Engine};
 
 let config = Config::load("licenserc.toml")?;
 let engine = Engine::new(config)?;
-let plan = engine.plan(Action::Check)?;
-let report = plan.report();
+let report = engine.check()?;
 # Ok::<(), hawkeye::Error>(())
 ```
 
-`Config` is the Serde-facing TOML model, and `Config::load` anchors relative paths to the config file. `Config::validate` is available to callers that need to inspect a configuration before use; `Engine::new` always invokes it before building the resolved paths, compiled template, styles, and ordered rules. `Engine::plan` performs discovery and analysis without writes; only replacement contents for changed files remain in the plan. `Plan::apply` assumes exclusive access to the selected files and writes each replacement directly to the existing path, preserving hard links and other inode metadata.
+`Config` is the Serde-facing TOML model, and `Config::load` anchors relative paths to the config file. `Config::validate` is available to callers that need to inspect a configuration before use; `Engine::new` always invokes it before building the resolved paths, compiled template, styles, and ordered rules. `Engine::check` returns a report without writes. `Engine::format` and `Engine::remove` return compact file edits for inspection or application. `Edits::apply` assumes exclusive access to the selected files and writes each replacement directly to the existing path, preserving hard links and other inode metadata.
 
 ## Development
 

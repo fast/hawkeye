@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::Action;
 use super::Analysis;
 use super::Edit;
 use super::Engine;
 use super::Rule;
+use super::Target;
 use super::lines;
 use super::style::Candidate;
 use crate::report::FileOutcome;
@@ -27,7 +27,7 @@ impl Engine {
         rule: &Rule,
         input: &str,
         header: &str,
-        action: Action,
+        target: Target,
     ) -> Analysis {
         let offset = preamble_offset(input);
         let header_start = skip_blank_lines(input, offset);
@@ -77,7 +77,7 @@ impl Engine {
                 };
             }
             let range = offset..end;
-            if action == Action::Remove {
+            if target == Target::Absent {
                 return Analysis {
                     outcome: FileOutcome::Remove,
                     edit: Some(Edit {
@@ -97,7 +97,7 @@ impl Engine {
             } else {
                 Analysis {
                     outcome: FileOutcome::Replace,
-                    edit: (action == Action::Format).then_some(Edit {
+                    edit: Some(Edit {
                         range,
                         replacement: rendered,
                     }),
@@ -112,7 +112,7 @@ impl Engine {
                 outcome: FileOutcome::Conflict,
                 edit: None,
             }
-        } else if action == Action::Remove {
+        } else if target == Target::Absent {
             Analysis {
                 outcome: FileOutcome::Clean,
                 edit: None,
@@ -120,7 +120,7 @@ impl Engine {
         } else {
             Analysis {
                 outcome: FileOutcome::Add,
-                edit: (action == Action::Format).then_some(Edit {
+                edit: Some(Edit {
                     range: offset..header_start,
                     replacement: rendered,
                 }),

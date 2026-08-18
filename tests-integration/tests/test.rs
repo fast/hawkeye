@@ -20,7 +20,6 @@ use std::process::Command;
 use std::process::Output;
 use std::sync::OnceLock;
 
-use hawkeye::Action;
 use hawkeye::Config;
 use hawkeye::Engine;
 use hawkeye::ErrorKind;
@@ -149,7 +148,7 @@ ignore = "enable"
     .expect("write required Git configuration");
     let config = Config::load(&config_path).expect("load required Git configuration");
     let engine = Engine::new(config).expect("initialize required Git engine");
-    let error = match engine.plan(Action::Check) {
+    let error = match engine.check() {
         Ok(_) => panic!("required Git discovery must reject a non-Git directory"),
         Err(error) => error,
     };
@@ -170,11 +169,10 @@ ignore = "auto"
     )
     .expect("write automatic Git configuration");
     let config = Config::load(&config_path).expect("load automatic Git configuration");
-    let plan = Engine::new(config)
+    let report = Engine::new(config)
         .expect("initialize automatic Git engine")
-        .plan(Action::Check)
+        .check()
         .expect("fall back to filesystem discovery");
-    let report = plan.report();
     assert_eq!(report.files.len(), 1);
     assert_eq!(report.files[0].outcome, FileOutcome::Add);
 }

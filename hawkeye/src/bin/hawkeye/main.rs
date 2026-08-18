@@ -25,7 +25,6 @@ use clap::ValueEnum;
 use exn::Result;
 use exn::ResultExt;
 use exn::bail;
-use hawkeye::Action;
 use hawkeye::Config;
 use hawkeye::Engine;
 use hawkeye::FileOutcome;
@@ -75,7 +74,7 @@ struct CheckOptions {
 
 #[derive(Debug, Args)]
 struct EditOptions {
-    /// Plan changes without writing them.
+    /// Show changes without writing them.
     #[arg(long)]
     dry_run: bool,
 
@@ -118,8 +117,7 @@ fn do_main() -> Result<ExitCode, Error> {
     let (report, failed) = match subcommand {
         SubcommandOptions::Check(options) => {
             let make_error = || Error::new("failed to execute check command");
-            let plan = engine.plan(Action::Check).or_raise(make_error)?;
-            let report = plan.report();
+            let report = engine.check().or_raise(make_error)?;
             let failed = report.files.iter().any(|file| match file.outcome {
                 FileOutcome::Clean => false,
                 FileOutcome::Add
@@ -132,11 +130,11 @@ fn do_main() -> Result<ExitCode, Error> {
         }
         SubcommandOptions::Format(options) => {
             let make_error = || Error::new("failed to execute format command");
-            let plan = engine.plan(Action::Format).or_raise(make_error)?;
+            let edits = engine.format().or_raise(make_error)?;
             let report = if options.dry_run {
-                plan.report()
+                edits.report
             } else {
-                plan.apply().or_raise(make_error)?
+                edits.apply().or_raise(make_error)?
             };
             let failed = report.files.iter().any(|file| match file.outcome {
                 FileOutcome::Clean => false,
@@ -150,11 +148,11 @@ fn do_main() -> Result<ExitCode, Error> {
         }
         SubcommandOptions::Remove(options) => {
             let make_error = || Error::new("failed to execute remove command");
-            let plan = engine.plan(Action::Remove).or_raise(make_error)?;
+            let edits = engine.remove().or_raise(make_error)?;
             let report = if options.dry_run {
-                plan.report()
+                edits.report
             } else {
-                plan.apply().or_raise(make_error)?
+                edits.apply().or_raise(make_error)?
             };
             let failed = report.files.iter().any(|file| match file.outcome {
                 FileOutcome::Clean => false,

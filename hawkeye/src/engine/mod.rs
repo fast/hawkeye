@@ -43,15 +43,10 @@ use crate::report::FileReport;
 use crate::report::Report;
 use crate::template::HeaderTemplate;
 
-/// The action to plan for selected files.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Action {
-    /// Report the changes needed to make headers canonical.
-    Check,
-    /// Add or replace headers to make them canonical.
-    Format,
-    /// Remove recognized headers.
-    Remove,
+enum Target {
+    Present,
+    Absent,
 }
 
 /// A reusable HawkEye runtime built from one configuration.
@@ -219,8 +214,22 @@ impl Engine {
         })
     }
 
-    /// Discovers and analyzes files without modifying the filesystem.
-    pub fn plan(&self, action: Action) -> Result<Plan, Error> {
+    /// Reports the changes needed to make selected headers canonical.
+    pub fn check(&self) -> Result<Report, Error> {
+        Ok(self.edits(Target::Present)?.report)
+    }
+
+    /// Prepares edits that make selected headers canonical.
+    pub fn format(&self) -> Result<Edits, Error> {
+        self.edits(Target::Present)
+    }
+
+    /// Prepares edits that remove recognized headers from selected files.
+    pub fn remove(&self) -> Result<Edits, Error> {
+        self.edits(Target::Absent)
+    }
+
+    fn edits(&self, target: Target) -> Result<Edits, Error> {
         let git = self.git;
         let git_mode = git.ignore.combine(git.file_attrs);
         let repo = if git_mode == FeatureMode::Disable {
@@ -304,7 +313,7 @@ impl Engine {
                 git_history.as_ref().and_then(|history| history.get(&path)),
             )?;
             let header = self.render_header(&file_attrs)?;
-            let analysis = self.analyze(rule, input, &header, action);
+            let analysis = self.analyze(rule, input, &header, target);
             report.files.push(FileReport {
                 path: relative,
                 outcome: analysis.outcome,
@@ -314,7 +323,10 @@ impl Engine {
             }
         }
 
-        Ok(Plan { report, edits })
+        Ok(Edits {
+            report,
+            files: edits,
+        })
     }
 
     fn rule_for(&self, path: &Path) -> Option<&Rule> {
@@ -347,23 +359,21 @@ impl Engine {
     }
 }
 
-/// A complete plan produced before any file is written.
-pub struct Plan {
-    report: Report,
-    edits: Vec<FileEdit>,
+/// File edits prepared by an [`Engine`].
+#[must_use = "edits have no effect until they are applied"]
+pub struct Edits {
+    /// The outcome for every selected file.
+    pub report: Report,
+    files: Vec<FileEdit>,
 }
 
-impl Plan {
-    /// Builds the serializable report for this plan.
-    pub fn report(&self) -> Report {
-        self.report.clone()
-    }
-
-    /// Writes every planned edit directly to its source file.
+impl Edits {
+    /// Applies every edit directly to its source file and returns the report.
     ///
-    /// Callers must ensure that selected files are not modified between planning and applying.
+    /// Callers must ensure that selected files are not modified between preparing and applying the
+    /// edits.
     pub fn apply(self) -> Result<Report, Error> {
-        for file in self.edits {
+        for file in self.files {
             let mut input = fs::read_to_string(&file.path).map_err(|err| {
                 Error::new(
                     ErrorKind::Unexpected,
