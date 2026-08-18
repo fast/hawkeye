@@ -149,13 +149,15 @@ fn walk(
         let entry = entry.map_err(|err| {
             Error::new(ErrorKind::Unexpected, "cannot discover files").with_source(err)
         })?;
+
         let path = entry.path();
-        if !entry
-            .file_type()
-            .is_some_and(|kind| kind.is_file() || (kind.is_symlink() && path.is_file()))
-        {
+        let Some(file_type) = entry.file_type() else {
+            continue;
+        };
+        if !file_type.is_file() && !(file_type.is_symlink() && path.is_file()) {
             continue;
         }
+
         let relative = path.strip_prefix(root).map_err(|_| {
             Error::new(
                 ErrorKind::Unexpected,
@@ -165,6 +167,7 @@ fn walk(
                 ),
             )
         })?;
+
         if selection.matched(relative, false).is_whitelist() {
             files.insert(relative.to_path_buf());
         }
