@@ -17,12 +17,10 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![deny(missing_docs)]
 
-mod attrs;
 mod builtin;
 mod config;
 mod engine;
 mod error;
-mod git;
 mod report;
 mod template;
 

@@ -22,10 +22,10 @@ use ignore::overrides::Override;
 use ignore::overrides::OverrideBuilder;
 
 use super::Engine;
+use super::git::GitRepo;
 use crate::Error;
 use crate::ErrorKind;
 use crate::config::FeatureMode;
-use crate::git::GitRepo;
 
 impl Engine {
     pub(super) fn discover(&self, repo: Option<&GitRepo>) -> Result<Vec<PathBuf>, Error> {

@@ -21,7 +21,7 @@ use minijinja::UndefinedBehavior;
 
 use crate::Error;
 use crate::ErrorKind;
-use crate::attrs::FileAttrs;
+use crate::engine::FileAttrs;
 
 pub struct HeaderTemplate {
     environment: Environment<'static>,

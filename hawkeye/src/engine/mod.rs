@@ -13,7 +13,9 @@
 // limitations under the License.
 
 mod analyze;
+mod attrs;
 mod discovery;
+mod git;
 mod lines;
 mod style;
 
@@ -26,16 +28,16 @@ use std::path::PathBuf;
 
 use ignore::overrides::Override;
 
+pub use self::attrs::FileAttrs;
+use self::git::GitRepo;
 use self::style::Style;
 use crate::Error;
 use crate::ErrorKind;
-use crate::attrs::FileAttrs;
-use crate::attrs::FileAttrsResolver;
 use crate::builtin;
 use crate::config::Config;
+use crate::config::FeatureMode;
 use crate::config::GitConfig;
 use crate::config::RuleConfig;
-use crate::git::GitRepo;
 use crate::report::FileOutcome;
 use crate::report::Outcome;
 use crate::report::Report;
@@ -231,7 +233,21 @@ impl Engine {
     /// Discovers and analyzes files without modifying the filesystem.
     pub fn plan(&self, action: Action) -> Result<Plan, Error> {
         let git = self.git;
-        let repo = GitRepo::discover(&self.root, git.ignore.combine(git.file_attrs))?;
+        let git_mode = git.ignore.combine(git.file_attrs);
+        let repo = if git_mode == FeatureMode::Disable {
+            None
+        } else {
+            match GitRepo::discover(&self.root) {
+                Ok(repo) => Some(repo),
+                Err(err)
+                    if git_mode == FeatureMode::Auto && err.kind() == ErrorKind::Unsupported =>
+                {
+                    log::debug!("Git integration is unavailable: {err}");
+                    None
+                }
+                Err(err) => return Err(err),
+            }
+        };
         let paths = self.discover(repo.as_ref())?;
         let discovered = paths
             .into_iter()
@@ -244,13 +260,28 @@ impl Engine {
                 (path, relative, rule)
             })
             .collect::<Vec<_>>();
-        let attrs = FileAttrsResolver::new(
-            discovered
-                .iter()
-                .filter_map(|(path, _, rule)| rule.is_some().then_some(path.as_path())),
-            git.file_attrs,
-            repo.as_ref(),
-        )?;
+        let supported = discovered
+            .iter()
+            .filter_map(|(path, _, rule)| rule.is_some().then_some(path.as_path()))
+            .collect::<Vec<_>>();
+        let git_history = if git.file_attrs == FeatureMode::Disable || supported.is_empty() {
+            None
+        } else if let Some(repo) = repo.as_ref() {
+            if repo.is_shallow()? {
+                let message = "Git file attributes require complete history, but the repository is shallow; fetch complete history first";
+                if git.file_attrs == FeatureMode::Auto {
+                    log::warn!("{message}; continuing with Git file attributes disabled");
+                    None
+                } else {
+                    return Err(Error::new(ErrorKind::Unsupported, message));
+                }
+            } else {
+                Some(repo.file_history(supported)?)
+            }
+        } else {
+            debug_assert_ne!(git.file_attrs, FeatureMode::Enable);
+            None
+        };
         let mut files = Vec::with_capacity(discovered.len());
 
         for (path, relative, rule) in discovered {
@@ -270,7 +301,10 @@ impl Engine {
                 files.push(PlannedFile::unsupported(path, relative));
                 continue;
             };
-            let file_attrs = attrs.for_file(&path)?;
+            let file_attrs = FileAttrs::new(
+                &path,
+                git_history.as_ref().and_then(|history| history.get(&path)),
+            )?;
             let header = self.render_header(&file_attrs)?;
             let analysis = self.analyze(rule, input, &header, action);
             let updated = analysis
