@@ -12,13 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-[header]
-builtin = "Apache-2.0"
+[build-system]
+build-backend = "maturin"
+requires = ["maturin>=1.0,<2.0"]
 
-[files]
-excludes = [".github/workflows/release.yml", "hawkeye/tests/cases/**"]
-includes = ["**/*.rs", "**/*.toml", "**/*.yaml", "**/*.yml"]
-
-[props]
-copyright_owner = "FastLabs Developers"
-inception_year = 2026
+[tool.maturin]
+bindings = "bin"
+manifest-path = "hawkeye/Cargo.toml"
