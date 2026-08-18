@@ -452,12 +452,6 @@ impl Rule {
             style_out,
             styles_in,
         } = config;
-        if !styles.contains_key(&style_out) {
-            return Err(Error::new(
-                ErrorKind::ConfigInvalid,
-                format!("{source} references unknown style {style_out:?}"),
-            ));
-        }
         let styles_in = if styles_in.is_empty() {
             vec![style_out.clone()]
         } else {
