@@ -18,13 +18,35 @@
 
 HawkEye checks, formats, and removes source-file license headers. The crate provides both the `hawkeye` command-line tool and a Rust library.
 
-## Getting started
+## Installation
 
-Install the v7 prerelease from crates.io:
+The recommended way to install the command-line tool is to let [cargo-binstall](https://github.com/cargo-bins/cargo-binstall) download a prebuilt release:
+
+```shell
+cargo binstall hawkeye@7.0.0-alpha.1
+```
+
+The same executable is available as a Python wheel. The PyPI distribution is named `hawkeye-license`, while the installed command remains `hawkeye`:
+
+```shell
+uv tool install 'hawkeye-license==7.0.0a1'
+```
+
+To build from source instead, use Cargo:
 
 ```shell
 cargo install hawkeye --version 7.0.0-alpha.1 --locked
 ```
+
+Prebuilt releases cover the following platforms:
+
+| Distribution | Platforms |
+| --- | --- |
+| cargo-binstall | macOS and Linux on x86-64 or ARM64, plus Windows on x86-64; Linux archives support both glibc and musl. |
+| Python wheel | macOS and Linux on x86-64 or ARM64, plus Windows on x86-64; Linux wheels support manylinux and musllinux. |
+| Docker image | Linux on amd64 or arm64. |
+
+## Getting started
 
 Add `licenserc.toml` to the project root. This minimal configuration uses the bundled Apache 2.0 header and the built-in file rules:
 
@@ -57,6 +79,43 @@ Without `--config`, HawkEye tries `licenserc.toml` and then `.licenserc.toml` in
 All commands support `--output-format json` and `--fail-on-unknown`. `format` and `remove` also support `--dry-run` and `--fail-on-change`. Reports go to stdout; logs and errors go to stderr. Set `RUST_LOG=hawkeye=debug` to inspect file discovery and Git processing.
 
 Exit code 0 means the selected policy passed. Exit code 1 means `check` found a required change or conflict, an edit command left a conflict, or an enabled failure option matched. Config, I/O, template, and Git errors use exit code 2.
+
+## Integrations
+
+### Docker
+
+The distroless image runs HawkEye in `/workspace`. Pass the host user when formatting a bind mount so that writes retain the expected ownership:
+
+```shell
+docker run --rm --user "$(id -u):$(id -g)" --volume "$PWD:/workspace" ghcr.io/korandoru/hawkeye:v7.0.0-alpha.1 check
+```
+
+### GitHub Actions
+
+Install the released binary with cargo-binstall and invoke HawkEye directly; no HawkEye-specific action is required:
+
+```yaml
+- uses: actions/checkout@v7
+- uses: taiki-e/install-action@v2
+  with:
+    tool: cargo-binstall
+- run: cargo binstall hawkeye@7.0.0-alpha.1 --no-confirm
+- run: hawkeye check
+```
+
+### pre-commit
+
+The default hook installs the matching HawkEye source revision in pre-commit's isolated Python environment:
+
+```yaml
+repos:
+  - repo: https://github.com/korandoru/hawkeye
+    rev: v7.0.0-alpha.1
+    hooks:
+      - id: hawkeye-format
+```
+
+The Python hook needs a Rust toolchain when its environment is created for the first time. Use `hawkeye-format-docker` instead when Docker is the preferred runtime.
 
 ## Configuration
 
