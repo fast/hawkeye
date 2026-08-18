@@ -64,13 +64,24 @@ impl Engine {
         }
 
         if let Some(header_path) = &self.header_path {
-            files.retain(|path| {
-                path != header_path
-                    && (!path.is_symlink()
-                        || path
-                            .canonicalize()
-                            .is_ok_and(|target| target != *header_path))
-            });
+            let mut selected = Vec::with_capacity(files.len());
+            for path in files {
+                let is_header = same_file::is_same_file(&path, header_path).map_err(|err| {
+                    Error::new(
+                        ErrorKind::Unexpected,
+                        format!(
+                            "cannot compare {} with header template {}",
+                            path.display(),
+                            header_path.display()
+                        ),
+                    )
+                    .with_source(err)
+                })?;
+                if !is_header {
+                    selected.push(path);
+                }
+            }
+            return Ok(selected);
         }
         Ok(files.into_iter().collect())
     }

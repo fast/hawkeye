@@ -882,6 +882,11 @@ includes = ["**/*.rs"]
     #[cfg(unix)]
     std::os::unix::fs::symlink("license.rs", project.path().join("license-link.rs"))
         .expect("create header template symlink");
+    fs::hard_link(
+        project.path().join("license.rs"),
+        project.path().join("license-hardlink.rs"),
+    )
+    .expect("create header template hard link");
     fs::write(project.path().join("main.rs"), "fn main() {}\n").expect("write source");
 
     let formatted = hawkeye(project.path(), ["format", "--output-format=json"]);

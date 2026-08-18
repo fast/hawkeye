@@ -303,6 +303,7 @@ dependencies = [
  "log",
  "logforth",
  "minijinja",
+ "same-file",
  "serde",
  "serde_json",
  "tempfile",
