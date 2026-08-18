@@ -268,15 +268,15 @@ impl Engine {
                 Err(err) => return Err(err),
             }
         };
-        let files = self
+        let selected = self
             .discover(repo.as_ref())?
             .into_iter()
             .map(|path| {
-                let rule = self.rule_for(&path);
+                let rule = self.rules.iter().find(|rule| rule.matches(&path));
                 (path, rule)
             })
             .collect::<Vec<_>>();
-        let supported = files
+        let supported = selected
             .iter()
             .filter_map(|(path, rule)| rule.is_some().then_some(path.as_path()))
             .collect::<Vec<_>>();
@@ -299,11 +299,11 @@ impl Engine {
             None
         };
         let mut report = Report {
-            files: Vec::with_capacity(files.len()),
+            files: Vec::with_capacity(selected.len()),
         };
         let mut file_edits = Vec::new();
 
-        for (relative_path, rule) in files {
+        for (relative_path, rule) in selected {
             let Some(rule) = rule else {
                 report.files.push(FileReport {
                     path: relative_path,
@@ -348,10 +348,6 @@ impl Engine {
             report,
             files: file_edits,
         })
-    }
-
-    fn rule_for(&self, path: &Path) -> Option<&Rule> {
-        self.rules.iter().find(|rule| rule.matches(path))
     }
 
     fn style(&self, name: &str) -> &StyleConfig {
