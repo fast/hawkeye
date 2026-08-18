@@ -108,7 +108,7 @@ pub struct Engine {
     git: GitConfig,
     keywords: Vec<String>,
     template: HeaderTemplate,
-    styles: BTreeMap<String, Style>,
+    styles: BTreeMap<String, StyleConfig>,
     rules: Vec<Rule>,
 }
 
@@ -188,15 +188,12 @@ impl Engine {
         };
 
         let styles = {
-            let mut styles = builtin::STYLES
-                .iter()
-                .map(|(name, style)| (name.clone(), Style::new(style.clone())))
-                .collect::<BTreeMap<_, _>>();
+            let mut styles = builtin::STYLES.clone();
             for (name, style) in configured_styles {
                 if styles.contains_key(&name) {
                     log::warn!("custom style {name:?} overrides a built-in style of the same name");
                 }
-                styles.insert(name, Style::new(style));
+                styles.insert(name, style);
             }
             styles
         };
@@ -367,7 +364,7 @@ impl Engine {
         self.rules.iter().find(|rule| rule.matches(path))
     }
 
-    fn style(&self, name: &str) -> &Style {
+    fn style(&self, name: &str) -> &StyleConfig {
         self.styles
             .get(name)
             .expect("resolved rules only refer to known styles")
@@ -439,7 +436,7 @@ impl Rule {
     fn new(
         source: impl AsRef<str>,
         config: RuleConfig,
-        styles: &BTreeMap<String, Style>,
+        styles: &BTreeMap<String, StyleConfig>,
     ) -> Result<Self, Error> {
         let RuleConfig {
             extensions,
@@ -862,52 +859,12 @@ fn walk(
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-enum Style {
-    Line {
-        prefix: String,
-        suffix: String,
-        pad_lines: bool,
-    },
-    Block {
-        start: String,
-        prefix: String,
-        suffix: String,
-        end: String,
-    },
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
 struct StyleMatch {
     range: Range<usize>,
     body: String,
 }
 
-impl Style {
-    fn new(config: StyleConfig) -> Self {
-        match config {
-            StyleConfig::Line {
-                prefix,
-                suffix,
-                pad_lines,
-            } => Self::Line {
-                prefix,
-                suffix,
-                pad_lines,
-            },
-            StyleConfig::Block {
-                start,
-                prefix,
-                suffix,
-                end,
-            } => Self::Block {
-                start,
-                prefix,
-                suffix,
-                end,
-            },
-        }
-    }
-
+impl StyleConfig {
     fn render(&self, body: &str, eol: &str) -> String {
         let mut output = String::new();
         match self {
