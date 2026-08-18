@@ -528,12 +528,12 @@ impl Engine {
     ) -> FileAnalysis {
         let offset = preamble_offset(input);
         let header_start = skip_blank_lines(input, offset);
-        let eol = detect_eol(input);
-        let rendered = {
-            let mut value = self.style(&rule.style_out).render(header, eol);
-            value.push_str(eol);
-            value.push_str(eol);
-            value
+        let render = || {
+            let eol = detect_eol(input);
+            let mut rendered = self.style(&rule.style_out).render(header, eol);
+            rendered.push_str(eol);
+            rendered.push_str(eol);
+            rendered
         };
 
         let matches = rule
@@ -571,6 +571,7 @@ impl Engine {
                     text: String::new(),
                 });
             }
+            let rendered = render();
             let clean = style_name == rule.style_out
                 && candidate.body == header
                 && input.get(range.clone()) == Some(rendered.as_str());
@@ -593,7 +594,7 @@ impl Engine {
         } else {
             FileAnalysis::Add(Replacement {
                 range: offset..header_start,
-                text: rendered,
+                text: render(),
             })
         }
     }
