@@ -217,14 +217,15 @@ The library exposes the same engine used by the command-line tool:
 ```rust
 use hawkeye::Config;
 use hawkeye::Engine;
+use hawkeye::Scope;
 
 let config = Config::load("licenserc.toml")?;
 let engine = Engine::new(config)?;
-let report = engine.check(&[])?;
+let report = engine.check(Scope::All)?;
 # Ok::<(), hawkeye::Error>(())
 ```
 
-Each operation accepts a slice of paths. An empty slice processes the configured file set; otherwise, only the requested files and directories are processed. `Engine::check` never writes files. `Engine::format` and `Engine::remove` return pending `Edits`; call `Edits::apply` to write them or `Edits::into_report` to inspect the result without writing.
+Each operation accepts a `Scope`. `Scope::All` processes the configured file set, while `Scope::Paths(&paths)` processes only the requested files and directories; an empty path slice processes nothing. `Engine::check` never writes files. `Engine::format` and `Engine::remove` return pending `Edits`; call `Edits::apply` to write them or `Edits::into_report` to inspect the result without writing.
 
 The default `application` feature builds the command-line tool. Library-only users can omit its command-specific dependencies:
 

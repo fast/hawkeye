@@ -31,6 +31,7 @@ use exn::bail;
 use hawkeye::Config;
 use hawkeye::Engine;
 use hawkeye::FileOutcome;
+use hawkeye::Scope;
 use logforth::filter::rustlog::RustLogFilterBuilder;
 
 #[derive(Debug, Parser)]
@@ -129,13 +130,13 @@ fn do_main() -> Result<ExitCode, Error> {
         SubcommandOptions::Check(options) => {
             let paths = resolve_paths(options.paths)?;
             let make_error = || Error::new("failed to execute check command");
-            let report = engine.check(&paths).or_raise(make_error)?;
+            let report = engine.check(command_scope(&paths)).or_raise(make_error)?;
             (report, true, options.fail_on_unknown)
         }
         SubcommandOptions::Format(options) => {
             let paths = resolve_paths(options.paths)?;
             let make_error = || Error::new("failed to execute format command");
-            let edits = engine.format(&paths).or_raise(make_error)?;
+            let edits = engine.format(command_scope(&paths)).or_raise(make_error)?;
             let report = if options.dry_run {
                 edits.into_report()
             } else {
@@ -146,7 +147,7 @@ fn do_main() -> Result<ExitCode, Error> {
         SubcommandOptions::Remove(options) => {
             let paths = resolve_paths(options.paths)?;
             let make_error = || Error::new("failed to execute remove command");
-            let edits = engine.remove(&paths).or_raise(make_error)?;
+            let edits = engine.remove(command_scope(&paths)).or_raise(make_error)?;
             let report = if options.dry_run {
                 edits.into_report()
             } else {
@@ -234,6 +235,14 @@ fn resolve_paths(mut paths: Vec<PathBuf>) -> Result<Vec<PathBuf>, Error> {
         }
     }
     Ok(paths)
+}
+
+fn command_scope(paths: &[PathBuf]) -> Scope<'_> {
+    if paths.is_empty() {
+        Scope::All
+    } else {
+        Scope::Paths(paths)
+    }
 }
 
 fn emit_error(err: &Exn<Error>) {

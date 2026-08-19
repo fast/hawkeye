@@ -19,6 +19,7 @@ use hawkeye::Config;
 use hawkeye::Engine;
 use hawkeye::ErrorKind;
 use hawkeye::FileOutcome;
+use hawkeye::Scope;
 use jiff::Timestamp;
 use jiff::tz::TimeZone;
 
@@ -524,7 +525,7 @@ ignore = "enable"
         Config::load(project.path().join("licenserc.toml")).expect("load required Git config");
     let engine = Engine::new(config).expect("build engine before discovering files");
     let err = engine
-        .check(&[])
+        .check(Scope::All)
         .expect_err("required Git discovery must reject a non-repository");
     assert_eq!(err.kind(), ErrorKind::Unsupported);
 
@@ -544,7 +545,7 @@ ignore = "auto"
         Config::load(project.path().join("licenserc.toml")).expect("load automatic Git config");
     let report = Engine::new(config)
         .expect("build automatic Git engine")
-        .check(&[])
+        .check(Scope::All)
         .expect("fall back to filesystem discovery");
     assert_eq!(report.files.len(), 1);
     assert_eq!(report.files[0].outcome, FileOutcome::Add);

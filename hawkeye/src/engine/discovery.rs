@@ -25,6 +25,7 @@ use ignore::overrides::OverrideBuilder;
 use crate::Engine;
 use crate::Error;
 use crate::ErrorKind;
+use crate::Scope;
 use crate::config::FeatureMode;
 use crate::engine::git::Repository;
 
@@ -32,18 +33,19 @@ impl Engine {
     pub(super) fn discover_files(
         &self,
         repo: Option<&Repository>,
-        requested_paths: &[PathBuf],
+        scope: Scope<'_>,
     ) -> Result<Vec<PathBuf>, Error> {
         let started = Instant::now();
-        let (files, scope) = if requested_paths.is_empty() {
-            (self.discover_directory(&self.root, repo)?, "files.root")
-        } else {
-            let (directories, direct_files) = self.resolve_requested_paths(requested_paths)?;
-            let mut files = direct_files;
-            for directory in directories {
-                files.extend(self.discover_directory(&directory, repo)?);
+        let (files, source) = match scope {
+            Scope::All => (self.discover_directory(&self.root, repo)?, "files.root"),
+            Scope::Paths(paths) => {
+                let (directories, direct_files) = self.resolve_requested_paths(paths)?;
+                let mut files = direct_files;
+                for directory in directories {
+                    files.extend(self.discover_directory(&directory, repo)?);
+                }
+                (files, "the requested paths")
             }
-            (files, "the requested paths")
         };
 
         let files = if let Some(header_path) = &self.header_path {
@@ -71,7 +73,7 @@ impl Engine {
             files.into_iter().collect()
         };
         log::debug!(
-            "discovered {} candidate files from {scope} in {:?}",
+            "discovered {} candidate files from {source} in {:?}",
             files.len(),
             started.elapsed()
         );

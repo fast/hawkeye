@@ -91,6 +91,19 @@ enum HeaderTarget {
     Absent,
 }
 
+/// The files and directories processed by an [`Engine`] operation.
+#[derive(Debug, Clone, Copy)]
+pub enum Scope<'a> {
+    /// Process every file selected by the configuration.
+    All,
+    /// Process only the requested paths.
+    ///
+    /// Relative paths are resolved against `files.root`. Direct files bypass Git ignore rules,
+    /// while directories use normal discovery. All paths still obey `files.root`,
+    /// `files.includes`, and `files.excludes`. An empty slice processes no files.
+    Paths(&'a [PathBuf]),
+}
+
 /// A license-header processor built from one [`Config`].
 pub struct Engine {
     root: PathBuf,
@@ -253,17 +266,13 @@ impl Engine {
         })
     }
 
-    /// Checks selected files without modifying them.
-    ///
-    /// An empty path list selects the configured file set. Otherwise, relative paths are resolved
-    /// against `files.root`; direct files bypass Git ignore rules, while directories use normal
-    /// discovery. All paths still obey `files.root`, `files.includes`, and `files.excludes`.
+    /// Checks files in the given scope without modifying them.
     ///
     /// # Errors
     ///
     /// Returns an error if selected files cannot be discovered, read, or analyzed.
-    pub fn check(&self, paths: &[PathBuf]) -> Result<Report, Error> {
-        Ok(self.edits(HeaderTarget::Present, paths)?.report)
+    pub fn check(&self, scope: Scope<'_>) -> Result<Report, Error> {
+        Ok(self.edits(HeaderTarget::Present, scope)?.report)
     }
 
     /// Prepares additions and replacements that make selected headers canonical.
@@ -271,8 +280,8 @@ impl Engine {
     /// # Errors
     ///
     /// Returns an error if selected files cannot be discovered, read, or analyzed.
-    pub fn format(&self, paths: &[PathBuf]) -> Result<Edits, Error> {
-        self.edits(HeaderTarget::Present, paths)
+    pub fn format(&self, scope: Scope<'_>) -> Result<Edits, Error> {
+        self.edits(HeaderTarget::Present, scope)
     }
 
     /// Prepares removals for recognized headers.
@@ -280,11 +289,18 @@ impl Engine {
     /// # Errors
     ///
     /// Returns an error if selected files cannot be discovered, read, or analyzed.
-    pub fn remove(&self, paths: &[PathBuf]) -> Result<Edits, Error> {
-        self.edits(HeaderTarget::Absent, paths)
+    pub fn remove(&self, scope: Scope<'_>) -> Result<Edits, Error> {
+        self.edits(HeaderTarget::Absent, scope)
     }
 
-    fn edits(&self, target: HeaderTarget, requested_paths: &[PathBuf]) -> Result<Edits, Error> {
+    fn edits(&self, target: HeaderTarget, scope: Scope<'_>) -> Result<Edits, Error> {
+        if matches!(scope, Scope::Paths([])) {
+            return Ok(Edits {
+                report: Report { files: Vec::new() },
+                files: Vec::new(),
+            });
+        }
+
         let git_mode = self.git.ignore.combine(self.git.file_attrs);
         let repo = if git_mode == FeatureMode::Disable {
             None
@@ -300,7 +316,7 @@ impl Engine {
                 Err(err) => return Err(err),
             }
         };
-        let paths = self.discover_files(repo.as_ref(), requested_paths)?;
+        let paths = self.discover_files(repo.as_ref(), scope)?;
         let files_with_rules = paths
             .into_iter()
             .map(|path| {
