@@ -182,6 +182,10 @@ impl Repository {
             .map(|value| String::from_utf8_lossy(&value).trim().to_owned())
             .filter(|value| !value.is_empty());
         let mut history = self.committed_history(&selected)?;
+        let status_pathspecs = selected
+            .keys()
+            .map(|path| literal_pathspec(path.as_bstr()))
+            .collect::<Vec<_>>();
 
         let mut status = self
             .inner
@@ -197,7 +201,7 @@ impl Repository {
             .index_worktree_submodules(None)
             .index_worktree_rewrites(None)
             .tree_index_track_renames(gix::status::tree_index::TrackRenames::Disabled)
-            .into_iter(scan_pathspec(relative_root))
+            .into_iter(status_pathspecs)
             .map_err(|err| {
                 Error::new(ErrorKind::Unexpected, "cannot inspect Git worktree status")
                     .with_source(err)
@@ -511,9 +515,13 @@ fn scan_pathspec(relative_root: &Path) -> Option<BString> {
         return None;
     }
 
+    Some(literal_pathspec(prefix.as_bstr()))
+}
+
+fn literal_pathspec(path: &BStr) -> BString {
     let mut pattern = BString::from(":(top,literal)");
-    pattern.extend_from_slice(&prefix);
-    Some(pattern)
+    pattern.extend_from_slice(path);
+    pattern
 }
 
 fn encode_path(path: &Path) -> BString {
