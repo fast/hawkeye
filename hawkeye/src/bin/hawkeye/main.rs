@@ -114,7 +114,7 @@ fn do_main() -> Result<ExitCode, Error> {
     let Command {
         config,
         output_format,
-        subcommand,
+        mut subcommand,
     } = Command::parse();
 
     let config = match config {
@@ -126,28 +126,32 @@ fn do_main() -> Result<ExitCode, Error> {
     let config = Config::load(config).or_raise(|| Error::new("cannot load config"))?;
     let engine = Engine::new(config).or_raise(|| Error::new("cannot create engine"))?;
 
-    let mut subcommand = subcommand;
-    let paths = match &mut subcommand {
+    resolve_paths(match &mut subcommand {
         SubcommandOptions::Check(options) => &mut options.paths,
-        SubcommandOptions::Format(options) | SubcommandOptions::Remove(options) => {
-            &mut options.paths
+        SubcommandOptions::Format(options) => &mut options.paths,
+        SubcommandOptions::Remove(options) => &mut options.paths,
+    })?;
+    let scope = {
+        let paths = match &subcommand {
+            SubcommandOptions::Check(options) => &options.paths,
+            SubcommandOptions::Format(options) => &options.paths,
+            SubcommandOptions::Remove(options) => &options.paths,
+        };
+        if paths.is_empty() {
+            Scope::All
+        } else {
+            Scope::Paths(paths)
         }
     };
-    resolve_paths(paths)?;
-
     let (report, fail_on_change, fail_on_unknown) = match &subcommand {
         SubcommandOptions::Check(options) => {
             let make_error = || Error::new("failed to execute check command");
-            let report = engine
-                .check(command_scope(&options.paths))
-                .or_raise(make_error)?;
+            let report = engine.check(scope).or_raise(make_error)?;
             (report, true, options.fail_on_unknown)
         }
         SubcommandOptions::Format(options) => {
             let make_error = || Error::new("failed to execute format command");
-            let edits = engine
-                .format(command_scope(&options.paths))
-                .or_raise(make_error)?;
+            let edits = engine.format(scope).or_raise(make_error)?;
             let report = if options.dry_run {
                 edits.into_report()
             } else {
@@ -157,9 +161,7 @@ fn do_main() -> Result<ExitCode, Error> {
         }
         SubcommandOptions::Remove(options) => {
             let make_error = || Error::new("failed to execute remove command");
-            let edits = engine
-                .remove(command_scope(&options.paths))
-                .or_raise(make_error)?;
+            let edits = engine.remove(scope).or_raise(make_error)?;
             let report = if options.dry_run {
                 edits.into_report()
             } else {
@@ -249,14 +251,6 @@ fn resolve_paths(paths: &mut [PathBuf]) -> Result<(), Error> {
         }
     }
     Ok(())
-}
-
-fn command_scope(paths: &[PathBuf]) -> Scope<'_> {
-    if paths.is_empty() {
-        Scope::All
-    } else {
-        Scope::Paths(paths)
-    }
 }
 
 fn emit_error(err: &Exn<Error>) {
