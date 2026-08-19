@@ -15,6 +15,7 @@
 use std::collections::BTreeSet;
 use std::collections::HashMap;
 use std::collections::HashSet;
+use std::collections::VecDeque;
 use std::convert::Infallible;
 use std::ops::ControlFlow;
 use std::path::Path;
@@ -38,13 +39,23 @@ pub struct FileHistory {
     pub authors: BTreeSet<String>,
 }
 
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum ParentState {
+    Absent,
+    Changed,
+}
+
 impl FileHistory {
-    fn record_commit(&mut self, year: i16, author: &str) {
-        self.created_year = Some(self.created_year.map_or(year, |value| value.min(year)));
+    fn record_change(&mut self, year: i16, author: &str) {
         self.modified_year = Some(self.modified_year.map_or(year, |value| value.max(year)));
         if !author.trim().is_empty() {
             self.authors.insert(author.to_owned());
         }
+    }
+
+    fn record_addition(&mut self, year: i16, author: &str) {
+        self.created_year = Some(self.created_year.map_or(year, |value| value.min(year)));
+        self.record_change(year, author);
     }
 
     fn record_worktree(&mut self, year: i16, author: Option<&str>) {
@@ -294,48 +305,25 @@ impl Repository {
             .map_err(|err| {
                 Error::new(ErrorKind::Unexpected, "cannot prepare Git tree diff").with_source(err)
             })?;
-        // The first addition seen from newest to oldest starts the path's current lifetime.
-        let commits = repo
-            .rev_walk([head])
-            .sorting(gix::revision::walk::Sorting::ByCommitTime(
-                Default::default(),
-            ))
-            .all()
-            .map_err(|err| {
-                Error::new(ErrorKind::Unexpected, "cannot traverse Git history").with_source(err)
-            })?;
         let mut history = HashMap::<PathBuf, FileHistory>::new();
-        let mut commits_walked = 0;
-        for info in commits {
-            if pending.is_empty() {
-                break;
-            }
-            commits_walked += 1;
-            let info = info.map_err(|err| {
-                Error::new(ErrorKind::Unexpected, "cannot traverse Git history").with_source(err)
-            })?;
-            // A merge has multiple possible before states. Its parents already carry the file
-            // changes, so skipping the merge avoids assigning the merge author to those changes.
-            let parent = match info.parent_ids.as_slice() {
-                [] => None,
-                [parent] => Some(*parent),
-                _ => continue,
-            };
-            let commit = info.object().map_err(|err| {
+        let mut seen = HashMap::from([(head, pending.clone())]);
+        let mut queue = VecDeque::from([(head, pending)]);
+        while let Some((commit_id, paths)) = queue.pop_front() {
+            let commit = repo.find_commit(commit_id).map_err(|err| {
                 Error::new(ErrorKind::Unexpected, "cannot read Git commit").with_source(err)
             })?;
-            let year = commit_year(commit.time().map_err(|err| {
-                Error::new(ErrorKind::Unexpected, "cannot read Git commit time").with_source(err)
-            })?)?;
-            let author = commit.author().map_err(|err| {
-                Error::new(ErrorKind::Unexpected, "cannot read Git commit author").with_source(err)
-            })?;
-            let author = String::from_utf8_lossy(author.name.as_ref()).into_owned();
+            let parents = commit
+                .parent_ids()
+                .map(|parent| parent.detach())
+                .collect::<Vec<_>>();
             let tree = commit.tree().map_err(|err| {
                 Error::new(ErrorKind::Unexpected, "cannot read Git commit tree").with_source(err)
             })?;
-            let previous_tree = if let Some(parent) = parent {
-                repo.find_commit(parent)
+
+            let mut parent_changes = Vec::with_capacity(parents.len());
+            for parent in parents {
+                let previous_tree = repo
+                    .find_commit(parent)
                     .map_err(|err| {
                         Error::new(ErrorKind::Unexpected, "cannot read Git parent commit")
                             .with_source(err)
@@ -344,62 +332,103 @@ impl Repository {
                     .map_err(|err| {
                         Error::new(ErrorKind::Unexpected, "cannot read Git parent tree")
                             .with_source(err)
-                    })?
-            } else {
-                repo.empty_tree()
-            };
-            let mut changes = previous_tree.changes().map_err(|err| {
-                Error::new(ErrorKind::Unexpected, "cannot configure Git tree diff").with_source(err)
-            })?;
-            // A rename is a removal and an addition for header-history purposes. Avoid the much
-            // more expensive similarity analysis and let the new path start its own history.
-            changes.options(|options| {
-                options.track_rewrites(None);
-            });
-            changes
-                .for_each_to_obtain_tree_with_cache::<Infallible>(
-                    &tree,
-                    &mut resource_cache,
-                    |change| {
-                        let (location, added) = match change {
-                            gix::object::tree::diff::Change::Addition { location, .. } => {
-                                (location, true)
-                            }
-                            gix::object::tree::diff::Change::Modification { location, .. } => {
-                                (location, false)
-                            }
-                            gix::object::tree::diff::Change::Deletion { .. } => {
-                                return Ok(ControlFlow::Continue(()));
-                            }
-                            gix::object::tree::diff::Change::Rewrite { .. } => {
-                                unreachable!("rewrite tracking is disabled")
-                            }
-                        };
-                        if !pending.contains(location) {
-                            return Ok(ControlFlow::Continue(()));
-                        }
-                        let Some(path) = selected.get(location) else {
-                            return Ok(ControlFlow::Continue(()));
-                        };
-                        history
-                            .entry(path.clone())
-                            .or_default()
-                            .record_commit(year, &author);
-                        if added {
-                            pending.remove(location);
-                        }
-                        Ok(ControlFlow::Continue(()))
-                    },
-                )
-                .map_err(|err| {
-                    Error::new(ErrorKind::Unexpected, "cannot compare Git commit trees")
+                    })?;
+                let mut changes = previous_tree.changes().map_err(|err| {
+                    Error::new(ErrorKind::Unexpected, "cannot configure Git tree diff")
                         .with_source(err)
                 })?;
+                // A rename is a removal and an addition for header-history purposes. Avoid the
+                // much more expensive similarity analysis and start a new path lifetime instead.
+                changes.options(|options| {
+                    options.track_rewrites(None);
+                });
+                let mut changed = HashMap::new();
+                changes
+                    .for_each_to_obtain_tree_with_cache::<Infallible>(
+                        &tree,
+                        &mut resource_cache,
+                        |change| {
+                            let (location, state) = match change {
+                                gix::object::tree::diff::Change::Addition { location, .. } => {
+                                    (location, ParentState::Absent)
+                                }
+                                gix::object::tree::diff::Change::Modification {
+                                    location, ..
+                                }
+                                | gix::object::tree::diff::Change::Deletion { location, .. } => {
+                                    (location, ParentState::Changed)
+                                }
+                                gix::object::tree::diff::Change::Rewrite { .. } => {
+                                    unreachable!("rewrite tracking is disabled")
+                                }
+                            };
+                            if paths.contains(location) {
+                                changed.insert(location.to_owned(), state);
+                            }
+                            Ok(ControlFlow::Continue(()))
+                        },
+                    )
+                    .map_err(|err| {
+                        Error::new(ErrorKind::Unexpected, "cannot compare Git commit trees")
+                            .with_source(err)
+                    })?;
+                parent_changes.push((parent, changed));
+            }
+
+            let mut routes = HashMap::<gix::ObjectId, HashSet<BString>>::new();
+            let mut changes = Vec::new();
+            for path in paths {
+                // A merge result identical to a parent came from that parent. Following only the
+                // first matching parent prevents discarded side-branch changes from leaking in.
+                if let Some((parent, _)) = parent_changes
+                    .iter()
+                    .find(|(_, changed)| !changed.contains_key(path.as_bstr()))
+                {
+                    routes.entry(*parent).or_default().insert(path);
+                    continue;
+                }
+
+                let mut existed = false;
+                for (parent, changed) in &parent_changes {
+                    if changed.get(path.as_bstr()) == Some(&ParentState::Changed) {
+                        existed = true;
+                        routes.entry(*parent).or_default().insert(path.clone());
+                    }
+                }
+                changes.push((path, !existed));
+            }
+
+            if !changes.is_empty() {
+                let year = commit_year(commit.time().map_err(|err| {
+                    Error::new(ErrorKind::Unexpected, "cannot read Git commit time")
+                        .with_source(err)
+                })?)?;
+                let author = commit.author().map_err(|err| {
+                    Error::new(ErrorKind::Unexpected, "cannot read Git commit author")
+                        .with_source(err)
+                })?;
+                let author = String::from_utf8_lossy(author.name.as_ref()).into_owned();
+                for (path, added) in changes {
+                    let file = selected
+                        .get(path.as_bstr())
+                        .expect("history paths originate from selected files");
+                    let history = history.entry(file.clone()).or_default();
+                    if added {
+                        history.record_addition(year, &author);
+                    } else {
+                        history.record_change(year, &author);
+                    }
+                }
+            }
+
+            for (parent, paths) in routes {
+                enqueue_paths(&mut queue, &mut seen, parent, paths);
+            }
         }
         log::debug!(
-            "traversed {commits_walked} commits for {} paths; {} histories remain unresolved",
+            "traversed {} commits for {} Git path histories",
+            seen.len(),
             selected.len(),
-            pending.len()
         );
         Ok(history)
     }
@@ -458,6 +487,22 @@ fn path_prefix(path: &Path) -> BString {
         path.push(b'/');
     }
     path
+}
+
+fn enqueue_paths(
+    queue: &mut VecDeque<(gix::ObjectId, HashSet<BString>)>,
+    seen: &mut HashMap<gix::ObjectId, HashSet<BString>>,
+    commit: gix::ObjectId,
+    paths: HashSet<BString>,
+) {
+    let seen = seen.entry(commit).or_default();
+    let paths = paths
+        .into_iter()
+        .filter(|path| seen.insert(path.clone()))
+        .collect::<HashSet<_>>();
+    if !paths.is_empty() {
+        queue.push_back((commit, paths));
+    }
 }
 
 fn scan_pathspec(relative_root: &Path) -> Option<BString> {

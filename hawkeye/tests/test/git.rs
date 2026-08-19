@@ -345,6 +345,82 @@ ignore = "disable"
     );
 }
 
+#[test]
+fn merge_history_follows_the_file_result() {
+    let project = Project::empty();
+    project.git(["init", "-b", "main"]);
+    project.git(["config", "user.name", "Current User"]);
+    project.git(["config", "user.email", "current@example.com"]);
+    let base = "fn base() {}\nfn one() {}\nfn two() {}\nfn three() {}\nfn shared() {}\n";
+    project.write("discarded.rs", base);
+    project.write("resolved.rs", base);
+    project.git(["add", "discarded.rs", "resolved.rs"]);
+    project.commit(
+        "add sources",
+        "Alice",
+        "alice@example.com",
+        "2019-06-01T12:00:00+0000",
+    );
+
+    project.git(["switch", "-c", "feature"]);
+    let feature = "fn base() {}\nfn one() {}\nfn two() {}\nfn three() {}\nfn feature() {}\n";
+    project.write("discarded.rs", feature);
+    project.write("resolved.rs", feature);
+    project.git(["add", "discarded.rs", "resolved.rs"]);
+    project.commit(
+        "change sources on feature",
+        "Bob",
+        "bob@example.com",
+        "2020-06-01T12:00:00+0000",
+    );
+
+    project.git(["switch", "main"]);
+    let main = "fn main() {}\nfn one() {}\nfn two() {}\nfn three() {}\nfn shared() {}\n";
+    project.write("discarded.rs", main);
+    project.write("resolved.rs", main);
+    project.git(["add", "discarded.rs", "resolved.rs"]);
+    project.commit(
+        "change sources on main",
+        "Carol",
+        "carol@example.com",
+        "2021-06-01T12:00:00+0000",
+    );
+
+    project.git(["merge", "--no-ff", "--no-commit", "feature"]);
+    // Keep one file exactly as it was on main; the other retains the automatic merge result.
+    project.write("discarded.rs", main);
+    project.git(["add", "discarded.rs", "resolved.rs"]);
+    project.commit(
+        "merge feature",
+        "Dave",
+        "dave@example.com",
+        "2022-06-01T12:00:00+0000",
+    );
+    project.write(
+        "licenserc.toml",
+        r#"[header]
+text = "Copyright {{ attrs.git_file_created_year }}-{{ attrs.git_file_modified_year }} {{ attrs.git_authors | join(', ') }}"
+
+[files]
+includes = ["**/*.rs"]
+
+[git]
+file_attrs = "enable"
+ignore = "disable"
+"#,
+    );
+
+    assert_exit(&project.run(["format"]), 0);
+    assert_eq!(
+        project.read("discarded.rs"),
+        format!("// Copyright 2019-2021 Alice, Carol\n\n{main}")
+    );
+    assert_eq!(
+        project.read("resolved.rs"),
+        "// Copyright 2019-2022 Alice, Bob, Carol, Dave\n\nfn main() {}\nfn one() {}\nfn two() {}\nfn three() {}\nfn feature() {}\n"
+    );
+}
+
 #[cfg(unix)]
 #[test]
 fn git_history_accepts_control_characters_in_paths() {
