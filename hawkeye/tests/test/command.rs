@@ -269,7 +269,7 @@ ignore = "disable"
 
     let from_stdin = project.run_with_stdin(
         ["format", "--files-from=-", "--output-format=json"],
-        b"source/second.rs\0",
+        b"source/second.rs\n",
     );
     assert_exit(&from_stdin, 0);
     assert_report(&from_stdin, &[("second.rs", "add")]);

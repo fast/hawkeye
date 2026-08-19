@@ -13,13 +13,9 @@
 // limitations under the License.
 
 use std::env;
-#[cfg(unix)]
-use std::ffi::OsString;
 use std::fs;
 use std::io;
 use std::io::Read;
-#[cfg(unix)]
-use std::os::unix::ffi::OsStringExt;
 use std::path::Path;
 use std::path::PathBuf;
 
@@ -34,7 +30,7 @@ pub struct PathOptions {
     #[arg(value_name = "PATH")]
     paths: Vec<PathBuf>,
 
-    /// Read newline- or NUL-separated paths from FILE; use `-` for stdin.
+    /// Read one UTF-8 path per line from FILE; use `-` for stdin.
     #[arg(long, value_name = "FILE")]
     files_from: Option<PathBuf>,
 }
@@ -62,46 +58,20 @@ impl PathOptions {
 }
 
 fn read_path_list(path: &Path) -> Result<Vec<PathBuf>, Error> {
-    let mut content = Vec::new();
+    let mut content = String::new();
     if path == Path::new("-") {
         io::stdin()
-            .read_to_end(&mut content)
+            .read_to_string(&mut content)
             .map_err(|err| Error::new(format!("cannot read paths from stdin: {err}")))?;
     } else {
-        content = fs::read(path).map_err(|err| {
+        content = fs::read_to_string(path).map_err(|err| {
             Error::new(format!("cannot read paths from {}: {err}", path.display()))
         })?;
     }
 
-    // NUL cannot occur within a path, so its presence unambiguously selects NUL-delimited input.
-    let nul_separated = content.contains(&b'\0');
-    let mut paths = Vec::new();
-    for mut value in content.split(|byte| {
-        if nul_separated {
-            *byte == b'\0'
-        } else {
-            *byte == b'\n'
-        }
-    }) {
-        if !nul_separated && value.last() == Some(&b'\r') {
-            value = &value[..value.len() - 1];
-        }
-        if !value.is_empty() {
-            paths.push(path_from_bytes(value.to_vec())?);
-        }
-    }
-    Ok(paths)
-}
-
-#[cfg(unix)]
-fn path_from_bytes(value: Vec<u8>) -> Result<PathBuf, Error> {
-    // Unix paths need not be UTF-8; preserve every record exactly as the producer emitted it.
-    Ok(PathBuf::from(OsString::from_vec(value)))
-}
-
-#[cfg(not(unix))]
-fn path_from_bytes(value: Vec<u8>) -> Result<PathBuf, Error> {
-    let value = String::from_utf8(value)
-        .map_err(|err| Error::new(format!("path list contains non-UTF-8 data: {err}")))?;
-    Ok(value.into())
+    Ok(content
+        .lines()
+        .filter(|path| !path.is_empty())
+        .map(PathBuf::from)
+        .collect())
 }

@@ -67,11 +67,11 @@ hawkeye format
 | `hawkeye format` | Adds missing headers and replaces recognized non-canonical headers.            |
 | `hawkeye remove` | Removes recognized headers.                                                    |
 
-Pass files or directories after a command to avoid scanning the rest of a large repository. `--files-from` reads newline- or NUL-separated paths from a file, and `-` reads stdin:
+Pass files or directories after a command to avoid scanning the rest of a large repository. `--files-from` reads one UTF-8 path per line from a file, and `-` reads stdin:
 
 ```shell
 hawkeye check src/lib.rs src/bin
-git diff --name-only -z origin/main | hawkeye check --files-from -
+git diff --name-only origin/main | hawkeye check --files-from -
 ```
 
 Command-line paths are resolved from the current directory. They still obey `files.root`, `files.includes`, and `files.excludes`; an explicitly named file bypasses Git ignore rules, while a named directory uses normal discovery. Missing paths are skipped with a warning, while paths outside `files.root` are ignored as out of scope. An explicitly supplied empty list selects no files.
