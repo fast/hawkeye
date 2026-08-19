@@ -126,6 +126,9 @@ fn has_keywords(body: &str, keywords: &[String]) -> bool {
 fn safe_to_replace(candidate: &str, header: &str, keywords: &[String]) -> bool {
     // Comment syntax finds the candidate range; this semantic check prevents an adjacent ordinary
     // comment from being consumed merely because it uses the same style.
+    if candidate.split_whitespace().eq(header.split_whitespace()) {
+        return true;
+    }
     candidate.lines().count() <= header.lines().count()
         && candidate
             .lines()
@@ -348,9 +351,12 @@ fn parse_block_style(
     for (content, line_range) in lines {
         if content == closing {
             let end = line_range.start + content.len();
+            // Header templates cannot retain outer blank lines, while block comments commonly
+            // use them as visual padding immediately inside the delimiters.
+            let body = body.join("\n");
             return Some(StyleMatch {
                 range: start..end,
-                body: body.join("\n"),
+                body: body.trim_matches('\n').to_owned(),
             });
         }
         body.push(strip_affixes(content, prefix, suffix, false)?);

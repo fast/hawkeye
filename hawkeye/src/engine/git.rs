@@ -16,8 +16,6 @@ use std::collections::BTreeSet;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::collections::VecDeque;
-use std::convert::Infallible;
-use std::ops::ControlFlow;
 use std::path::Path;
 use std::path::PathBuf;
 use std::time::Instant;
@@ -195,14 +193,16 @@ impl Repository {
         let relative_root = self.relative_root(scan_root)?;
         let mut selected = HashMap::new();
         let mut files_by_id = Vec::new();
+        let mut git_paths_by_id = Vec::new();
         for path in files {
             let git_path = encode_path(&relative_root.join(path));
             if selected.contains_key(git_path.as_bstr()) {
                 continue;
             }
             let id = files_by_id.len();
-            selected.insert(git_path, id);
+            selected.insert(git_path.clone(), id);
             files_by_id.push(path.to_path_buf());
+            git_paths_by_id.push(git_path);
         }
         if files_by_id.is_empty() {
             return Ok(HashMap::new());
@@ -216,7 +216,7 @@ impl Repository {
             .string(gix::config::tree::User::NAME)
             .map(|value| String::from_utf8_lossy(&value).trim().to_owned())
             .filter(|value| !value.is_empty());
-        let mut history = self.committed_history(&selected, &files_by_id)?;
+        let mut history = self.committed_history(&git_paths_by_id, &files_by_id)?;
         let status_pathspecs = selected
             .keys()
             .map(|path| literal_pathspec(path.as_bstr()))
@@ -285,11 +285,11 @@ impl Repository {
 
     fn committed_history(
         &self,
-        selected: &HashMap<BString, usize>,
+        git_paths_by_id: &[BString],
         files_by_id: &[PathBuf],
     ) -> Result<HashMap<PathBuf, FileHistory>, Error> {
         let mut repo = self.inner.clone();
-        // Repeated tree diffs benefit from decoded objects, but the recommendation scales with
+        // Repeated tree lookups benefit from decoded objects, but the recommendation scales with
         // the complete index. Cap this private history handle for predictable memory use.
         let cache_size = {
             let index = repo.index_or_empty().map_err(|err| {
@@ -323,29 +323,16 @@ impl Repository {
             .map_err(|err| {
                 Error::new(ErrorKind::Unexpected, "cannot read Git HEAD tree").with_source(err)
             })?;
-        let mut pending = HashSet::with_capacity(selected.len());
-        for (path, id) in selected {
-            let tree_path = gix::path::from_bstr(path.as_bstr());
-            if head_tree
-                .lookup_entry_by_path(tree_path.as_ref())
-                .map_err(|err| {
-                    Error::new(ErrorKind::Unexpected, "cannot inspect Git HEAD tree")
-                        .with_source(err)
-                })?
-                .is_some()
-            {
-                pending.insert(*id);
+        let mut pending = HashSet::with_capacity(git_paths_by_id.len());
+        for (id, path) in git_paths_by_id.iter().enumerate() {
+            if tree_entry(&head_tree, path.as_bstr())?.is_some() {
+                pending.insert(id);
             }
         }
         if pending.is_empty() {
             return Ok(HashMap::new());
         }
 
-        let mut resource_cache = repo
-            .diff_resource_cache(gix::diff::blob::pipeline::Mode::ToGit, Default::default())
-            .map_err(|err| {
-                Error::new(ErrorKind::Unexpected, "cannot prepare Git tree diff").with_source(err)
-            })?;
         let mut history = HashMap::<PathBuf, FileHistory>::new();
         let mut visited = VisitedPaths::new(files_by_id.len());
         for path in &pending {
@@ -364,9 +351,9 @@ impl Repository {
                 Error::new(ErrorKind::Unexpected, "cannot read Git commit tree").with_source(err)
             })?;
 
-            let mut parent_changes = Vec::with_capacity(parents.len());
+            let mut parent_trees = Vec::with_capacity(parents.len());
             for parent in parents {
-                let previous_tree = repo
+                let parent_tree = repo
                     .find_commit(parent)
                     .map_err(|err| {
                         Error::new(ErrorKind::Unexpected, "cannot read Git parent commit")
@@ -377,74 +364,45 @@ impl Repository {
                         Error::new(ErrorKind::Unexpected, "cannot read Git parent tree")
                             .with_source(err)
                     })?;
-                let mut changes = previous_tree.changes().map_err(|err| {
-                    Error::new(ErrorKind::Unexpected, "cannot configure Git tree diff")
-                        .with_source(err)
-                })?;
-                // A rename is a removal and an addition for header-history purposes. Avoid the
-                // much more expensive similarity analysis and start a new path lifetime instead.
-                changes.options(|options| {
-                    options.track_rewrites(None);
-                });
-                let mut path_changes = HashMap::new();
-                changes
-                    .for_each_to_obtain_tree_with_cache::<Infallible>(
-                        &tree,
-                        &mut resource_cache,
-                        |change| {
-                            let (location, path_change) = match change {
-                                gix::object::tree::diff::Change::Addition { location, .. } => {
-                                    (location, PathChange::Addition)
-                                }
-                                gix::object::tree::diff::Change::Modification {
-                                    location, ..
-                                }
-                                | gix::object::tree::diff::Change::Deletion { location, .. } => {
-                                    (location, PathChange::Modification)
-                                }
-                                gix::object::tree::diff::Change::Rewrite { .. } => {
-                                    unreachable!("rewrite tracking is disabled")
-                                }
-                            };
-                            if let Some(id) = selected.get(location)
-                                && paths.contains(id)
-                            {
-                                path_changes.insert(*id, path_change);
-                            }
-                            Ok(ControlFlow::Continue(()))
-                        },
-                    )
-                    .map_err(|err| {
-                        Error::new(ErrorKind::Unexpected, "cannot compare Git commit trees")
-                            .with_source(err)
-                    })?;
-                parent_changes.push((parent, path_changes));
+                parent_trees.push((parent, parent_tree));
             }
 
             let mut routes = HashMap::<gix::ObjectId, HashSet<usize>>::new();
             let mut commit_changes = Vec::new();
             for path in paths {
+                let git_path = git_paths_by_id[path].as_bstr();
+                let current_entry = tree_entry(&tree, git_path)?.ok_or_else(|| {
+                    Error::new(
+                        ErrorKind::Unexpected,
+                        format!("Git path disappeared from its history: {git_path}"),
+                    )
+                })?;
                 // A merge result identical to a parent came from that parent. Following only the
                 // first matching parent prevents discarded side-branch changes from leaking in.
-                if let Some((parent, _)) = parent_changes
-                    .iter()
-                    .find(|(_, changes)| !changes.contains_key(&path))
-                {
-                    routes.entry(*parent).or_default().insert(path);
+                let mut changed_parents = Vec::new();
+                let mut unchanged_parent = None;
+                for (parent, parent_tree) in &parent_trees {
+                    match tree_entry(parent_tree, git_path)? {
+                        Some(entry) if entry == current_entry => {
+                            unchanged_parent = Some(*parent);
+                            break;
+                        }
+                        Some(_) => changed_parents.push(*parent),
+                        None => {}
+                    }
+                }
+                if let Some(parent) = unchanged_parent {
+                    routes.entry(parent).or_default().insert(path);
                     continue;
                 }
 
-                let mut existed = false;
-                for (parent, changes) in &parent_changes {
-                    if changes.get(&path) == Some(&PathChange::Modification) {
-                        existed = true;
-                        routes.entry(*parent).or_default().insert(path);
-                    }
-                }
-                let change = if existed {
-                    PathChange::Modification
-                } else {
+                let change = if changed_parents.is_empty() {
                     PathChange::Addition
+                } else {
+                    for parent in changed_parents {
+                        routes.entry(parent).or_default().insert(path);
+                    }
+                    PathChange::Modification
                 };
                 commit_changes.push((path, change));
             }
@@ -530,6 +488,18 @@ impl Repository {
         })?;
         Ok(Some(relative.to_path_buf()))
     }
+}
+
+fn tree_entry(
+    tree: &gix::Tree<'_>,
+    path: &BStr,
+) -> Result<Option<(gix::object::tree::EntryMode, gix::ObjectId)>, Error> {
+    let path = gix::path::from_bstr(path);
+    tree.lookup_entry_by_path(path.as_ref())
+        .map(|entry| entry.map(|entry| (entry.mode(), entry.object_id())))
+        .map_err(|err| {
+            Error::new(ErrorKind::Unexpected, "cannot inspect Git tree path").with_source(err)
+        })
 }
 
 fn path_prefix(path: &Path) -> BString {
