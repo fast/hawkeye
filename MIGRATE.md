@@ -282,8 +282,7 @@ The v6 repository action is removed. Install and invoke the released CLI explici
 - uses: actions/checkout@v7
 - uses: taiki-e/install-action@v2
   with:
-    tool: cargo-binstall
-- run: cargo binstall hawkeye@7.0.0-alpha.1 --no-confirm
+    tool: hawkeye@7.0.0-alpha.1
 - run: hawkeye check
 ```
 

@@ -96,14 +96,13 @@ docker run --rm --user "$(id -u):$(id -g)" --volume "$PWD:/workspace" ghcr.io/fa
 
 ### GitHub Actions
 
-Install the released binary with cargo-binstall and invoke HawkEye directly; no HawkEye-specific action is required:
+Install the released binary and invoke HawkEye directly; no HawkEye-specific action is required:
 
 ```yaml
 - uses: actions/checkout@v7
 - uses: taiki-e/install-action@v2
   with:
-    tool: cargo-binstall
-- run: cargo binstall hawkeye@7.0.0-alpha.1 --no-confirm
+    tool: hawkeye@7.0.0-alpha.1
 - run: hawkeye check
 ```
 
