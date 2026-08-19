@@ -188,9 +188,9 @@ Templates use MiniJinja with strict undefined values, auto-escaping disabled, an
 | `attrs.filename`                | The current file name.                                                          |
 | `attrs.disk_file_created_year`  | The filesystem creation year, or `null` when unavailable.                       |
 | `attrs.disk_file_modified_year` | The filesystem modification year, or `null` when unavailable.                   |
-| `attrs.git_file_created_year`   | The most recent Git addition year for the path, or `null` when unavailable.     |
-| `attrs.git_file_modified_year`  | The latest year in the current path history, including uncommitted changes.     |
-| `attrs.git_authors`             | Sorted distinct author names from the current path history.                     |
+| `attrs.git_file_created_year`   | The year the current exact-path lifetime began, or `null` when unavailable.      |
+| `attrs.git_file_modified_year`  | The latest year in the current exact-path history, including worktree changes.  |
+| `attrs.git_authors`             | Sorted distinct author names from the current exact-path history.               |
 
 HawkEye never substitutes the current year for an unavailable value. Templates that need a fallback must express it explicitly.
 
@@ -206,9 +206,11 @@ Rules match complete filenames or case-insensitive filename suffixes. Extensions
 
 `git.ignore` defaults to `auto`: it uses the Git index and ignore rules inside a worktree and falls back to filesystem discovery outside one. Tracked files remain selected even when they match an ignore rule. Set the mode to `enable` to require a worktree or `disable` to use filesystem discovery unconditionally.
 
-`git.file_attrs` defaults to `disable` because walking repository history has a cost. `auto` populates attributes when complete history is available; `enable` also requires a usable repository and complete history. HawkEye reads Git repositories in-process and does not require a `git` executable at runtime.
+`git.file_attrs` defaults to `disable` because resolving attributes may walk a long history for every selected path. Prefer fixed values in `props` unless the template genuinely needs repository history. `auto` populates attributes when complete history is available; `enable` requires a usable repository and complete history. Selecting paths on the command line also limits Git status and history work to those files.
 
-Git attributes describe the current lifetime of a path. Deleting and later recreating a path starts a new history, as does moving a file to a new path; HawkEye does not infer identity from file similarity.
+Git attributes describe the current lifetime of an exact path. Deleting and later recreating a path starts a new history, as does moving a file to a new path; HawkEye does not infer identity from file similarity. At a merge, HawkEye follows a parent whose file entry matches the merge result. A merge resolution that differs from every parent counts as a modification and retains the contributing parent histories.
+
+HawkEye reads repositories in-process with `gix` and does not require a `git` executable at runtime, including in the distroless container image. CI checkouts must still contain complete history when Git file attributes are enabled.
 
 ## Library
 
