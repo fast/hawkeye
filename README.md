@@ -236,9 +236,9 @@ hawkeye = { version = "7.0.0-alpha.1", default-features = false }
 
 ## Compatibility
 
-HawkEye v7 uses a new snake-case configuration format and does not accept v6 field names. Follow [MIGRATE.md](https://github.com/fast/hawkeye/blob/main/MIGRATE.md) to migrate a v6 configuration, command line, and integration.
+HawkEye v7 uses a new snake-case configuration format and does not accept v6 field names. Follow [MIGRATE.md](MIGRATE.md) to migrate a v6 configuration, command line, and integration.
 
-Release summaries are recorded in [CHANGELOG.md](https://github.com/fast/hawkeye/blob/main/CHANGELOG.md).
+Release summaries are recorded in [CHANGELOG.md](CHANGELOG.md).
 
 The minimum supported Rust version is 1.89.0. It may be raised in a minor release; patch releases preserve the minimum version of their corresponding minor release.
 

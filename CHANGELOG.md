@@ -24,7 +24,7 @@ All notable changes to this project will be documented in this file.
 * Added human and JSON reports, stable exit-code categories, debug logging, and deterministic preservation of common file preambles and line endings.
 * Added cargo-binstall archives, a distroless multi-architecture container image, and Python and Docker pre-commit hooks.
 
-See [MIGRATE.md](https://github.com/fast/hawkeye/blob/main/MIGRATE.md) for the v6-to-v7 procedure and semantic differences.
+See [MIGRATE.md](MIGRATE.md) for the v6-to-v7 procedure and semantic differences.
 
 ## [6.5.1] 2026-02-14
 
