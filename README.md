@@ -71,9 +71,12 @@ Pass files or directories after a command to avoid scanning the rest of a large 
 
 ```shell
 hawkeye check src/lib.rs src/bin
+git diff --name-only --diff-filter=ACMRT -z origin/main -- | xargs -0 -r hawkeye check --
 ```
 
 Command-line paths are resolved from the current directory. They still obey `files.root`, `files.includes`, and `files.excludes`; an explicitly named file bypasses Git ignore rules, while a named directory uses normal discovery. Missing paths are skipped with a warning, while paths outside `files.root` are ignored as out of scope.
+
+The `git diff` pipeline uses NUL-delimited paths so that unusual file names remain intact. Its `-r` option avoids running HawkEye with no arguments—and therefore avoids a full scan—when the diff is empty; the final `--` keeps file names from being parsed as HawkEye options.
 
 Without `--config`, HawkEye tries `licenserc.toml` and then `.licenserc.toml` in the current directory. It does not search parent directories.
 
