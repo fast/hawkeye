@@ -67,6 +67,17 @@ hawkeye format
 | `hawkeye format` | Adds missing headers and replaces recognized non-canonical headers.            |
 | `hawkeye remove` | Removes recognized headers.                                                    |
 
+Pass files or directories after a command to avoid scanning the rest of a large repository:
+
+```shell
+hawkeye check src/lib.rs src/bin
+git diff --name-only --diff-filter=ACMRT -z origin/main -- | xargs -0 -r hawkeye check --
+```
+
+Command-line paths are resolved from the current directory. They still obey `files.root`, `files.includes`, and `files.excludes`; an explicitly named file bypasses Git ignore rules, while a named directory uses normal discovery. Missing paths are skipped with a warning, while paths outside `files.root` are ignored as out of scope.
+
+The `git diff` pipeline uses NUL-delimited paths so that unusual file names remain intact. Its `-r` option avoids running HawkEye with no arguments—and therefore avoids a full scan—when the diff is empty; the final `--` keeps file names from being parsed as HawkEye options.
+
 Without `--config`, HawkEye tries `licenserc.toml` and then `.licenserc.toml` in the current directory. It does not search parent directories.
 
 All commands support `--output-format json` and `--fail-on-unknown`. `format` and `remove` also support `--dry-run` and `--fail-on-change`. Reports go to stdout; logs and errors go to stderr. Set `RUST_LOG=hawkeye=debug` to inspect file discovery and Git processing.
@@ -108,7 +119,7 @@ repos:
       - id: hawkeye-format
 ```
 
-The Python hook needs a Rust toolchain when its environment is created for the first time. Use `hawkeye-format-docker` instead when Docker is the preferred runtime.
+The hooks pass only the files selected by pre-commit. To scan the complete configured file set whenever a hook runs, set `pass_filenames: false` on that hook in the project's `.pre-commit-config.yaml`; HawkEye then receives no paths and performs a normal full scan. Pre-commit skips a hook when no files match, so also set `always_run: true` when the full scan must run even in that case. The Python hook needs a Rust toolchain when its environment is created for the first time. Use `hawkeye-format-docker` instead when Docker is the preferred runtime.
 
 ## Configuration
 
@@ -177,9 +188,9 @@ Templates use MiniJinja with strict undefined values, auto-escaping disabled, an
 | `attrs.filename`                | The current file name.                                                          |
 | `attrs.disk_file_created_year`  | The filesystem creation year, or `null` when unavailable.                       |
 | `attrs.disk_file_modified_year` | The filesystem modification year, or `null` when unavailable.                   |
-| `attrs.git_file_created_year`   | The first Git commit year for the path, or `null` when disabled or unavailable. |
-| `attrs.git_file_modified_year`  | The last Git commit year, using the current year for dirty or untracked files.  |
-| `attrs.git_authors`             | Sorted distinct Git author names.                                               |
+| `attrs.git_file_created_year`   | The year the current exact-path lifetime began, or `null` when unavailable.      |
+| `attrs.git_file_modified_year`  | The latest year in the current exact-path history, including worktree changes.  |
+| `attrs.git_authors`             | Sorted distinct author names from the current exact-path history.               |
 
 HawkEye never substitutes the current year for an unavailable value. Templates that need a fallback must express it explicitly.
 
@@ -195,7 +206,11 @@ Rules match complete filenames or case-insensitive filename suffixes. Extensions
 
 `git.ignore` defaults to `auto`: it uses the Git index and ignore rules inside a worktree and falls back to filesystem discovery outside one. Tracked files remain selected even when they match an ignore rule. Set the mode to `enable` to require a worktree or `disable` to use filesystem discovery unconditionally.
 
-`git.file_attrs` defaults to `disable` because walking repository history has a cost. `auto` populates attributes when complete history is available; `enable` also requires a usable repository and complete history. HawkEye reads Git repositories in-process and does not require a `git` executable at runtime.
+`git.file_attrs` defaults to `disable` because resolving attributes may walk a long history for every selected path. Prefer fixed values in `props` unless the template genuinely needs repository history. `auto` populates attributes when complete history is available; `enable` requires a usable repository and complete history. Selecting paths on the command line also limits Git status and history work to those files.
+
+Git attributes describe the current lifetime of an exact path. Deleting and later recreating a path starts a new history, as does moving a file to a new path; HawkEye does not infer identity from file similarity. At a merge, HawkEye follows a parent whose file entry matches the merge result. A merge resolution that differs from every parent counts as a modification and retains the contributing parent histories.
+
+HawkEye reads repositories in-process with `gix` and does not require a `git` executable at runtime, including in the distroless container image. CI checkouts must still contain complete history when Git file attributes are enabled.
 
 ## Library
 
@@ -204,14 +219,15 @@ The library exposes the same engine used by the command-line tool:
 ```rust
 use hawkeye::Config;
 use hawkeye::Engine;
+use hawkeye::Scope;
 
 let config = Config::load("licenserc.toml")?;
 let engine = Engine::new(config)?;
-let report = engine.check()?;
+let report = engine.check(Scope::All)?;
 # Ok::<(), hawkeye::Error>(())
 ```
 
-`Engine::check` never writes files. `Engine::format` and `Engine::remove` return pending `Edits`; call `Edits::apply` to write them or `Edits::into_report` to inspect the result without writing.
+Each operation accepts a `Scope`. `Scope::All` processes the configured file set, while `Scope::Paths(&paths)` processes only the requested files and directories; an empty path slice processes nothing. `Engine::check` never writes files. `Engine::format` and `Engine::remove` return pending `Edits`; call `Edits::apply` to write them or `Edits::into_report` to inspect the result without writing.
 
 The default `application` feature builds the command-line tool. Library-only users can omit its command-specific dependencies:
 

@@ -17,7 +17,7 @@
   description: Format license headers with HawkEye.
   entry: hawkeye format
   language: python
-  pass_filenames: false
+  pass_filenames: true
   require_serial: true
 
 - id: hawkeye-format-docker
@@ -25,5 +25,5 @@
   description: Format license headers with the HawkEye container.
   entry: hawkeye format
   language: docker
-  pass_filenames: false
+  pass_filenames: true
   require_serial: true

@@ -19,10 +19,11 @@
 //! ```no_run
 //! use hawkeye::Config;
 //! use hawkeye::Engine;
+//! use hawkeye::Scope;
 //!
 //! # fn main() -> Result<(), hawkeye::Error> {
 //! let config = Config::load("licenserc.toml")?;
-//! let report = Engine::new(config)?.check()?;
+//! let report = Engine::new(config)?.check(Scope::All)?;
 //! println!("checked {} files", report.files.len());
 //! # Ok(())
 //! # }
@@ -50,6 +51,7 @@ pub use self::config::RuleConfig;
 pub use self::config::StyleConfig;
 pub use self::engine::Edits;
 pub use self::engine::Engine;
+pub use self::engine::Scope;
 pub use self::error::Error;
 pub use self::error::ErrorKind;
 pub use self::report::FileOutcome;

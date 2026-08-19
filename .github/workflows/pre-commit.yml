@@ -27,13 +27,26 @@ permissions:
 
 jobs:
   test:
-    name: Test hook
+    name: Test ${{ matrix.hook }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        hook:
+          - hawkeye-format
+          - hawkeye-format-docker
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@1.89.0
       - uses: astral-sh/setup-uv@v10.0.1
-      - run: uvx --from pre-commit pre-commit try-repo . hawkeye-format --all-files
+      - name: Test selected file forwarding
+        run: |
+          uvx --from pre-commit pre-commit try-repo . ${{ matrix.hook }} \
+            --files hawkeye/src/lib.rs --verbose 2>&1 \
+            | tee "${RUNNER_TEMP}/pre-commit.log"
+          grep --fixed-strings --line-regexp --quiet \
+            "1 file, 0 changes, 0 conflicts, 0 unsupported" \
+            "${RUNNER_TEMP}/pre-commit.log"
         env:
           RUSTUP_TOOLCHAIN: 1.89.0

@@ -19,6 +19,7 @@ use hawkeye::Config;
 use hawkeye::Engine;
 use hawkeye::ErrorKind;
 use hawkeye::FileOutcome;
+use hawkeye::Scope;
 use jiff::Timestamp;
 use jiff::tz::TimeZone;
 
@@ -146,30 +147,178 @@ ignore = "enable"
 }
 
 #[test]
-fn recreated_paths_keep_their_earliest_commit_year() {
+fn recreated_paths_start_new_history() {
     let project = Project::empty();
     project.git(["init", "-b", "main"]);
     project.git(["config", "user.name", "Current User"]);
     project.git(["config", "user.email", "current@example.com"]);
+    project.write("committed.rs", "fn committed() {}\n");
     project.write("staged.rs", "fn staged() {}\n");
     project.write("untracked.rs", "fn untracked() {}\n");
-    project.git(["add", "staged.rs", "untracked.rs"]);
+    project.git(["add", "committed.rs", "staged.rs", "untracked.rs"]);
     project.commit(
         "add sources",
         "Alice",
         "alice@example.com",
         "2019-06-01T12:00:00+0000",
     );
-    project.git(["rm", "staged.rs", "untracked.rs"]);
+    project.git(["rm", "committed.rs", "staged.rs", "untracked.rs"]);
     project.commit(
         "remove sources",
         "Bob",
         "bob@example.com",
         "2020-06-01T12:00:00+0000",
     );
+    project.write("committed.rs", "fn committed() {}\n");
     project.write("staged.rs", "fn staged() {}\n");
     project.write("untracked.rs", "fn untracked() {}\n");
+    project.git(["add", "committed.rs"]);
+    project.commit(
+        "recreate committed source",
+        "Carol",
+        "carol@example.com",
+        "2022-06-01T12:00:00+0000",
+    );
     project.git(["add", "staged.rs"]);
+    project.write(
+        "licenserc.toml",
+        r#"[header]
+text = "Copyright {{ attrs.git_file_created_year }}-{{ attrs.git_file_modified_year }} {{ attrs.git_authors | join(', ') }}"
+
+[files]
+includes = ["**/*.rs"]
+
+[git]
+file_attrs = "enable"
+ignore = "disable"
+"#,
+    );
+
+    assert_exit(&project.run(["format"]), 0);
+    let current_year = Timestamp::now().to_zoned(TimeZone::UTC).year();
+    assert_eq!(
+        project.read("committed.rs"),
+        "// Copyright 2022-2022 Carol\n\nfn committed() {}\n"
+    );
+    assert_eq!(
+        project.read("staged.rs"),
+        format!("// Copyright {current_year}-{current_year} Current User\n\nfn staged() {{}}\n")
+    );
+    assert_eq!(
+        project.read("untracked.rs"),
+        format!("// Copyright {current_year}-{current_year} Current User\n\nfn untracked() {{}}\n")
+    );
+}
+
+#[test]
+fn renamed_paths_start_new_history() {
+    let project = Project::empty();
+    project.git(["init", "-b", "main"]);
+    project.write("original.rs", "fn renamed() {}\n");
+    project.git(["add", "original.rs"]);
+    project.commit(
+        "add original source",
+        "Alice",
+        "alice@example.com",
+        "2019-06-01T12:00:00+0000",
+    );
+    project.git(["mv", "original.rs", "renamed.rs"]);
+    project.commit(
+        "rename source",
+        "Bob",
+        "bob@example.com",
+        "2022-06-01T12:00:00+0000",
+    );
+    project.write(
+        "licenserc.toml",
+        r#"[header]
+text = "Copyright {{ attrs.git_file_created_year }}-{{ attrs.git_file_modified_year }} {{ attrs.git_authors | join(', ') }}"
+
+[files]
+includes = ["**/*.rs"]
+
+[git]
+file_attrs = "enable"
+ignore = "disable"
+"#,
+    );
+
+    assert_exit(&project.run(["format"]), 0);
+    assert_eq!(
+        project.read("renamed.rs"),
+        "// Copyright 2022-2022 Bob\n\nfn renamed() {}\n"
+    );
+}
+
+#[test]
+fn merge_history_does_not_depend_on_revision_walk_order() {
+    let project = Project::empty();
+    project.git(["init", "-b", "main"]);
+    project.git(["config", "user.name", "Current User"]);
+    project.git(["config", "user.email", "current@example.com"]);
+    project.write("common-1.md", "base\n");
+    project.write("common-2.md", "base\n");
+    project.git(["add", "common-1.md", "common-2.md"]);
+    project.commit(
+        "initial",
+        "Alice",
+        "alice@example.com",
+        "2025-12-15T00:00:00+0000",
+    );
+    project.write("common-1.md", "base\nmain\n");
+    project.git(["add", "common-1.md"]);
+    project.commit(
+        "base",
+        "Alice",
+        "alice@example.com",
+        "2025-12-22T00:00:00+0000",
+    );
+    project.git(["branch", "wip"]);
+
+    project.write("a.rs", "fn a() {}\n");
+    project.git(["add", "a.rs"]);
+    project.commit(
+        "add a",
+        "Alice",
+        "alice@example.com",
+        "2025-12-30T00:00:00+0000",
+    );
+    project.write("b.rs", "fn b() {}\n");
+    project.git(["add", "b.rs"]);
+    project.commit(
+        "add b",
+        "Bob",
+        "bob@example.com",
+        "2026-01-05T00:00:00+0000",
+    );
+    project.write("common-1.md", "base\nmain\ndummy\n");
+    project.git(["add", "common-1.md"]);
+    project.commit(
+        "dummy",
+        "Alice",
+        "alice@example.com",
+        "2026-01-07T00:00:00+0000",
+    );
+    project.write("common-1.md", "base\nmain\ndummy\nrandom\n");
+    project.git(["add", "common-1.md"]);
+    project.commit(
+        "random",
+        "Alice",
+        "alice@example.com",
+        "2026-01-08T00:00:00+0000",
+    );
+
+    project.git(["switch", "wip"]);
+    project.write("common-2.md", "base\nbranch\n");
+    project.git(["add", "common-2.md"]);
+    project.commit(
+        "branch",
+        "Carol",
+        "carol@example.com",
+        "2026-01-06T00:00:00+0000",
+    );
+    project.git(["switch", "main"]);
+    project.git(["merge", "--no-ff", "wip", "--no-edit"]);
     project.write(
         "licenserc.toml",
         r#"[header]
@@ -184,15 +333,91 @@ ignore = "disable"
 "#,
     );
 
+    // Regression for #203: revision-walk neighbours are not necessarily parent and child.
     assert_exit(&project.run(["format"]), 0);
-    let current_year = Timestamp::now().to_zoned(TimeZone::UTC).year();
     assert_eq!(
-        project.read("staged.rs"),
-        format!("// Copyright 2019-{current_year} Acme\n\nfn staged() {{}}\n")
+        project.read("a.rs"),
+        "// Copyright 2025-2025 Acme\n\nfn a() {}\n"
     );
     assert_eq!(
-        project.read("untracked.rs"),
-        format!("// Copyright 2019-{current_year} Acme\n\nfn untracked() {{}}\n")
+        project.read("b.rs"),
+        "// Copyright 2026-2026 Acme\n\nfn b() {}\n"
+    );
+}
+
+#[test]
+fn merge_history_follows_the_file_result() {
+    let project = Project::empty();
+    project.git(["init", "-b", "main"]);
+    project.git(["config", "user.name", "Current User"]);
+    project.git(["config", "user.email", "current@example.com"]);
+    let base = "fn base() {}\nfn one() {}\nfn two() {}\nfn three() {}\nfn shared() {}\n";
+    project.write("discarded.rs", base);
+    project.write("resolved.rs", base);
+    project.git(["add", "discarded.rs", "resolved.rs"]);
+    project.commit(
+        "add sources",
+        "Alice",
+        "alice@example.com",
+        "2019-06-01T12:00:00+0000",
+    );
+
+    project.git(["switch", "-c", "feature"]);
+    let feature = "fn base() {}\nfn one() {}\nfn two() {}\nfn three() {}\nfn feature() {}\n";
+    project.write("discarded.rs", feature);
+    project.write("resolved.rs", feature);
+    project.git(["add", "discarded.rs", "resolved.rs"]);
+    project.commit(
+        "change sources on feature",
+        "Bob",
+        "bob@example.com",
+        "2020-06-01T12:00:00+0000",
+    );
+
+    project.git(["switch", "main"]);
+    let main = "fn main() {}\nfn one() {}\nfn two() {}\nfn three() {}\nfn shared() {}\n";
+    project.write("discarded.rs", main);
+    project.write("resolved.rs", main);
+    project.git(["add", "discarded.rs", "resolved.rs"]);
+    project.commit(
+        "change sources on main",
+        "Carol",
+        "carol@example.com",
+        "2021-06-01T12:00:00+0000",
+    );
+
+    project.git(["merge", "--no-ff", "--no-commit", "feature"]);
+    // Keep one file exactly as it was on main; the other retains the automatic merge result.
+    project.write("discarded.rs", main);
+    project.git(["add", "discarded.rs", "resolved.rs"]);
+    project.commit(
+        "merge feature",
+        "Dave",
+        "dave@example.com",
+        "2022-06-01T12:00:00+0000",
+    );
+    project.write(
+        "licenserc.toml",
+        r#"[header]
+text = "Copyright {{ attrs.git_file_created_year }}-{{ attrs.git_file_modified_year }} {{ attrs.git_authors | join(', ') }}"
+
+[files]
+includes = ["**/*.rs"]
+
+[git]
+file_attrs = "enable"
+ignore = "disable"
+"#,
+    );
+
+    assert_exit(&project.run(["format"]), 0);
+    assert_eq!(
+        project.read("discarded.rs"),
+        format!("// Copyright 2019-2021 Alice, Carol\n\n{main}")
+    );
+    assert_eq!(
+        project.read("resolved.rs"),
+        "// Copyright 2019-2022 Alice, Bob, Carol, Dave\n\nfn main() {}\nfn one() {}\nfn two() {}\nfn three() {}\nfn feature() {}\n"
     );
 }
 
@@ -376,7 +601,7 @@ ignore = "enable"
         Config::load(project.path().join("licenserc.toml")).expect("load required Git config");
     let engine = Engine::new(config).expect("build engine before discovering files");
     let err = engine
-        .check()
+        .check(Scope::All)
         .expect_err("required Git discovery must reject a non-repository");
     assert_eq!(err.kind(), ErrorKind::Unsupported);
 
@@ -396,7 +621,7 @@ ignore = "auto"
         Config::load(project.path().join("licenserc.toml")).expect("load automatic Git config");
     let report = Engine::new(config)
         .expect("build automatic Git engine")
-        .check()
+        .check(Scope::All)
         .expect("fall back to filesystem discovery");
     assert_eq!(report.files.len(), 1);
     assert_eq!(report.files[0].outcome, FileOutcome::Add);

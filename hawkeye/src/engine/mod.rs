@@ -91,12 +91,25 @@ enum HeaderTarget {
     Absent,
 }
 
+/// The files and directories processed by an [`Engine`] operation.
+#[derive(Debug, Clone, Copy)]
+pub enum Scope<'a> {
+    /// Process every file selected by the configuration.
+    All,
+    /// Process only the requested paths.
+    ///
+    /// Relative paths are resolved against `files.root`. Direct files bypass Git ignore rules,
+    /// while directories use normal discovery. All paths still obey `files.root`,
+    /// `files.includes`, and `files.excludes`. An empty slice processes no files.
+    Paths(&'a [PathBuf]),
+}
+
 /// A license-header processor built from one [`Config`].
 pub struct Engine {
     root: PathBuf,
     header_path: Option<PathBuf>,
-    selection: Override,
-    exclusions: Override,
+    file_filter: Override,
+    walk_filter: Override,
     props: BTreeMap<String, toml::Value>,
     git: GitConfig,
     keywords: Vec<String>,
@@ -153,8 +166,8 @@ impl Engine {
             git.ignore,
             git.file_attrs
         );
-        let (selection, exclusions) =
-            discovery::compile_patterns(&root, &files.includes, &files.excludes)?;
+        let (file_filter, walk_filter) =
+            discovery::compile_file_filters(&root, &files.includes, &files.excludes)?;
 
         let (template, header_path) = if let Some(content) = header.text {
             (HeaderTemplate::new(content)?, None)
@@ -242,8 +255,8 @@ impl Engine {
         Ok(Self {
             root,
             header_path,
-            selection,
-            exclusions,
+            file_filter,
+            walk_filter,
             props,
             git,
             keywords,
@@ -253,13 +266,13 @@ impl Engine {
         })
     }
 
-    /// Checks selected files without modifying them.
+    /// Checks files in the given scope without modifying them.
     ///
     /// # Errors
     ///
     /// Returns an error if selected files cannot be discovered, read, or analyzed.
-    pub fn check(&self) -> Result<Report, Error> {
-        Ok(self.edits(HeaderTarget::Present)?.report)
+    pub fn check(&self, scope: Scope<'_>) -> Result<Report, Error> {
+        Ok(self.edits(HeaderTarget::Present, scope)?.report)
     }
 
     /// Prepares additions and replacements that make selected headers canonical.
@@ -267,8 +280,8 @@ impl Engine {
     /// # Errors
     ///
     /// Returns an error if selected files cannot be discovered, read, or analyzed.
-    pub fn format(&self) -> Result<Edits, Error> {
-        self.edits(HeaderTarget::Present)
+    pub fn format(&self, scope: Scope<'_>) -> Result<Edits, Error> {
+        self.edits(HeaderTarget::Present, scope)
     }
 
     /// Prepares removals for recognized headers.
@@ -276,11 +289,18 @@ impl Engine {
     /// # Errors
     ///
     /// Returns an error if selected files cannot be discovered, read, or analyzed.
-    pub fn remove(&self) -> Result<Edits, Error> {
-        self.edits(HeaderTarget::Absent)
+    pub fn remove(&self, scope: Scope<'_>) -> Result<Edits, Error> {
+        self.edits(HeaderTarget::Absent, scope)
     }
 
-    fn edits(&self, target: HeaderTarget) -> Result<Edits, Error> {
+    fn edits(&self, target: HeaderTarget, scope: Scope<'_>) -> Result<Edits, Error> {
+        if matches!(scope, Scope::Paths([])) {
+            return Ok(Edits {
+                report: Report { files: Vec::new() },
+                files: Vec::new(),
+            });
+        }
+
         let git_mode = self.git.ignore.combine(self.git.file_attrs);
         let repo = if git_mode == FeatureMode::Disable {
             None
@@ -296,15 +316,15 @@ impl Engine {
                 Err(err) => return Err(err),
             }
         };
-        let paths = self.discover(repo.as_ref())?;
-        let selected = paths
+        let paths = self.discover_files(repo.as_ref(), scope)?;
+        let files_with_rules = paths
             .into_iter()
             .map(|path| {
                 let rule = self.rules.iter().find(|rule| rule.matches(&path));
                 (path, rule)
             })
             .collect::<Vec<_>>();
-        let supported = selected
+        let supported = files_with_rules
             .iter()
             .filter_map(|(path, rule)| rule.is_some().then_some(path.as_path()))
             .collect::<Vec<_>>();
@@ -327,10 +347,10 @@ impl Engine {
             None
         };
 
-        let mut files = Vec::with_capacity(selected.len());
+        let mut files = Vec::with_capacity(files_with_rules.len());
         let mut file_edits = Vec::new();
 
-        for (relative_path, rule) in selected {
+        for (relative_path, rule) in files_with_rules {
             let Some(rule) = rule else {
                 log::debug!(
                     "{} has no matching rule; reporting it as unsupported",

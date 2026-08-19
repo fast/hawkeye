@@ -15,10 +15,47 @@
 use hawkeye::Config;
 use hawkeye::Engine;
 use hawkeye::ErrorKind;
+use hawkeye::Scope;
 
 use super::support::Project;
 use super::support::assert_exit;
 use super::support::stderr;
+
+#[test]
+fn operation_scope_distinguishes_all_files_from_no_files() {
+    let project = Project::empty();
+    project.write("main.rs", "fn main() {}\n");
+    project.write(
+        "licenserc.toml",
+        r#"[header]
+text = "Copyright 2026 Acme"
+
+[files]
+includes = ["**/*.rs"]
+
+[git]
+ignore = "disable"
+"#,
+    );
+
+    let config = Config::load(project.path().join("licenserc.toml")).expect("load valid config");
+    let engine = Engine::new(config).expect("build engine");
+    assert_eq!(
+        engine
+            .check(Scope::All)
+            .expect("check all files")
+            .files
+            .len(),
+        1
+    );
+    assert!(
+        engine
+            .check(Scope::Paths(&[]))
+            .expect("check no files")
+            .files
+            .is_empty()
+    );
+}
 
 #[test]
 fn public_validation_matches_engine_initialization() {

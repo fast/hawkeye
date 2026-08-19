@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::env;
 use std::fmt;
 use std::io;
 use std::io::Write;
@@ -30,6 +31,7 @@ use exn::bail;
 use hawkeye::Config;
 use hawkeye::Engine;
 use hawkeye::FileOutcome;
+use hawkeye::Scope;
 use logforth::filter::rustlog::RustLogFilterBuilder;
 
 #[derive(Debug, Parser)]
@@ -69,6 +71,10 @@ enum SubcommandOptions {
 
 #[derive(Debug, Args)]
 struct CheckOptions {
+    /// Files and directories to process.
+    #[arg(value_name = "PATH")]
+    paths: Vec<PathBuf>,
+
     /// Fail when selected files have no rule or are not UTF-8 text.
     #[arg(long)]
     fail_on_unknown: bool,
@@ -76,6 +82,10 @@ struct CheckOptions {
 
 #[derive(Debug, Args)]
 struct EditOptions {
+    /// Files and directories to process.
+    #[arg(value_name = "PATH")]
+    paths: Vec<PathBuf>,
+
     /// Show changes without writing them.
     #[arg(long)]
     dry_run: bool,
@@ -104,7 +114,7 @@ fn do_main() -> Result<ExitCode, Error> {
     let Command {
         config,
         output_format,
-        subcommand,
+        mut subcommand,
     } = Command::parse();
 
     let config = match config {
@@ -116,15 +126,32 @@ fn do_main() -> Result<ExitCode, Error> {
     let config = Config::load(config).or_raise(|| Error::new("cannot load config"))?;
     let engine = Engine::new(config).or_raise(|| Error::new("cannot create engine"))?;
 
-    let (report, fail_on_change, fail_on_unknown) = match subcommand {
+    resolve_paths(match &mut subcommand {
+        SubcommandOptions::Check(options) => &mut options.paths,
+        SubcommandOptions::Format(options) => &mut options.paths,
+        SubcommandOptions::Remove(options) => &mut options.paths,
+    })?;
+    let scope = {
+        let paths = match &subcommand {
+            SubcommandOptions::Check(options) => &options.paths,
+            SubcommandOptions::Format(options) => &options.paths,
+            SubcommandOptions::Remove(options) => &options.paths,
+        };
+        if paths.is_empty() {
+            Scope::All
+        } else {
+            Scope::Paths(paths)
+        }
+    };
+    let (report, fail_on_change, fail_on_unknown) = match &subcommand {
         SubcommandOptions::Check(options) => {
             let make_error = || Error::new("failed to execute check command");
-            let report = engine.check().or_raise(make_error)?;
+            let report = engine.check(scope).or_raise(make_error)?;
             (report, true, options.fail_on_unknown)
         }
         SubcommandOptions::Format(options) => {
             let make_error = || Error::new("failed to execute format command");
-            let edits = engine.format().or_raise(make_error)?;
+            let edits = engine.format(scope).or_raise(make_error)?;
             let report = if options.dry_run {
                 edits.into_report()
             } else {
@@ -134,7 +161,7 @@ fn do_main() -> Result<ExitCode, Error> {
         }
         SubcommandOptions::Remove(options) => {
             let make_error = || Error::new("failed to execute remove command");
-            let edits = engine.remove().or_raise(make_error)?;
+            let edits = engine.remove(scope).or_raise(make_error)?;
             let report = if options.dry_run {
                 edits.into_report()
             } else {
@@ -209,6 +236,21 @@ fn do_main() -> Result<ExitCode, Error> {
     } else {
         ExitCode::SUCCESS
     })
+}
+
+fn resolve_paths(paths: &mut [PathBuf]) -> Result<(), Error> {
+    if paths.iter().all(|path| path.is_absolute()) {
+        return Ok(());
+    }
+
+    let current_dir = env::current_dir()
+        .or_raise(|| Error::new("cannot resolve the current working directory"))?;
+    for path in paths {
+        if path.is_relative() {
+            *path = current_dir.join(&*path);
+        }
+    }
+    Ok(())
 }
 
 fn emit_error(err: &Exn<Error>) {
