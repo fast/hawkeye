@@ -76,22 +76,22 @@ file_attrs = "disable"
 
 Use this field mapping for the rest of the config:
 
-| v6 | v7 | Migration action |
-| --- | --- | --- |
-| `baseDir` | `files.root` | Move the value under `[files]`. |
-| `inlineHeader` | `header.text` | Move the template under `[header]`. |
-| `headerPath` | `header.builtin` or `header.path` | Use a built-in key for a bundled header; otherwise use a path. |
-| `keywords` | `header.keywords` | Move the list under `[header]`. |
-| `includes` | `files.includes` | Move the list under `[files]`. |
-| `excludes` | `files.excludes` | Move the list and rewrite any negation. |
-| `properties` | `props` | Move values and update every template reference. |
-| `git.ignore` | `git.ignore` | No field rename. |
-| `git.attrs` | `git.file_attrs` | Rename the field. |
-| `[mapping.STYLE]` | `[[rules]]` | Convert mappings to ordered rule entries. |
-| `additionalHeaders` | `[styles.NAME]` | Inline each referenced style in the main config. |
-| `strictCheck` | none | Remove it; v7 uses safe literal style recognition. |
-| `useDefaultExcludes` | none | Remove it and make required exclusions explicit. |
-| `useDefaultMapping` | none | Remove it; built-in rules are always low-priority fallbacks. |
+| v6                   | v7                                | Migration action                                               |
+|----------------------|-----------------------------------|----------------------------------------------------------------|
+| `baseDir`            | `files.root`                      | Move the value under `[files]`.                                |
+| `inlineHeader`       | `header.text`                     | Move the template under `[header]`.                            |
+| `headerPath`         | `header.builtin` or `header.path` | Use a built-in key for a bundled header; otherwise use a path. |
+| `keywords`           | `header.keywords`                 | Move the list under `[header]`.                                |
+| `includes`           | `files.includes`                  | Move the list under `[files]`.                                 |
+| `excludes`           | `files.excludes`                  | Move the list and rewrite any negation.                        |
+| `properties`         | `props`                           | Move values and update every template reference.               |
+| `git.ignore`         | `git.ignore`                      | No field rename.                                               |
+| `git.attrs`          | `git.file_attrs`                  | Rename the field.                                              |
+| `[mapping.STYLE]`    | `[[rules]]`                       | Convert mappings to ordered rule entries.                      |
+| `additionalHeaders`  | `[styles.NAME]`                   | Inline each referenced style in the main config.               |
+| `strictCheck`        | none                              | Remove it; v7 uses safe literal style recognition.             |
+| `useDefaultExcludes` | none                              | Remove it and make required exclusions explicit.               |
+| `useDefaultMapping`  | none                              | Remove it; built-in rules are always low-priority fallbacks.   |
 
 v6 evaluated a relative `baseDir` from the process working directory. v7 resolves a relative `files.root` from the directory containing the selected config file, so rewrite the path when those directories differ. Relative `header.path` values are also resolved only from the config directory; v6 additionally tried `baseDir` and the process working directory for resources.
 
@@ -179,23 +179,23 @@ Do not recreate a v6 mapping that is already covered by a v7 built-in rule unles
 
 v6 style names are case-insensitive; v7 names are case-sensitive. These common built-in names map as follows:
 
-| v6 | v7 | v6 | v7 |
-| --- | --- | --- | --- |
-| `DOUBLESLASH_STYLE` | `doubleslash` | `SLASHSTAR_STYLE` | `slashstar` |
-| `TRIPLESLASH_STYLE` | `tripleslash` | `JAVADOC_STYLE` | `javadoc` |
-| `SCRIPT_STYLE` | `script` | `DOUBLEDASHES_STYLE` | `doubledashes` |
-| `XML_STYLE` | `xml` | `XML_PER_LINE` | `xml_per_line` |
-| `PERCENT_STYLE` | `percent` | `PERCENT3_STYLE` | `percent3` |
-| `SEMICOLON_STYLE` | `semicolon` | `APOSTROPHE_STYLE` | `apostrophe` |
+| v6                  | v7            | v6                   | v7             |
+|---------------------|---------------|----------------------|----------------|
+| `DOUBLESLASH_STYLE` | `doubleslash` | `SLASHSTAR_STYLE`    | `slashstar`    |
+| `TRIPLESLASH_STYLE` | `tripleslash` | `JAVADOC_STYLE`      | `javadoc`      |
+| `SCRIPT_STYLE`      | `script`      | `DOUBLEDASHES_STYLE` | `doubledashes` |
+| `XML_STYLE`         | `xml`         | `XML_PER_LINE`       | `xml_per_line` |
+| `PERCENT_STYLE`     | `percent`     | `PERCENT3_STYLE`     | `percent3`     |
+| `SEMICOLON_STYLE`   | `semicolon`   | `APOSTROPHE_STYLE`   | `apostrophe`   |
 | `EXCLAMATION_STYLE` | `exclamation` | `EXCLAMATION3_STYLE` | `exclamation3` |
-| `DOUBLETILDE_STYLE` | `doubletilde` | `BATCH` | `batch` |
-| `HAML_STYLE` | `haml` | `BRACESSTAR_STYLE` | `bracesstar` |
-| `SHARPSTAR_STYLE` | `sharpstar` | `MUSTACHE_STYLE` | `mustache` |
-| `MVEL_STYLE` | `mvel` | `FTL` | `ftl` |
-| `FTL_ALT` | `ftl_alt` | `DYNASCRIPT_STYLE` | `dynascript` |
-| `DYNASCRIPT3_STYLE` | `dynascript3` | `ASP` | `asp` |
-| `PHP` | `slashstar` | `LUA` | `lua` |
-| `ASCIIDOC_STYLE` | `asciidoc` | `LINE_BLOCK_STYLE` | `line_block` |
+| `DOUBLETILDE_STYLE` | `doubletilde` | `BATCH`              | `batch`        |
+| `HAML_STYLE`        | `haml`        | `BRACESSTAR_STYLE`   | `bracesstar`   |
+| `SHARPSTAR_STYLE`   | `sharpstar`   | `MUSTACHE_STYLE`     | `mustache`     |
+| `MVEL_STYLE`        | `mvel`        | `FTL`                | `ftl`          |
+| `FTL_ALT`           | `ftl_alt`     | `DYNASCRIPT_STYLE`   | `dynascript`   |
+| `DYNASCRIPT3_STYLE` | `dynascript3` | `ASP`                | `asp`          |
+| `PHP`               | `slashstar`   | `LUA`                | `lua`          |
+| `ASCIIDOC_STYLE`    | `asciidoc`    | `LINE_BLOCK_STYLE`   | `line_block`   |
 
 For `SCALA_STYLE`, `JAVAPKG_STYLE`, `UNKNOWN`, or any project-defined style, create a custom v7 style instead of guessing a built-in replacement. Even mapped built-ins may produce slightly different canonical whitespace, so inspect the dry-run diff.
 
@@ -235,16 +235,16 @@ v7 defines Git creation as the latest addition in the current exact-path lifetim
 
 ## 3. Update command lines
 
-| v6 | v7 |
-| --- | --- |
-| `--fail-if-unknown` | `--fail-on-unknown` |
-| `--output report.json` | `--output-format json > report.json` |
-| `check --fail-if-missing=true` | `check` already fails when a change is required |
-| `check --fail-if-missing=false` | No equivalent; consume the JSON report if a non-failing audit is required |
-| `format --fail-if-updated=true` | `format --fail-on-change` |
-| `format --fail-if-updated=false` | `format` |
-| `remove --fail-if-updated=true` | `remove --fail-on-change` |
-| `remove --fail-if-updated=false` | `remove` |
+| v6                               | v7                                                                        |
+|----------------------------------|---------------------------------------------------------------------------|
+| `--fail-if-unknown`              | `--fail-on-unknown`                                                       |
+| `--output report.json`           | `--output-format json > report.json`                                      |
+| `check --fail-if-missing=true`   | `check` already fails when a change is required                           |
+| `check --fail-if-missing=false`  | No equivalent; consume the JSON report if a non-failing audit is required |
+| `format --fail-if-updated=true`  | `format --fail-on-change`                                                 |
+| `format --fail-if-updated=false` | `format`                                                                  |
+| `remove --fail-if-updated=true`  | `remove --fail-on-change`                                                 |
+| `remove --fail-if-updated=false` | `remove`                                                                  |
 
 The v7 `format` and `remove` commands succeed after making changes unless `--fail-on-change` is present. CI should normally use `hawkeye check`; use `--fail-on-change` only when an editing command must preserve the old failure policy.
 

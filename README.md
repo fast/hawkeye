@@ -181,15 +181,15 @@ styles_in = ["doubleslash", "slashstar"]
 
 Templates use MiniJinja with strict undefined values, auto-escaping disabled, and its standard built-in filters, tests, and functions. HawkEye does not enable template includes or external loaders. The template context contains:
 
-| Value                           | Meaning                                                                         |
-| ------------------------------- | ------------------------------------------------------------------------------- |
-| `props`                         | The complete user-defined `[props]` table.                                      |
-| `attrs.filename`                | The current file name.                                                          |
-| `attrs.disk_file_created_year`  | The filesystem creation year, or `null` when unavailable.                       |
-| `attrs.disk_file_modified_year` | The filesystem modification year, or `null` when unavailable.                   |
-| `attrs.git_file_created_year`   | The year the current exact-path lifetime began, or `null` when unavailable.      |
-| `attrs.git_file_modified_year`  | The latest year in the current exact-path history, including worktree changes.  |
-| `attrs.git_authors`             | Sorted distinct author names from the current exact-path history.               |
+| Value                           | Meaning                                                                        |
+|---------------------------------|--------------------------------------------------------------------------------|
+| `props`                         | The complete user-defined `[props]` table.                                     |
+| `attrs.filename`                | The current file name.                                                         |
+| `attrs.disk_file_created_year`  | The filesystem creation year, or `null` when unavailable.                      |
+| `attrs.disk_file_modified_year` | The filesystem modification year, or `null` when unavailable.                  |
+| `attrs.git_file_created_year`   | The year the current exact-path lifetime began, or `null` when unavailable.    |
+| `attrs.git_file_modified_year`  | The latest year in the current exact-path history, including worktree changes. |
+| `attrs.git_authors`             | Sorted distinct author names from the current exact-path history.              |
 
 HawkEye never substitutes the current year for an unavailable value. Templates that need a fallback must express it explicitly.
 
