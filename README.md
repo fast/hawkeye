@@ -13,8 +13,8 @@
 [msrv-badge]: https://img.shields.io/badge/MSRV-1.89-green?logo=rust
 [license-badge]: https://img.shields.io/crates/l/hawkeye
 [license-url]: https://www.apache.org/licenses/LICENSE-2.0
-[actions-badge]: https://github.com/korandoru/hawkeye/actions/workflows/ci.yml/badge.svg
-[actions-url]: https://github.com/korandoru/hawkeye/actions/workflows/ci.yml
+[actions-badge]: https://github.com/fast/hawkeye/actions/workflows/ci.yml/badge.svg
+[actions-url]: https://github.com/fast/hawkeye/actions/workflows/ci.yml
 
 HawkEye checks, formats, and removes source-file license headers. The crate provides both the `hawkeye` command-line tool and a Rust library.
 
@@ -91,7 +91,7 @@ Exit code 0 means the selected policy passed. Exit code 1 means `check` found a 
 The distroless image runs HawkEye in `/workspace`. Pass the host user when formatting a bind mount so that writes retain the expected ownership:
 
 ```shell
-docker run --rm --user "$(id -u):$(id -g)" --volume "$PWD:/workspace" ghcr.io/korandoru/hawkeye:v7.0.0-alpha.1 check
+docker run --rm --user "$(id -u):$(id -g)" --volume "$PWD:/workspace" ghcr.io/fast/hawkeye:v7.0.0-alpha.1 check
 ```
 
 ### GitHub Actions
@@ -113,7 +113,7 @@ The default hook installs the matching HawkEye source revision in pre-commit's i
 
 ```yaml
 repos:
-  - repo: https://github.com/korandoru/hawkeye
+  - repo: https://github.com/fast/hawkeye
     rev: v7.0.0-alpha.1
     hooks:
       - id: hawkeye-format
