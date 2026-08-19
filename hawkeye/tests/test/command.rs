@@ -243,6 +243,41 @@ ignore = "enable"
     assert_eq!(project.read("excluded.rs"), "fn excluded() {}\n");
 }
 
+#[cfg(unix)]
+#[test]
+fn explicit_file_paths_keep_symlink_identity() {
+    let project = Project::empty();
+    project.write(
+        "licenserc.toml",
+        r#"[header]
+text = "Copyright 2026 Acme"
+
+[files]
+includes = ["source.rs"]
+
+[git]
+ignore = "disable"
+"#,
+    );
+    project.write("target.txt", "fn main() {}\n");
+    std::os::unix::fs::symlink("target.txt", project.path().join("source.rs"))
+        .expect("create source symlink");
+
+    let formatted = project.run(["format", "source.rs", "--output-format=json"]);
+    assert_exit(&formatted, 0);
+    assert_report(&formatted, &[("source.rs", "add")]);
+    assert!(
+        fs::symlink_metadata(project.path().join("source.rs"))
+            .expect("read source metadata")
+            .file_type()
+            .is_symlink()
+    );
+    assert_eq!(
+        project.read("target.txt"),
+        "// Copyright 2026 Acme\n\nfn main() {}\n"
+    );
+}
+
 #[test]
 fn errors_and_debug_logs_use_stderr_only() {
     let project = Project::empty();

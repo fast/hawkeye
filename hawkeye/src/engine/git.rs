@@ -27,7 +27,6 @@ use gix::bstr::BString;
 use gix::bstr::ByteSlice;
 use jiff::Timestamp;
 use jiff::tz::Offset;
-use jiff::tz::TimeZone;
 
 use crate::Error;
 use crate::ErrorKind;
@@ -40,9 +39,38 @@ pub struct FileHistory {
 }
 
 #[derive(Clone, Copy, Eq, PartialEq)]
-enum ParentState {
-    Absent,
-    Changed,
+enum PathChange {
+    Addition,
+    Modification,
+}
+
+// A dense path ID keeps merge de-duplication to one bit per selected path and visited commit.
+// Retaining full path strings here would make memory grow prohibitively on large repositories.
+struct VisitedPaths {
+    words_per_commit: usize,
+    by_commit: HashMap<gix::ObjectId, Box<[u64]>>,
+}
+
+impl VisitedPaths {
+    fn new(path_count: usize) -> Self {
+        debug_assert_ne!(path_count, 0);
+        Self {
+            words_per_commit: path_count.div_ceil(u64::BITS as usize),
+            by_commit: HashMap::new(),
+        }
+    }
+
+    fn insert(&mut self, commit: gix::ObjectId, path: usize) -> bool {
+        let words = self
+            .by_commit
+            .entry(commit)
+            .or_insert_with(|| vec![0; self.words_per_commit].into_boxed_slice());
+        let word = &mut words[path / u64::BITS as usize];
+        let mask = 1_u64 << (path % u64::BITS as usize);
+        let inserted = *word & mask == 0;
+        *word |= mask;
+        inserted
+    }
 }
 
 impl FileHistory {
@@ -165,23 +193,30 @@ impl Repository {
         files: impl IntoIterator<Item = &'a Path>,
     ) -> Result<HashMap<PathBuf, FileHistory>, Error> {
         let relative_root = self.relative_root(scan_root)?;
-        let selected = files
-            .into_iter()
-            .map(|path| (encode_path(&relative_root.join(path)), path.to_path_buf()))
-            .collect::<HashMap<_, _>>();
-        if selected.is_empty() {
+        let mut selected = HashMap::new();
+        let mut files_by_id = Vec::new();
+        for path in files {
+            let git_path = encode_path(&relative_root.join(path));
+            if selected.contains_key(git_path.as_bstr()) {
+                continue;
+            }
+            let id = files_by_id.len();
+            selected.insert(git_path, id);
+            files_by_id.push(path.to_path_buf());
+        }
+        if files_by_id.is_empty() {
             return Ok(HashMap::new());
         }
 
         let started = Instant::now();
-        let current_year = Timestamp::now().to_zoned(TimeZone::UTC).year();
+        let current_year = commit_year(gix::date::Time::now_local_or_utc())?;
         let current_author = self
             .inner
             .config_snapshot()
             .string(gix::config::tree::User::NAME)
             .map(|value| String::from_utf8_lossy(&value).trim().to_owned())
             .filter(|value| !value.is_empty());
-        let mut history = self.committed_history(&selected)?;
+        let mut history = self.committed_history(&selected, &files_by_id)?;
         let status_pathspecs = selected
             .keys()
             .map(|path| literal_pathspec(path.as_bstr()))
@@ -218,7 +253,8 @@ impl Repository {
                 gix::status::Item::TreeIndex(change) => change.location(),
                 _ => continue,
             };
-            if let Some(path) = selected.get(path) {
+            if let Some(id) = selected.get(path) {
+                let path = &files_by_id[*id];
                 history
                     .entry(path.clone())
                     .or_default()
@@ -228,7 +264,7 @@ impl Repository {
 
         // Files absent from HEAD are new worktree files even when status omits them, for example
         // when the caller explicitly selected an ignored file.
-        for path in selected.values() {
+        for path in &files_by_id {
             history.entry(path.clone()).or_insert_with(|| {
                 let mut history = FileHistory::default();
                 history.record_worktree(current_year, current_author.as_deref());
@@ -237,7 +273,7 @@ impl Repository {
         }
         log::debug!(
             "resolved Git history for {} files in {:?}",
-            selected.len(),
+            files_by_id.len(),
             started.elapsed()
         );
         Ok(history)
@@ -249,7 +285,8 @@ impl Repository {
 
     fn committed_history(
         &self,
-        selected: &HashMap<BString, PathBuf>,
+        selected: &HashMap<BString, usize>,
+        files_by_id: &[PathBuf],
     ) -> Result<HashMap<PathBuf, FileHistory>, Error> {
         let mut repo = self.inner.clone();
         // Repeated tree diffs benefit from decoded objects, but the recommendation scales with
@@ -287,7 +324,7 @@ impl Repository {
                 Error::new(ErrorKind::Unexpected, "cannot read Git HEAD tree").with_source(err)
             })?;
         let mut pending = HashSet::with_capacity(selected.len());
-        for path in selected.keys() {
+        for (path, id) in selected {
             let tree_path = gix::path::from_bstr(path.as_bstr());
             if head_tree
                 .lookup_entry_by_path(tree_path.as_ref())
@@ -297,7 +334,7 @@ impl Repository {
                 })?
                 .is_some()
             {
-                pending.insert(path.clone());
+                pending.insert(*id);
             }
         }
         if pending.is_empty() {
@@ -310,7 +347,10 @@ impl Repository {
                 Error::new(ErrorKind::Unexpected, "cannot prepare Git tree diff").with_source(err)
             })?;
         let mut history = HashMap::<PathBuf, FileHistory>::new();
-        let mut seen = HashMap::from([(head, pending.clone())]);
+        let mut visited = VisitedPaths::new(files_by_id.len());
+        for path in &pending {
+            visited.insert(head, *path);
+        }
         let mut queue = VecDeque::from([(head, pending)]);
         while let Some((commit_id, paths)) = queue.pop_front() {
             let commit = repo.find_commit(commit_id).map_err(|err| {
@@ -346,28 +386,30 @@ impl Repository {
                 changes.options(|options| {
                     options.track_rewrites(None);
                 });
-                let mut changed = HashMap::new();
+                let mut path_changes = HashMap::new();
                 changes
                     .for_each_to_obtain_tree_with_cache::<Infallible>(
                         &tree,
                         &mut resource_cache,
                         |change| {
-                            let (location, state) = match change {
+                            let (location, path_change) = match change {
                                 gix::object::tree::diff::Change::Addition { location, .. } => {
-                                    (location, ParentState::Absent)
+                                    (location, PathChange::Addition)
                                 }
                                 gix::object::tree::diff::Change::Modification {
                                     location, ..
                                 }
                                 | gix::object::tree::diff::Change::Deletion { location, .. } => {
-                                    (location, ParentState::Changed)
+                                    (location, PathChange::Modification)
                                 }
                                 gix::object::tree::diff::Change::Rewrite { .. } => {
                                     unreachable!("rewrite tracking is disabled")
                                 }
                             };
-                            if paths.contains(location) {
-                                changed.insert(location.to_owned(), state);
+                            if let Some(id) = selected.get(location)
+                                && paths.contains(id)
+                            {
+                                path_changes.insert(*id, path_change);
                             }
                             Ok(ControlFlow::Continue(()))
                         },
@@ -376,33 +418,38 @@ impl Repository {
                         Error::new(ErrorKind::Unexpected, "cannot compare Git commit trees")
                             .with_source(err)
                     })?;
-                parent_changes.push((parent, changed));
+                parent_changes.push((parent, path_changes));
             }
 
-            let mut routes = HashMap::<gix::ObjectId, HashSet<BString>>::new();
-            let mut changes = Vec::new();
+            let mut routes = HashMap::<gix::ObjectId, HashSet<usize>>::new();
+            let mut commit_changes = Vec::new();
             for path in paths {
                 // A merge result identical to a parent came from that parent. Following only the
                 // first matching parent prevents discarded side-branch changes from leaking in.
                 if let Some((parent, _)) = parent_changes
                     .iter()
-                    .find(|(_, changed)| !changed.contains_key(path.as_bstr()))
+                    .find(|(_, changes)| !changes.contains_key(&path))
                 {
                     routes.entry(*parent).or_default().insert(path);
                     continue;
                 }
 
                 let mut existed = false;
-                for (parent, changed) in &parent_changes {
-                    if changed.get(path.as_bstr()) == Some(&ParentState::Changed) {
+                for (parent, changes) in &parent_changes {
+                    if changes.get(&path) == Some(&PathChange::Modification) {
                         existed = true;
-                        routes.entry(*parent).or_default().insert(path.clone());
+                        routes.entry(*parent).or_default().insert(path);
                     }
                 }
-                changes.push((path, !existed));
+                let change = if existed {
+                    PathChange::Modification
+                } else {
+                    PathChange::Addition
+                };
+                commit_changes.push((path, change));
             }
 
-            if !changes.is_empty() {
+            if !commit_changes.is_empty() {
                 let year = commit_year(commit.time().map_err(|err| {
                     Error::new(ErrorKind::Unexpected, "cannot read Git commit time")
                         .with_source(err)
@@ -412,27 +459,27 @@ impl Repository {
                         .with_source(err)
                 })?;
                 let author = String::from_utf8_lossy(author.name.as_ref()).into_owned();
-                for (path, added) in changes {
-                    let file = selected
-                        .get(path.as_bstr())
-                        .expect("history paths originate from selected files");
+                for (path, change) in commit_changes {
+                    let file = &files_by_id[path];
                     let history = history.entry(file.clone()).or_default();
-                    if added {
-                        history.record_addition(year, &author);
-                    } else {
-                        history.record_change(year, &author);
+                    match change {
+                        PathChange::Addition => history.record_addition(year, &author),
+                        PathChange::Modification => history.record_change(year, &author),
                     }
                 }
             }
 
-            for (parent, paths) in routes {
-                enqueue_paths(&mut queue, &mut seen, parent, paths);
+            for (parent, mut paths) in routes {
+                paths.retain(|path| visited.insert(parent, *path));
+                if !paths.is_empty() {
+                    queue.push_back((parent, paths));
+                }
             }
         }
         log::debug!(
             "traversed {} commits for {} Git path histories",
-            seen.len(),
-            selected.len(),
+            visited.by_commit.len(),
+            files_by_id.len(),
         );
         Ok(history)
     }
@@ -491,22 +538,6 @@ fn path_prefix(path: &Path) -> BString {
         path.push(b'/');
     }
     path
-}
-
-fn enqueue_paths(
-    queue: &mut VecDeque<(gix::ObjectId, HashSet<BString>)>,
-    seen: &mut HashMap<gix::ObjectId, HashSet<BString>>,
-    commit: gix::ObjectId,
-    paths: HashSet<BString>,
-) {
-    let seen = seen.entry(commit).or_default();
-    let paths = paths
-        .into_iter()
-        .filter(|path| seen.insert(path.clone()))
-        .collect::<HashSet<_>>();
-    if !paths.is_empty() {
-        queue.push_back((commit, paths));
-    }
 }
 
 fn scan_pathspec(relative_root: &Path) -> Option<BString> {
