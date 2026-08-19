@@ -67,14 +67,13 @@ hawkeye format
 | `hawkeye format` | Adds missing headers and replaces recognized non-canonical headers.            |
 | `hawkeye remove` | Removes recognized headers.                                                    |
 
-Pass files or directories after a command to avoid scanning the rest of a large repository. `--files-from` reads one UTF-8 path per line from a file, and `-` reads stdin:
+Pass files or directories after a command to avoid scanning the rest of a large repository:
 
 ```shell
 hawkeye check src/lib.rs src/bin
-git diff --name-only origin/main | hawkeye check --files-from -
 ```
 
-Command-line paths are resolved from the current directory. They still obey `files.root`, `files.includes`, and `files.excludes`; an explicitly named file bypasses Git ignore rules, while a named directory uses normal discovery. Missing paths are skipped with a warning, while paths outside `files.root` are ignored as out of scope. An explicitly supplied empty list selects no files.
+Command-line paths are resolved from the current directory. They still obey `files.root`, `files.includes`, and `files.excludes`; an explicitly named file bypasses Git ignore rules, while a named directory uses normal discovery. Missing paths are skipped with a warning, while paths outside `files.root` are ignored as out of scope.
 
 Without `--config`, HawkEye tries `licenserc.toml` and then `.licenserc.toml` in the current directory. It does not search parent directories.
 
@@ -117,7 +116,7 @@ repos:
       - id: hawkeye-format
 ```
 
-The hooks pass only the files selected by pre-commit. Set `pass_filenames: false` on a hook in the project's `.pre-commit-config.yaml` to scan the complete configured file set instead. The Python hook needs a Rust toolchain when its environment is created for the first time. Use `hawkeye-format-docker` instead when Docker is the preferred runtime.
+The hooks pass only the files selected by pre-commit. To scan the complete configured file set whenever a hook runs, set `pass_filenames: false` on that hook in the project's `.pre-commit-config.yaml`; HawkEye then receives no paths and performs a normal full scan. Pre-commit skips a hook when no files match, so also set `always_run: true` when the full scan must run even in that case. The Python hook needs a Rust toolchain when its environment is created for the first time. Use `hawkeye-format-docker` instead when Docker is the preferred runtime.
 
 ## Configuration
 

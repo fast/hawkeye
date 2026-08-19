@@ -13,10 +13,6 @@
 // limitations under the License.
 
 use std::env;
-use std::fs;
-use std::io;
-use std::io::Read;
-use std::path::Path;
 use std::path::PathBuf;
 
 use clap::Args;
@@ -29,20 +25,12 @@ pub struct PathOptions {
     /// Files and directories to process.
     #[arg(value_name = "PATH")]
     paths: Vec<PathBuf>,
-
-    /// Read one UTF-8 path per line from FILE; use `-` for stdin.
-    #[arg(long, value_name = "FILE")]
-    files_from: Option<PathBuf>,
 }
 
 impl PathOptions {
     pub fn into_paths(mut self) -> Result<Option<Vec<PathBuf>>, Error> {
-        if self.paths.is_empty() && self.files_from.is_none() {
+        if self.paths.is_empty() {
             return Ok(None);
-        }
-
-        if let Some(path) = self.files_from {
-            self.paths.extend(read_path_list(&path)?);
         }
 
         // CLI paths follow the current directory; Engine paths follow the configured file root.
@@ -55,23 +43,4 @@ impl PathOptions {
         }
         Ok(Some(self.paths))
     }
-}
-
-fn read_path_list(path: &Path) -> Result<Vec<PathBuf>, Error> {
-    let mut content = String::new();
-    if path == Path::new("-") {
-        io::stdin()
-            .read_to_string(&mut content)
-            .map_err(|err| Error::new(format!("cannot read paths from stdin: {err}")))?;
-    } else {
-        content = fs::read_to_string(path).map_err(|err| {
-            Error::new(format!("cannot read paths from {}: {err}", path.display()))
-        })?;
-    }
-
-    Ok(content
-        .lines()
-        .filter(|path| !path.is_empty())
-        .map(PathBuf::from)
-        .collect())
 }

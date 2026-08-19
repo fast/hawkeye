@@ -244,42 +244,6 @@ ignore = "enable"
 }
 
 #[test]
-fn files_from_accepts_files_stdin_and_empty_input() {
-    let project = Project::empty();
-    project.write(
-        "licenserc.toml",
-        r#"[header]
-text = "Copyright 2026 Acme"
-
-[files]
-root = "source"
-includes = ["**/*.rs"]
-
-[git]
-ignore = "disable"
-"#,
-    );
-    project.write("source/first.rs", "fn first() {}\n");
-    project.write("source/second.rs", "fn second() {}\n");
-    project.write("paths.txt", "source/first.rs\r\n");
-
-    let from_file = project.run(["format", "--files-from=paths.txt", "--output-format=json"]);
-    assert_exit(&from_file, 0);
-    assert_report(&from_file, &[("first.rs", "add")]);
-
-    let from_stdin = project.run_with_stdin(
-        ["format", "--files-from=-", "--output-format=json"],
-        b"source/second.rs\n",
-    );
-    assert_exit(&from_stdin, 0);
-    assert_report(&from_stdin, &[("second.rs", "add")]);
-
-    let empty = project.run_with_stdin(["check", "--files-from=-", "--output-format=json"], []);
-    assert_exit(&empty, 0);
-    assert_report(&empty, &[]);
-}
-
-#[test]
 fn errors_and_debug_logs_use_stderr_only() {
     let project = Project::empty();
     let missing_config = project.run(["check"]);
