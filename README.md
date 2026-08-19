@@ -13,8 +13,8 @@
 [msrv-badge]: https://img.shields.io/badge/MSRV-1.89-green?logo=rust
 [license-badge]: https://img.shields.io/crates/l/hawkeye
 [license-url]: https://www.apache.org/licenses/LICENSE-2.0
-[actions-badge]: https://github.com/korandoru/hawkeye/actions/workflows/ci.yml/badge.svg
-[actions-url]: https://github.com/korandoru/hawkeye/actions/workflows/ci.yml
+[actions-badge]: https://github.com/fast/hawkeye/actions/workflows/ci.yml/badge.svg
+[actions-url]: https://github.com/fast/hawkeye/actions/workflows/ci.yml
 
 HawkEye checks, formats, and removes source-file license headers. The crate provides both the `hawkeye` command-line tool and a Rust library.
 
@@ -91,19 +91,18 @@ Exit code 0 means the selected policy passed. Exit code 1 means `check` found a 
 The distroless image runs HawkEye in `/workspace`. Pass the host user when formatting a bind mount so that writes retain the expected ownership:
 
 ```shell
-docker run --rm --user "$(id -u):$(id -g)" --volume "$PWD:/workspace" ghcr.io/korandoru/hawkeye:v7.0.0-alpha.1 check
+docker run --rm --user "$(id -u):$(id -g)" --volume "$PWD:/workspace" ghcr.io/fast/hawkeye:v7.0.0-alpha.1 check
 ```
 
 ### GitHub Actions
 
-Install the released binary with cargo-binstall and invoke HawkEye directly; no HawkEye-specific action is required:
+Install the released binary and invoke HawkEye directly; no HawkEye-specific action is required:
 
 ```yaml
 - uses: actions/checkout@v7
 - uses: taiki-e/install-action@v2
   with:
-    tool: cargo-binstall
-- run: cargo binstall hawkeye@7.0.0-alpha.1 --no-confirm
+    tool: hawkeye@7.0.0-alpha.1
 - run: hawkeye check
 ```
 
@@ -113,7 +112,7 @@ The default hook installs the matching HawkEye source revision in pre-commit's i
 
 ```yaml
 repos:
-  - repo: https://github.com/korandoru/hawkeye
+  - repo: https://github.com/fast/hawkeye
     rev: v7.0.0-alpha.1
     hooks:
       - id: hawkeye-format
@@ -182,15 +181,15 @@ styles_in = ["doubleslash", "slashstar"]
 
 Templates use MiniJinja with strict undefined values, auto-escaping disabled, and its standard built-in filters, tests, and functions. HawkEye does not enable template includes or external loaders. The template context contains:
 
-| Value                           | Meaning                                                                         |
-| ------------------------------- | ------------------------------------------------------------------------------- |
-| `props`                         | The complete user-defined `[props]` table.                                      |
-| `attrs.filename`                | The current file name.                                                          |
-| `attrs.disk_file_created_year`  | The filesystem creation year, or `null` when unavailable.                       |
-| `attrs.disk_file_modified_year` | The filesystem modification year, or `null` when unavailable.                   |
-| `attrs.git_file_created_year`   | The year the current exact-path lifetime began, or `null` when unavailable.      |
-| `attrs.git_file_modified_year`  | The latest year in the current exact-path history, including worktree changes.  |
-| `attrs.git_authors`             | Sorted distinct author names from the current exact-path history.               |
+| Value                           | Meaning                                                                        |
+|---------------------------------|--------------------------------------------------------------------------------|
+| `props`                         | The complete user-defined `[props]` table.                                     |
+| `attrs.filename`                | The current file name.                                                         |
+| `attrs.disk_file_created_year`  | The filesystem creation year, or `null` when unavailable.                      |
+| `attrs.disk_file_modified_year` | The filesystem modification year, or `null` when unavailable.                  |
+| `attrs.git_file_created_year`   | The year the current exact-path lifetime began, or `null` when unavailable.    |
+| `attrs.git_file_modified_year`  | The latest year in the current exact-path history, including worktree changes. |
+| `attrs.git_authors`             | Sorted distinct author names from the current exact-path history.              |
 
 HawkEye never substitutes the current year for an unavailable value. Templates that need a fallback must express it explicitly.
 
@@ -237,7 +236,9 @@ hawkeye = { version = "7.0.0-alpha.1", default-features = false }
 
 ## Compatibility
 
-HawkEye v7 uses a new snake-case configuration format and does not accept v6 field names. A v6 config must be migrated before use with v7.
+HawkEye v7 uses a new snake-case configuration format and does not accept v6 field names. Follow [MIGRATE.md](MIGRATE.md) to migrate a v6 configuration, command line, and integration.
+
+Release summaries are recorded in [CHANGELOG.md](CHANGELOG.md).
 
 The minimum supported Rust version is 1.89.0. It may be raised in a minor release; patch releases preserve the minimum version of their corresponding minor release.
 
