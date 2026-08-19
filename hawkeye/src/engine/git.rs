@@ -14,6 +14,7 @@
 
 use std::collections::BTreeSet;
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::convert::Infallible;
 use std::ops::ControlFlow;
 use std::path::Path;
@@ -260,16 +261,56 @@ impl Repository {
             return Ok(HashMap::new());
         };
 
+        let head = head.detach();
+        let head_tree = repo
+            .find_commit(head)
+            .map_err(|err| {
+                Error::new(ErrorKind::Unexpected, "cannot read Git HEAD").with_source(err)
+            })?
+            .tree()
+            .map_err(|err| {
+                Error::new(ErrorKind::Unexpected, "cannot read Git HEAD tree").with_source(err)
+            })?;
+        let mut pending = HashSet::with_capacity(selected.len());
+        for path in selected.keys() {
+            let tree_path = gix::path::from_bstr(path.as_bstr());
+            if head_tree
+                .lookup_entry_by_path(tree_path.as_ref())
+                .map_err(|err| {
+                    Error::new(ErrorKind::Unexpected, "cannot inspect Git HEAD tree")
+                        .with_source(err)
+                })?
+                .is_some()
+            {
+                pending.insert(path.clone());
+            }
+        }
+        if pending.is_empty() {
+            return Ok(HashMap::new());
+        }
+
         let mut resource_cache = repo
             .diff_resource_cache(gix::diff::blob::pipeline::Mode::ToGit, Default::default())
             .map_err(|err| {
                 Error::new(ErrorKind::Unexpected, "cannot prepare Git tree diff").with_source(err)
             })?;
-        let commits = repo.rev_walk([head.detach()]).all().map_err(|err| {
-            Error::new(ErrorKind::Unexpected, "cannot traverse Git history").with_source(err)
-        })?;
+        // The first addition seen from newest to oldest starts the path's current lifetime.
+        let commits = repo
+            .rev_walk([head])
+            .sorting(gix::revision::walk::Sorting::ByCommitTime(
+                Default::default(),
+            ))
+            .all()
+            .map_err(|err| {
+                Error::new(ErrorKind::Unexpected, "cannot traverse Git history").with_source(err)
+            })?;
         let mut history = HashMap::<PathBuf, FileHistory>::new();
+        let mut commits_walked = 0;
         for info in commits {
+            if pending.is_empty() {
+                break;
+            }
+            commits_walked += 1;
             let info = info.map_err(|err| {
                 Error::new(ErrorKind::Unexpected, "cannot traverse Git history").with_source(err)
             })?;
@@ -320,11 +361,32 @@ impl Repository {
                     &tree,
                     &mut resource_cache,
                     |change| {
-                        if let Some(path) = selected.get(change.location()) {
-                            history
-                                .entry(path.clone())
-                                .or_default()
-                                .record_commit(year, &author);
+                        let (location, added) = match change {
+                            gix::object::tree::diff::Change::Addition { location, .. } => {
+                                (location, true)
+                            }
+                            gix::object::tree::diff::Change::Modification { location, .. } => {
+                                (location, false)
+                            }
+                            gix::object::tree::diff::Change::Deletion { .. } => {
+                                return Ok(ControlFlow::Continue(()));
+                            }
+                            gix::object::tree::diff::Change::Rewrite { .. } => {
+                                unreachable!("rewrite tracking is disabled")
+                            }
+                        };
+                        if !pending.contains(location) {
+                            return Ok(ControlFlow::Continue(()));
+                        }
+                        let Some(path) = selected.get(location) else {
+                            return Ok(ControlFlow::Continue(()));
+                        };
+                        history
+                            .entry(path.clone())
+                            .or_default()
+                            .record_commit(year, &author);
+                        if added {
+                            pending.remove(location);
                         }
                         Ok(ControlFlow::Continue(()))
                     },
@@ -334,6 +396,11 @@ impl Repository {
                         .with_source(err)
                 })?;
         }
+        log::debug!(
+            "traversed {commits_walked} commits for {} paths; {} histories remain unresolved",
+            selected.len(),
+            pending.len()
+        );
         Ok(history)
     }
 
