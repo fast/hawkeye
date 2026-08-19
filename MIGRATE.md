@@ -1,6 +1,6 @@
 # Migrating from HawkEye v6 to v7
 
-HawkEye v7 is a rewrite. It does not accept v6 configuration aliases, and several behaviors changed in addition to the move from camel case to snake case. This guide targets v6.5.x and v7.0.0-alpha.1 and is written as an executable migration checklist for either a person or a code agent.
+HawkEye v7 is a rewrite. It does not accept v6 configuration aliases, and several behaviors changed in addition to the move from camel case to snake case. This guide targets v6.5.x and v7.0.0 and is written as an executable migration checklist for either a person or a code agent.
 
 ## Migration rules
 
@@ -9,7 +9,6 @@ HawkEye v7 is a rewrite. It does not accept v6 configuration aliases, and severa
 - Preserve the rendered license text, selected files, and failure policy unless this guide identifies an intentional v7 semantic change.
 - Treat exit code 2 as a migration or runtime error. Exit code 1 from `check` normally means the config loaded successfully but one or more files need attention.
 - Review a dry-run report before allowing `format` to write files. Do not silently accept `conflict` outcomes.
-- The canonical prerelease version is `7.0.0-alpha.1`, including the dot before `1`.
 
 ## 1. Inventory the v6 setup
 
@@ -282,7 +281,7 @@ The v6 repository action is removed. Install and invoke the released CLI explici
 - uses: actions/checkout@v7
 - uses: taiki-e/install-action@v2
   with:
-    tool: hawkeye@7.0.0-alpha.1
+    tool: hawkeye@7.0.0
 - run: hawkeye check
 ```
 
@@ -291,7 +290,7 @@ The v6 repository action is removed. Install and invoke the released CLI explici
 Use the transferred image namespace and mount the repository at `/workspace`:
 
 ```shell
-docker run --rm --user "$(id -u):$(id -g)" --volume "$PWD:/workspace" ghcr.io/fast/hawkeye:v7.0.0-alpha.1 check
+docker run --rm --user "$(id -u):$(id -g)" --volume "$PWD:/workspace" ghcr.io/fast/hawkeye:v7.0.0 check
 ```
 
 ### pre-commit
@@ -301,7 +300,7 @@ Update the repository and revision:
 ```yaml
 repos:
   - repo: https://github.com/fast/hawkeye
-    rev: v7.0.0-alpha.1
+    rev: v7.0.0
     hooks:
       - id: hawkeye-format
 ```
@@ -313,7 +312,7 @@ v7 hooks pass pre-commit's selected files to HawkEye. To retain a deliberate ful
 The separate `hawkeye-fmt` crate is replaced by the `hawkeye` library. A minimal dependency is:
 
 ```toml
-hawkeye = { version = "7.0.0-alpha.1", default-features = false }
+hawkeye = { version = "7.0.0", default-features = false }
 ```
 
 The v6 callback and document APIs are not preserved. Build a `Config`, create an `Engine`, and select an explicit `Scope`:
@@ -333,10 +332,10 @@ let report = engine.check(Scope::All)?;
 
 ## 5. Verify the migration
 
-Install the exact prerelease and confirm the selected binary:
+Install the exact release and confirm the selected binary:
 
 ```shell
-cargo install hawkeye --version 7.0.0-alpha.1 --locked
+cargo install hawkeye --version 7.0.0 --locked
 hawkeye --version
 ```
 
