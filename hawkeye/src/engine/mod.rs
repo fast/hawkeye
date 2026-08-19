@@ -255,28 +255,15 @@ impl Engine {
 
     /// Checks selected files without modifying them.
     ///
-    /// # Errors
-    ///
-    /// Returns an error if selected files cannot be discovered, read, or analyzed.
-    pub fn check(&self) -> Result<Report, Error> {
-        Ok(self.edits(HeaderTarget::Present, None)?.report)
-    }
-
-    /// Checks only the requested files and directories without modifying them.
-    ///
-    /// Relative paths are resolved against `files.root`. Direct files bypass Git ignore rules,
-    /// while directories use normal discovery. All paths still obey `files.root`,
-    /// `files.includes`, and `files.excludes`; missing or out-of-root paths are skipped. An empty
-    /// iterator selects no files.
+    /// An empty path list selects the configured file set. Otherwise, relative paths are resolved
+    /// against `files.root`; direct files bypass Git ignore rules, while directories use normal
+    /// discovery. All paths still obey `files.root`, `files.includes`, and `files.excludes`.
     ///
     /// # Errors
     ///
     /// Returns an error if selected files cannot be discovered, read, or analyzed.
-    pub fn check_paths(
-        &self,
-        paths: impl IntoIterator<Item = impl AsRef<Path>>,
-    ) -> Result<Report, Error> {
-        Ok(self.edits_for_paths(HeaderTarget::Present, paths)?.report)
+    pub fn check(&self, paths: &[PathBuf]) -> Result<Report, Error> {
+        Ok(self.edits(HeaderTarget::Present, paths)?.report)
     }
 
     /// Prepares additions and replacements that make selected headers canonical.
@@ -284,22 +271,8 @@ impl Engine {
     /// # Errors
     ///
     /// Returns an error if selected files cannot be discovered, read, or analyzed.
-    pub fn format(&self) -> Result<Edits, Error> {
-        self.edits(HeaderTarget::Present, None)
-    }
-
-    /// Prepares additions and replacements for only the requested files and directories.
-    ///
-    /// Path selection follows [`Self::check_paths`].
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if selected files cannot be discovered, read, or analyzed.
-    pub fn format_paths(
-        &self,
-        paths: impl IntoIterator<Item = impl AsRef<Path>>,
-    ) -> Result<Edits, Error> {
-        self.edits_for_paths(HeaderTarget::Present, paths)
+    pub fn format(&self, paths: &[PathBuf]) -> Result<Edits, Error> {
+        self.edits(HeaderTarget::Present, paths)
     }
 
     /// Prepares removals for recognized headers.
@@ -307,48 +280,11 @@ impl Engine {
     /// # Errors
     ///
     /// Returns an error if selected files cannot be discovered, read, or analyzed.
-    pub fn remove(&self) -> Result<Edits, Error> {
-        self.edits(HeaderTarget::Absent, None)
+    pub fn remove(&self, paths: &[PathBuf]) -> Result<Edits, Error> {
+        self.edits(HeaderTarget::Absent, paths)
     }
 
-    /// Prepares removals for recognized headers in only the requested files and directories.
-    ///
-    /// Path selection follows [`Self::check_paths`].
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if selected files cannot be discovered, read, or analyzed.
-    pub fn remove_paths(
-        &self,
-        paths: impl IntoIterator<Item = impl AsRef<Path>>,
-    ) -> Result<Edits, Error> {
-        self.edits_for_paths(HeaderTarget::Absent, paths)
-    }
-
-    fn edits_for_paths(
-        &self,
-        target: HeaderTarget,
-        paths: impl IntoIterator<Item = impl AsRef<Path>>,
-    ) -> Result<Edits, Error> {
-        let paths = paths
-            .into_iter()
-            .map(|path| path.as_ref().to_owned())
-            .collect::<Vec<_>>();
-        self.edits(target, Some(&paths))
-    }
-
-    fn edits(
-        &self,
-        target: HeaderTarget,
-        requested_paths: Option<&[PathBuf]>,
-    ) -> Result<Edits, Error> {
-        if matches!(requested_paths, Some([])) {
-            return Ok(Edits {
-                report: Report { files: Vec::new() },
-                files: Vec::new(),
-            });
-        }
-
+    fn edits(&self, target: HeaderTarget, requested_paths: &[PathBuf]) -> Result<Edits, Error> {
         let git_mode = self.git.ignore.combine(self.git.file_attrs);
         let repo = if git_mode == FeatureMode::Disable {
             None

@@ -32,19 +32,18 @@ impl Engine {
     pub(super) fn discover_files(
         &self,
         repo: Option<&Repository>,
-        requested_paths: Option<&[PathBuf]>,
+        requested_paths: &[PathBuf],
     ) -> Result<Vec<PathBuf>, Error> {
         let started = Instant::now();
-        let (files, scope) = match requested_paths {
-            None => (self.discover_directory(&self.root, repo)?, "files.root"),
-            Some(paths) => {
-                let (directories, direct_files) = self.resolve_requested_paths(paths)?;
-                let mut files = direct_files;
-                for directory in directories {
-                    files.extend(self.discover_directory(&directory, repo)?);
-                }
-                (files, "the requested paths")
+        let (files, scope) = if requested_paths.is_empty() {
+            (self.discover_directory(&self.root, repo)?, "files.root")
+        } else {
+            let (directories, direct_files) = self.resolve_requested_paths(requested_paths)?;
+            let mut files = direct_files;
+            for directory in directories {
+                files.extend(self.discover_directory(&directory, repo)?);
             }
+            (files, "the requested paths")
         };
 
         let files = if let Some(header_path) = &self.header_path {

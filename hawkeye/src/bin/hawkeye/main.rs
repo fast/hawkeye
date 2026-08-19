@@ -12,8 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-mod paths;
-
+use std::env;
 use std::fmt;
 use std::io;
 use std::io::Write;
@@ -33,8 +32,6 @@ use hawkeye::Config;
 use hawkeye::Engine;
 use hawkeye::FileOutcome;
 use logforth::filter::rustlog::RustLogFilterBuilder;
-
-use crate::paths::PathOptions;
 
 #[derive(Debug, Parser)]
 #[command(version, about)]
@@ -73,8 +70,9 @@ enum SubcommandOptions {
 
 #[derive(Debug, Args)]
 struct CheckOptions {
-    #[command(flatten)]
-    paths: PathOptions,
+    /// Files and directories to process.
+    #[arg(value_name = "PATH")]
+    paths: Vec<PathBuf>,
 
     /// Fail when selected files have no rule or are not UTF-8 text.
     #[arg(long)]
@@ -83,8 +81,9 @@ struct CheckOptions {
 
 #[derive(Debug, Args)]
 struct EditOptions {
-    #[command(flatten)]
-    paths: PathOptions,
+    /// Files and directories to process.
+    #[arg(value_name = "PATH")]
+    paths: Vec<PathBuf>,
 
     /// Show changes without writing them.
     #[arg(long)]
@@ -128,23 +127,15 @@ fn do_main() -> Result<ExitCode, Error> {
 
     let (report, fail_on_change, fail_on_unknown) = match subcommand {
         SubcommandOptions::Check(options) => {
-            let paths = options.paths.into_paths()?;
+            let paths = resolve_paths(options.paths)?;
             let make_error = || Error::new("failed to execute check command");
-            let report = match paths {
-                Some(paths) => engine.check_paths(paths),
-                None => engine.check(),
-            }
-            .or_raise(make_error)?;
+            let report = engine.check(&paths).or_raise(make_error)?;
             (report, true, options.fail_on_unknown)
         }
         SubcommandOptions::Format(options) => {
-            let paths = options.paths.into_paths()?;
+            let paths = resolve_paths(options.paths)?;
             let make_error = || Error::new("failed to execute format command");
-            let edits = match paths {
-                Some(paths) => engine.format_paths(paths),
-                None => engine.format(),
-            }
-            .or_raise(make_error)?;
+            let edits = engine.format(&paths).or_raise(make_error)?;
             let report = if options.dry_run {
                 edits.into_report()
             } else {
@@ -153,13 +144,9 @@ fn do_main() -> Result<ExitCode, Error> {
             (report, options.fail_on_change, options.fail_on_unknown)
         }
         SubcommandOptions::Remove(options) => {
-            let paths = options.paths.into_paths()?;
+            let paths = resolve_paths(options.paths)?;
             let make_error = || Error::new("failed to execute remove command");
-            let edits = match paths {
-                Some(paths) => engine.remove_paths(paths),
-                None => engine.remove(),
-            }
-            .or_raise(make_error)?;
+            let edits = engine.remove(&paths).or_raise(make_error)?;
             let report = if options.dry_run {
                 edits.into_report()
             } else {
@@ -234,6 +221,19 @@ fn do_main() -> Result<ExitCode, Error> {
     } else {
         ExitCode::SUCCESS
     })
+}
+
+fn resolve_paths(mut paths: Vec<PathBuf>) -> Result<Vec<PathBuf>, Error> {
+    if paths.iter().any(|path| path.is_relative()) {
+        let current_dir = env::current_dir()
+            .map_err(|err| Error::new(format!("cannot resolve the current directory: {err}")))?;
+        for path in &mut paths {
+            if path.is_relative() {
+                *path = current_dir.join(&*path);
+            }
+        }
+    }
+    Ok(paths)
 }
 
 fn emit_error(err: &Exn<Error>) {

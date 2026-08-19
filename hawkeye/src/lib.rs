@@ -22,7 +22,7 @@
 //!
 //! # fn main() -> Result<(), hawkeye::Error> {
 //! let config = Config::load("licenserc.toml")?;
-//! let report = Engine::new(config)?.check()?;
+//! let report = Engine::new(config)?.check(&[])?;
 //! println!("checked {} files", report.files.len());
 //! # Ok(())
 //! # }

@@ -220,11 +220,11 @@ use hawkeye::Engine;
 
 let config = Config::load("licenserc.toml")?;
 let engine = Engine::new(config)?;
-let report = engine.check()?;
+let report = engine.check(&[])?;
 # Ok::<(), hawkeye::Error>(())
 ```
 
-`Engine::check` never writes files. `Engine::format` and `Engine::remove` return pending `Edits`; call `Edits::apply` to write them or `Edits::into_report` to inspect the result without writing. The corresponding `check_paths`, `format_paths`, and `remove_paths` methods accept strings, `Path`s, or `PathBuf`s and process only requested files and directories.
+Each operation accepts a slice of paths. An empty slice processes the configured file set; otherwise, only the requested files and directories are processed. `Engine::check` never writes files. `Engine::format` and `Engine::remove` return pending `Edits`; call `Edits::apply` to write them or `Edits::into_report` to inspect the result without writing.
 
 The default `application` feature builds the command-line tool. Library-only users can omit its command-specific dependencies:
 
