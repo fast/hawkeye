@@ -12,12 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::env;
-use std::fmt;
 use std::io;
 use std::io::Write;
 use std::path::PathBuf;
 use std::process::ExitCode;
+use std::{fmt, mem};
 
 use clap::Args;
 use clap::Parser;
@@ -126,34 +125,57 @@ fn do_main() -> Result<ExitCode, Error> {
     let config = Config::load(config).or_raise(|| Error::new("cannot load config"))?;
     let engine = Engine::new(config).or_raise(|| Error::new("cannot create engine"))?;
 
-    let (report, fail_on_change, fail_on_unknown) = match subcommand {
+    let mut subcommand = subcommand;
+    let (mut paths, fail_on_change, fail_on_unknown) = match &mut subcommand {
         SubcommandOptions::Check(options) => {
-            let paths = resolve_paths(options.paths)?;
+            (mem::take(&mut options.paths), true, options.fail_on_unknown)
+        }
+        SubcommandOptions::Format(options) => (
+            mem::take(&mut options.paths),
+            options.fail_on_change,
+            options.fail_on_unknown,
+        ),
+        SubcommandOptions::Remove(options) => (
+            mem::take(&mut options.paths),
+            options.fail_on_change,
+            options.fail_on_unknown,
+        ),
+    };
+    for path in &mut paths {
+        if path.is_relative() {
+            *path = path
+                .canonicalize()
+                .or_raise(|| Error::new(format!("cannot resolve path {}", path.display())))?
+        }
+    }
+    let scope = if paths.is_empty() {
+        Scope::All
+    } else {
+        Scope::Paths(&paths)
+    };
+
+    let report = match subcommand {
+        SubcommandOptions::Check(_) => {
             let make_error = || Error::new("failed to execute check command");
-            let report = engine.check(command_scope(&paths)).or_raise(make_error)?;
-            (report, true, options.fail_on_unknown)
+            engine.check(scope).or_raise(make_error)?
         }
         SubcommandOptions::Format(options) => {
-            let paths = resolve_paths(options.paths)?;
             let make_error = || Error::new("failed to execute format command");
-            let edits = engine.format(command_scope(&paths)).or_raise(make_error)?;
-            let report = if options.dry_run {
+            let edits = engine.format(scope).or_raise(make_error)?;
+            if options.dry_run {
                 edits.into_report()
             } else {
                 edits.apply().or_raise(make_error)?
-            };
-            (report, options.fail_on_change, options.fail_on_unknown)
+            }
         }
         SubcommandOptions::Remove(options) => {
-            let paths = resolve_paths(options.paths)?;
             let make_error = || Error::new("failed to execute remove command");
-            let edits = engine.remove(command_scope(&paths)).or_raise(make_error)?;
-            let report = if options.dry_run {
+            let edits = engine.remove(scope).or_raise(make_error)?;
+            if options.dry_run {
                 edits.into_report()
             } else {
                 edits.apply().or_raise(make_error)?
-            };
-            (report, options.fail_on_change, options.fail_on_unknown)
+            }
         }
     };
 
@@ -222,27 +244,6 @@ fn do_main() -> Result<ExitCode, Error> {
     } else {
         ExitCode::SUCCESS
     })
-}
-
-fn resolve_paths(mut paths: Vec<PathBuf>) -> Result<Vec<PathBuf>, Error> {
-    if paths.iter().any(|path| path.is_relative()) {
-        let current_dir = env::current_dir()
-            .map_err(|err| Error::new(format!("cannot resolve the current directory: {err}")))?;
-        for path in &mut paths {
-            if path.is_relative() {
-                *path = current_dir.join(&*path);
-            }
-        }
-    }
-    Ok(paths)
-}
-
-fn command_scope(paths: &[PathBuf]) -> Scope<'_> {
-    if paths.is_empty() {
-        Scope::All
-    } else {
-        Scope::Paths(paths)
-    }
 }
 
 fn emit_error(err: &Exn<Error>) {
