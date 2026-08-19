@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
-## [7.0.0-alpha.1] 2026-08-19
+## v7.0.0-alpha.1 (2026-08-19)
 
 ### Breaking changes
 
@@ -26,13 +26,13 @@ All notable changes to this project will be documented in this file.
 
 See [MIGRATE.md](MIGRATE.md) for the v6-to-v7 procedure and semantic differences.
 
-## [6.5.1] 2026-02-14
+## v6.5.1 (2026-02-14)
 
 ### Bug fixes
 
 * Properly resolve relative paths when populating Git attributes for untracked folders.
 
-## [6.5.0] 2026-02-09
+## v6.5.0 (2026-02-09)
 
 ### Notable changes
 
@@ -46,19 +46,19 @@ See [MIGRATE.md](MIGRATE.md) for the v6-to-v7 procedure and semantic differences
 
 * Replace `anyhow` with `exn` for more informative error messages.
 
-## [6.4.2] 2026-02-07
+## v6.4.2 (2026-02-07)
 
 ### Bug fixes
 
 * Set Git attributes for untracked folders as if it were committed now.
 
-## [6.4.1] 2026-01-13
+## v6.4.1 (2026-01-13)
 
 ### Improvements
 
 * Use `TextLayout` for logging output to improve formatting and readability.
 
-## [6.4.0] 2026-01-12
+## v6.4.0 (2026-01-12)
 
 ### Notable changes
 
@@ -78,13 +78,13 @@ The semantic changes above are breaking, but they should not affect most users a
 
 * If `--config` is not specified, HawkEye will now search for `.licenserc.toml` in addition to `licenserc.toml`.
 
-## [6.3.0] 2025-10-09
+## v6.3.0 (2025-10-09)
 
 ### New features
 
 * Add distribution against musl libc ([#196](https://github.com/fast/hawkeye/pull/196)).
 
-## [6.2.0] 2025-08-25
+## v6.2.0 (2025-08-25)
 
 ### New features
 
@@ -92,7 +92,7 @@ The semantic changes above are breaking, but they should not affect most users a
 * Supports format Containerfile files: pattern = "Containerfile" and headerType = "SCRIPT_STYLE".
 * Add a shared flag to store lists of files to change ([#194](https://github.com/fast/hawkeye/pull/194)).
 
-## [6.1.1] 2025-06-11
+## v6.1.1 (2025-06-11)
 
 ### New features
 
@@ -100,13 +100,13 @@ The semantic changes above are breaking, but they should not affect most users a
 * Supports format Verilog files: pattern = "v" and headerType = "SLASHSTAR_STYLE".
 * Supports format SystemVerilog files: pattern = "sv" and headerType = "SLASHSTAR_STYLE".
 
-## [6.1.0] 2025-06-06
+## v6.1.0 (2025-06-06)
 
 ### New features
 
 * `attrs.disk_file_created_year` can be used to replace nonexisting Git attrs like `{{attrs.git_file_created_year if attrs.git_file_created_year else attrs.disk_file_created_year }}`
 
-## [6.0.0] 2025-01-28
+## v6.0.0 (2025-01-28)
 
 ### Breaking changes
 
