@@ -152,9 +152,7 @@ jobs:
           images: ${{ env.REGISTRY_IMAGE }}
           tags: |
             type=edge,branch=main
-            type=semver,pattern=v{{version}}
-            type=semver,pattern=v{{major}}.{{minor}}
-            type=semver,pattern=v{{major}}
+            type=semver,pattern={{raw}}
       - name: Push manifest
         env:
           AMD64_DIGEST: ${{ needs.amd64.outputs.digest }}
