@@ -106,6 +106,34 @@ ignore = "disable"
 }
 
 #[test]
+fn template_errors_identify_the_undefined_expression() {
+    let project = Project::empty();
+    project.write(
+        "licenserc.toml",
+        r#"[header]
+builtin = "Apache-2.0"
+
+[files]
+includes = ["**/*.rs"]
+
+[git]
+ignore = "disable"
+"#,
+    );
+    project.write("main.rs", "fn main() {}\n");
+
+    let formatted = project.run(["format"]);
+    assert_exit(&formatted, 2);
+    assert!(
+        stderr(&formatted).contains(
+            "source: undefined value in template expression \"props.inception_year\" (in header:1)"
+        ),
+        "unexpected diagnostic:\n{}",
+        stderr(&formatted)
+    );
+}
+
+#[test]
 fn commands_process_requested_files_and_directories() {
     let project = Project::empty();
     project.write(
