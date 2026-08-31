@@ -126,7 +126,7 @@ ignore = "disable"
     assert_exit(&formatted, 2);
     assert!(
         stderr(&formatted).contains(
-            "source: undefined value in template expression \"props.inception_year\" (in header:1)"
+            "cannot render header template: undefined value in template expression \"props.inception_year\" (in header:1)"
         ),
         "unexpected diagnostic:\n{}",
         stderr(&formatted)

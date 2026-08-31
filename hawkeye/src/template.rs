@@ -51,8 +51,11 @@ impl HeaderTemplate {
         let rendered = template
             .render(minijinja::context! { props, attrs })
             .map_err(|err| {
-                Error::new(ErrorKind::ConfigInvalid, "cannot render header template")
-                    .with_source(render_error_source(&err, template.source()))
+                let detail = render_error_message(&err, template.source());
+                Error::new(
+                    ErrorKind::ConfigInvalid,
+                    format!("cannot render header template: {detail}"),
+                )
             })?;
         let normalized = rendered.replace("\r\n", "\n").replace('\r', "\n");
         let normalized = normalized.trim_matches('\n').to_owned();
@@ -72,7 +75,7 @@ impl HeaderTemplate {
     }
 }
 
-fn render_error_source(error: &minijinja::Error, template_source: &str) -> String {
+fn render_error_message(error: &minijinja::Error, template_source: &str) -> String {
     if error.kind() != TemplateErrorKind::UndefinedError || error.detail().is_some() {
         return error.to_string();
     }
