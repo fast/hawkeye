@@ -17,6 +17,7 @@ use std::collections::BTreeMap;
 
 use minijinja::AutoEscape;
 use minijinja::Environment;
+use minijinja::ErrorKind as TemplateErrorKind;
 use minijinja::UndefinedBehavior;
 
 use crate::Error;
@@ -50,8 +51,11 @@ impl HeaderTemplate {
         let rendered = template
             .render(minijinja::context! { props, attrs })
             .map_err(|err| {
-                Error::new(ErrorKind::ConfigInvalid, "cannot render header template")
-                    .with_source(err)
+                let detail = render_error_message(&err, template.source());
+                Error::new(
+                    ErrorKind::ConfigInvalid,
+                    format!("cannot render header template: {detail}"),
+                )
             })?;
         let normalized = rendered.replace("\r\n", "\n").replace('\r', "\n");
         let normalized = normalized.trim_matches('\n').to_owned();
@@ -68,5 +72,28 @@ impl HeaderTemplate {
             ));
         }
         Ok(normalized)
+    }
+}
+
+fn render_error_message(error: &minijinja::Error, template_source: &str) -> String {
+    if error.kind() != TemplateErrorKind::UndefinedError || error.detail().is_some() {
+        return error.to_string();
+    }
+
+    let Some(expression) = error
+        .range()
+        .and_then(|range| template_source.get(range))
+        .map(str::trim)
+        .filter(|expression| !expression.is_empty())
+    else {
+        return error.to_string();
+    };
+
+    match error.name() {
+        Some(name) => format!(
+            "undefined value in template expression {expression:?} (in {name}:{})",
+            error.line().unwrap_or(0)
+        ),
+        None => format!("undefined value in template expression {expression:?}"),
     }
 }
