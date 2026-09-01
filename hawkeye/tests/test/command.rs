@@ -206,6 +206,40 @@ ignore = "disable"
 
 #[test]
 fn requested_directories_respect_git_ignore() {
+    for with_repository in [false, true] {
+        let project = Project::empty();
+        project.write(
+            "licenserc.toml",
+            r#"[header]
+text = "Copyright 2026 Acme"
+
+[files]
+includes = ["**/*.rs"]
+
+[git]
+ignore = "auto"
+"#,
+        );
+        project.write(".gitignore", "ignored/\n");
+        project.write("ignored/inside.rs", "fn ignored() {}\n");
+        project.write("visible/inside.rs", "fn visible() {}\n");
+        if with_repository {
+            project.git(["init", "--initial-branch=main"]);
+        }
+
+        let directories = project.run(["format", "ignored", "visible", "--output-format=json"]);
+        assert_exit(&directories, 0);
+        assert_report(&directories, &[("visible/inside.rs", "add")]);
+        assert_eq!(project.read("ignored/inside.rs"), "fn ignored() {}\n");
+
+        let direct = project.run(["format", "ignored/inside.rs", "--output-format=json"]);
+        assert_exit(&direct, 0);
+        assert_report(&direct, &[("ignored/inside.rs", "add")]);
+    }
+}
+
+#[test]
+fn filesystem_git_ignore_is_bounded_by_files_root() {
     let project = Project::empty();
     project.write(
         "licenserc.toml",
@@ -213,25 +247,26 @@ fn requested_directories_respect_git_ignore() {
 text = "Copyright 2026 Acme"
 
 [files]
+root = "source"
 includes = ["**/*.rs"]
 
 [git]
-ignore = "enable"
+ignore = "auto"
 "#,
     );
-    project.write(".gitignore", "ignored/\n");
-    project.write("ignored/inside.rs", "fn ignored() {}\n");
-    project.write("visible/inside.rs", "fn visible() {}\n");
-    project.git(["init", "--initial-branch=main"]);
+    project.write(".gitignore", "source/from_parent.rs\n");
+    project.write("source/.gitignore", "ignored.rs\n");
+    project.write("source/from_parent.rs", "fn from_parent() {}\n");
+    project.write("source/ignored.rs", "fn ignored() {}\n");
+    project.write("source/selected.rs", "fn selected() {}\n");
 
-    let directories = project.run(["format", "ignored", "visible", "--output-format=json"]);
-    assert_exit(&directories, 0);
-    assert_report(&directories, &[("visible/inside.rs", "add")]);
-    assert_eq!(project.read("ignored/inside.rs"), "fn ignored() {}\n");
-
-    let direct = project.run(["format", "ignored/inside.rs", "--output-format=json"]);
-    assert_exit(&direct, 0);
-    assert_report(&direct, &[("ignored/inside.rs", "add")]);
+    let formatted = project.run(["format", "--output-format=json"]);
+    assert_exit(&formatted, 0);
+    assert_report(
+        &formatted,
+        &[("from_parent.rs", "add"), ("selected.rs", "add")],
+    );
+    assert_eq!(project.read("source/ignored.rs"), "fn ignored() {}\n");
 }
 
 #[test]

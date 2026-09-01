@@ -22,6 +22,7 @@ use super::support::assert_report;
 fn mixed_repository_formats_checks_and_removes_headers() {
     let project = Project::from_case("mixed");
     let before_app = project.read("app.rs");
+    let before_ignored = project.read("ignored_without_repository.rs");
     let before_makefile = project.read("Makefile");
     let before_types = project.read("types.d.ts");
 
@@ -33,7 +34,6 @@ fn mixed_repository_formats_checks_and_removes_headers() {
             ("Makefile", "add"),
             ("app.rs", "add"),
             ("legacy.rs", "replace"),
-            ("not_ignored_without_repository.rs", "add"),
             ("notes.txt", "unsupported"),
             ("types.d.ts", "add"),
         ],
@@ -47,7 +47,6 @@ fn mixed_repository_formats_checks_and_removes_headers() {
             ("Makefile", "add"),
             ("app.rs", "add"),
             ("legacy.rs", "replace"),
-            ("not_ignored_without_repository.rs", "add"),
             ("notes.txt", "unsupported"),
             ("types.d.ts", "add"),
         ],
@@ -70,7 +69,6 @@ fn mixed_repository_formats_checks_and_removes_headers() {
             ("Makefile", "clean"),
             ("app.rs", "clean"),
             ("legacy.rs", "clean"),
-            ("not_ignored_without_repository.rs", "clean"),
             ("notes.txt", "unsupported"),
             ("types.d.ts", "clean"),
         ],
@@ -84,7 +82,6 @@ fn mixed_repository_formats_checks_and_removes_headers() {
             ("Makefile", "clean"),
             ("app.rs", "clean"),
             ("legacy.rs", "clean"),
-            ("not_ignored_without_repository.rs", "clean"),
             ("notes.txt", "unsupported"),
             ("types.d.ts", "clean"),
         ],
@@ -98,12 +95,15 @@ fn mixed_repository_formats_checks_and_removes_headers() {
             ("Makefile", "remove"),
             ("app.rs", "remove"),
             ("legacy.rs", "remove"),
-            ("not_ignored_without_repository.rs", "remove"),
             ("notes.txt", "unsupported"),
             ("types.d.ts", "remove"),
         ],
     );
     assert_eq!(project.read("app.rs"), before_app);
+    assert_eq!(
+        project.read("ignored_without_repository.rs"),
+        before_ignored
+    );
     assert_eq!(project.read("Makefile"), before_makefile);
     assert_eq!(project.read("types.d.ts"), before_types);
     assert_eq!(project.read("legacy.rs"), "fn legacy() {}\n");
