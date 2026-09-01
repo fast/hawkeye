@@ -211,29 +211,17 @@ impl Engine {
     fn walk_directory(&self, scan_root: &Path) -> Result<BTreeSet<PathBuf>, Error> {
         let use_git_ignore = self.git.ignore != FeatureMode::Disable;
         let mut files = BTreeSet::new();
-        let walk_root = if use_git_ignore {
-            &self.root
-        } else {
-            scan_root
-        };
-        let mut builder = WalkBuilder::new(walk_root);
-        builder
+        let walker = WalkBuilder::new(scan_root)
             .hidden(false)
             .ignore(false)
             .git_ignore(use_git_ignore)
-            .git_global(false)
-            .git_exclude(false)
-            .parents(false)
+            .git_global(use_git_ignore)
+            .git_exclude(use_git_ignore)
+            .parents(use_git_ignore)
             .require_git(false)
             .follow_links(false)
-            .overrides(self.walk_filter.clone());
-        if walk_root != scan_root {
-            let scan_root = scan_root.to_path_buf();
-            builder.filter_entry(move |entry| {
-                entry.path().starts_with(&scan_root) || scan_root.starts_with(entry.path())
-            });
-        }
-        let walker = builder.build();
+            .overrides(self.walk_filter.clone())
+            .build();
         for entry in walker {
             let entry = entry.map_err(|err| {
                 Error::new(ErrorKind::Unexpected, "cannot discover files").with_source(err)

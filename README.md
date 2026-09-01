@@ -203,7 +203,7 @@ Rules match complete filenames or case-insensitive filename suffixes. Extensions
 
 ### Git integration
 
-`git.ignore` defaults to `auto`: it uses the Git index and ignore rules inside a worktree and falls back to filesystem discovery outside one. The fallback honors `.gitignore` files at and below `files.root` without reading ignore files from parent directories or the user's global Git configuration. Tracked files remain selected even when they match an ignore rule. Set the mode to `enable` to require a worktree or `disable` to use filesystem discovery without Git ignore rules.
+`git.ignore` defaults to `auto`: it uses the Git index and ignore rules inside a worktree and falls back to ignore-aware filesystem discovery outside one. Tracked files remain selected even when they match an ignore rule. Set the mode to `enable` to require a worktree or `disable` to use filesystem discovery without Git ignore rules.
 
 `git.file_attrs` defaults to `disable` because resolving attributes may walk a long history for every selected path. Prefer fixed values in `props` unless the template genuinely needs repository history. `auto` populates attributes when complete history is available; `enable` requires a usable repository and complete history. Selecting paths on the command line also limits Git status and history work to those files.
 
