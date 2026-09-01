@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+### Bug fixes
+
+* Honor `.gitignore` files under `files.root` when automatic Git discovery falls back outside a worktree.
+
 ## v7.0.0 (2026-08-22)
 
 ### Breaking changes

@@ -18,6 +18,7 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::time::Instant;
 
+use ignore::Walk;
 use ignore::WalkBuilder;
 use ignore::overrides::Override;
 use ignore::overrides::OverrideBuilder;
@@ -209,19 +210,8 @@ impl Engine {
     }
 
     fn walk_directory(&self, scan_root: &Path) -> Result<BTreeSet<PathBuf>, Error> {
-        let use_git_ignore = self.git.ignore != FeatureMode::Disable;
         let mut files = BTreeSet::new();
-        let walker = WalkBuilder::new(scan_root)
-            .hidden(false)
-            .ignore(false)
-            .git_ignore(use_git_ignore)
-            .git_global(use_git_ignore)
-            .git_exclude(use_git_ignore)
-            .parents(use_git_ignore)
-            .follow_links(false)
-            .overrides(self.walk_filter.clone())
-            .build();
-        for entry in walker {
+        for entry in self.build_filesystem_walker(scan_root) {
             let entry = entry.map_err(|err| {
                 Error::new(ErrorKind::Unexpected, "cannot discover files").with_source(err)
             })?;
@@ -250,6 +240,28 @@ impl Engine {
         }
         Ok(files)
     }
+
+    fn build_filesystem_walker(&self, scan_root: &Path) -> Walk {
+        let use_git_ignore = self.git.ignore != FeatureMode::Disable;
+        let scan_root = scan_root.to_path_buf();
+        // Root the walker here so requested subdirectories inherit only in-scope .gitignore files.
+        WalkBuilder::new(&self.root)
+            .hidden(false)
+            .ignore(false)
+            .git_ignore(use_git_ignore)
+            .git_global(false)
+            .git_exclude(false)
+            .parents(false)
+            .require_git(false)
+            .follow_links(false)
+            .overrides(self.walk_filter.clone())
+            .filter_entry(move |entry| is_ancestor_or_descendant(entry.path(), &scan_root))
+            .build()
+    }
+}
+
+fn is_ancestor_or_descendant(path: &Path, reference: &Path) -> bool {
+    path.starts_with(reference) || reference.starts_with(path)
 }
 
 pub fn compile_file_filters(
