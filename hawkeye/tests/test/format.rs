@@ -110,6 +110,64 @@ fn mixed_repository_formats_checks_and_removes_headers() {
 }
 
 #[test]
+fn filesystem_gitignore_is_bounded_to_files_root() {
+    let project = Project::empty();
+    project.write(
+        "licenserc.toml",
+        r#"[header]
+text = "Copyright 2026 Acme"
+
+[files]
+root = "source"
+includes = ["**/*.rs"]
+"#,
+    );
+    project.write(".gitignore", "source/from_parent.rs\n");
+    project.write("global-ignore", "from_global.rs\n");
+    project.write(
+        "gitconfig",
+        format!(
+            "[core]\n    excludesFile = {}\n",
+            project.path().join("global-ignore").display()
+        ),
+    );
+    project.write("source/.gitignore", "from_root.rs\nignored/\n");
+    project.write("source/from_global.rs", "fn from_global() {}\n");
+    project.write("source/from_parent.rs", "fn from_parent() {}\n");
+    project.write("source/from_root.rs", "fn from_root() {}\n");
+    project.write("source/ignored/inside.rs", "fn ignored() {}\n");
+    project.write("source/nested/.gitignore", "from_nested.rs\n");
+    project.write("source/nested/from_nested.rs", "fn from_nested() {}\n");
+    project.write("source/nested/visible.rs", "fn nested() {}\n");
+    project.write("source/visible.rs", "fn visible() {}\n");
+
+    let formatted = project
+        .command(["format", "--output-format=json"])
+        .env("GIT_CONFIG_GLOBAL", project.path().join("gitconfig"))
+        .output()
+        .expect("run hawkeye");
+    assert_exit(&formatted, 0);
+    assert_report(
+        &formatted,
+        &[
+            ("from_global.rs", "add"),
+            ("from_parent.rs", "add"),
+            ("nested/visible.rs", "add"),
+            ("visible.rs", "add"),
+        ],
+    );
+    assert_eq!(project.read("source/from_root.rs"), "fn from_root() {}\n");
+    assert_eq!(
+        project.read("source/ignored/inside.rs"),
+        "fn ignored() {}\n"
+    );
+    assert_eq!(
+        project.read("source/nested/from_nested.rs"),
+        "fn from_nested() {}\n"
+    );
+}
+
+#[test]
 fn format_preserves_preambles_and_existing_line_endings() {
     let project = Project::from_case("preambles");
     project.write("bom.cs", b"\xef\xbb\xbfpublic class Example {}\n");

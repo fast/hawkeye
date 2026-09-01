@@ -178,7 +178,7 @@ pub enum FeatureMode {
     /// Never use the feature.
     #[serde(rename = "disable")]
     Disable,
-    /// Use the feature when a Git repository is available.
+    /// Use the feature when available without requiring it.
     #[serde(rename = "auto")]
     #[default]
     Auto,
