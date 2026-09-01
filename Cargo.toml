@@ -31,7 +31,7 @@ hawkeye = { version = "7.0.1", path = "hawkeye" }
 # crates.io dependencies
 clap = { version = "4.6.6", features = ["derive"] }
 exn = { version = "0.3.1" }
-gix = { version = "0.86.0", default-features = false, features = [
+gix = { version = "0.87.1", default-features = false, features = [
   "max-performance-safe",
   "revision",
   "sha1",
