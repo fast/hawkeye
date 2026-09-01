@@ -4,9 +4,12 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+## v7.0.1 (2026-09-01)
+
 ### Bug fixes
 
-* Honor `.gitignore` files under `files.root` when automatic Git discovery falls back outside a worktree.
+* Identify the failing expression when a header template references an undefined value.
+* Honor `.gitignore` files at or below `files.root` when automatic Git discovery falls back outside a worktree.
 
 ## v7.0.0 (2026-08-22)
 

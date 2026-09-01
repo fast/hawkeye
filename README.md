@@ -23,13 +23,13 @@ HawkEye checks, formats, and removes source-file license headers. The crate prov
 The recommended way to install the command-line tool is to let [cargo-binstall](https://github.com/cargo-bins/cargo-binstall) download a prebuilt release:
 
 ```shell
-cargo binstall hawkeye@7.0.0
+cargo binstall hawkeye@7.0.1
 ```
 
 To build from source instead, use Cargo:
 
 ```shell
-cargo install hawkeye --version 7.0.0 --locked
+cargo install hawkeye --version 7.0.1 --locked
 ```
 
 Prebuilt releases cover the following platforms:
@@ -91,7 +91,7 @@ Exit code 0 means the selected policy passed. Exit code 1 means `check` found a 
 The distroless image runs HawkEye in `/workspace`. Pass the host user when formatting a bind mount so that writes retain the expected ownership:
 
 ```shell
-docker run --rm --user "$(id -u):$(id -g)" --volume "$PWD:/workspace" ghcr.io/fast/hawkeye:v7.0.0 check
+docker run --rm --user "$(id -u):$(id -g)" --volume "$PWD:/workspace" ghcr.io/fast/hawkeye:v7.0.1 check
 ```
 
 ### GitHub Actions
@@ -102,7 +102,7 @@ Install the released binary and invoke HawkEye directly; no HawkEye-specific act
 - uses: actions/checkout@v7
 - uses: taiki-e/install-action@v2
   with:
-    tool: hawkeye@7.0.0
+    tool: hawkeye@7.0.1
 - run: hawkeye check
 ```
 
@@ -113,7 +113,7 @@ The default hook installs the matching HawkEye source revision in pre-commit's i
 ```yaml
 repos:
   - repo: https://github.com/fast/hawkeye
-    rev: v7.0.0
+    rev: v7.0.1
     hooks:
       - id: hawkeye-format
 ```
@@ -231,7 +231,7 @@ Each operation accepts a `Scope`. `Scope::All` processes the configured file set
 The default `application` feature builds the command-line tool. Library-only users can omit its command-specific dependencies:
 
 ```toml
-hawkeye = { version = "7.0.0", default-features = false }
+hawkeye = { version = "7.0.1", default-features = false }
 ```
 
 ## Compatibility
