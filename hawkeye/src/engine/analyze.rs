@@ -77,7 +77,12 @@ impl Engine {
                     .styles
                     .values()
                     .any(|style| style.parse(input, end).is_some());
-            if !safe_to_replace(&candidate.body, header, &self.keywords) || split_header {
+            let safe = if self.spdx_header {
+                safe_to_replace_spdx(&candidate.body, header)
+            } else {
+                safe_to_replace(&candidate.body, header, &self.keywords)
+            };
+            if !safe || split_header {
                 return FileAnalysis::Conflict;
             }
             let range = offset..end;
@@ -133,6 +138,36 @@ fn unambiguous_match<'a>(
 fn has_keywords(body: &str, keywords: &[String]) -> bool {
     let folded = body.to_lowercase();
     keywords.iter().all(|keyword| folded.contains(keyword))
+}
+
+fn safe_to_replace_spdx(candidate: &str, header: &str) -> bool {
+    let mut licenses = 0;
+    let mut copyrights = 0;
+    for line in candidate
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+    {
+        if let Some(value) = line.strip_prefix("SPDX-License-Identifier:") {
+            if value.trim().is_empty() {
+                return false;
+            }
+            licenses += 1;
+        } else if let Some(value) = line.strip_prefix("SPDX-FileCopyrightText:") {
+            if value.trim().is_empty() {
+                return false;
+            }
+            copyrights += 1;
+        } else {
+            return false;
+        }
+    }
+    // Updating the license must not discard copyright notices or merge multiple declarations.
+    let target_copyrights = header
+        .lines()
+        .filter(|line| line.starts_with("SPDX-FileCopyrightText:"))
+        .count();
+    licenses == 1 && copyrights <= target_copyrights
 }
 
 fn safe_to_replace(candidate: &str, header: &str, keywords: &[String]) -> bool {

@@ -24,5 +24,7 @@ mod frontmatter;
 mod git;
 #[path = "test/paths.rs"]
 mod paths;
+#[path = "test/spdx.rs"]
+mod spdx;
 #[path = "test/support.rs"]
 mod support;

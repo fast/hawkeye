@@ -113,6 +113,7 @@ pub struct Engine {
     props: BTreeMap<String, toml::Value>,
     git: GitConfig,
     keywords: Vec<String>,
+    spdx_header: bool,
     template: HeaderTemplate,
     styles: BTreeMap<String, StyleConfig>,
     rules: Vec<Rule>,
@@ -169,6 +170,7 @@ impl Engine {
         let (file_filter, walk_filter) =
             discovery::compile_file_filters(&root, &files.includes, &files.excludes)?;
 
+        let spdx_header = header.builtin.as_deref() == Some("SPDX");
         let (template, header_path) = if let Some(content) = header.text {
             (HeaderTemplate::new(content)?, None)
         } else if let Some(path) = header.path {
@@ -260,6 +262,7 @@ impl Engine {
             props,
             git,
             keywords,
+            spdx_header,
             template,
             styles,
             rules,

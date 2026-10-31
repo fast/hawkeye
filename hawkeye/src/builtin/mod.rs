@@ -26,9 +26,15 @@ pub static HEADERS: LazyLock<BTreeMap<&'static str, &'static str>> = LazyLock::n
         ("Apache-2.0-ASF", include_str!("headers/Apache-2.0-ASF.txt")),
         ("Elastic-2.0", include_str!("headers/Elastic-2.0.txt")),
         ("SPDX", include_str!("headers/SPDX.txt")),
-        ("SPDX-Long", include_str!("headers/SPDX-Long.txt")),
     ])
 });
+
+pub fn header_keywords(key: Option<&str>) -> Vec<String> {
+    match key {
+        Some("SPDX") => vec!["SPDX-License-Identifier".to_owned()],
+        _ => vec!["copyright".to_owned()],
+    }
+}
 
 pub static RULES: LazyLock<Vec<RuleConfig>> = LazyLock::new(|| {
     #[derive(Deserialize)]

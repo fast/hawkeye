@@ -27,6 +27,7 @@ use serde::Deserialize;
 
 use crate::Error;
 use crate::ErrorKind;
+use crate::builtin;
 use crate::template::PathTemplates;
 
 /// Configuration for a HawkEye engine.
@@ -104,6 +105,9 @@ impl Config {
     pub fn validate(&self) -> Result<(), Error> {
         let mut validator = Validator::default();
         validator.header(&self.header);
+        if self.header.builtin.as_deref() == Some("SPDX") {
+            validator.spdx_props(&self.props);
+        }
         validator.files(&self.files);
         validator.styles(&self.styles);
         validator.rules(&self.rules);
@@ -124,7 +128,7 @@ impl Config {
 ///
 /// Exactly one of `builtin`, `path`, or `text` must be set.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[serde(from = "HeaderConfigInput")]
 pub struct HeaderConfig {
     /// The built-in template key, when using a bundled header.
     pub builtin: Option<String>,
@@ -135,13 +139,34 @@ pub struct HeaderConfig {
     pub path: Option<PathBuf>,
     /// The inline template, when the header is stored in the config file.
     pub text: Option<String>,
-    /// Case-insensitive words required in a recognized header; defaults to `"copyright"`.
-    #[serde(default = "default_keywords")]
+    /// Case-insensitive words required in a recognized header.
+    ///
+    /// When omitted in TOML, defaults to `"SPDX-License-Identifier"` for the SPDX builtin
+    /// and `"copyright"` for other sources.
     pub keywords: Vec<String>,
 }
 
-fn default_keywords() -> Vec<String> {
-    vec!["copyright".to_owned()]
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct HeaderConfigInput {
+    builtin: Option<String>,
+    path: Option<PathBuf>,
+    text: Option<String>,
+    keywords: Option<Vec<String>>,
+}
+
+impl From<HeaderConfigInput> for HeaderConfig {
+    fn from(input: HeaderConfigInput) -> Self {
+        let keywords = input
+            .keywords
+            .unwrap_or_else(|| builtin::header_keywords(input.builtin.as_deref()));
+        Self {
+            builtin: input.builtin,
+            path: input.path,
+            text: input.text,
+            keywords,
+        }
+    }
 }
 
 /// File discovery settings.
@@ -272,6 +297,27 @@ impl Validator {
     fn issue(&mut self, path: impl Into<String>, message: impl Into<String>) {
         self.issues
             .push(format!("{}: {}", path.into(), message.into()));
+    }
+
+    fn spdx_props(&mut self, props: &BTreeMap<String, toml::Value>) {
+        for (name, required) in [("spdx_license_expression", true), ("copyright", false)] {
+            let path = format!("props.{name}");
+            let Some(value) = props.get(name) else {
+                if required {
+                    self.issue(path, "is required by the SPDX builtin");
+                }
+                continue;
+            };
+            let Some(value) = value.as_str() else {
+                self.issue(path, "must be a string");
+                continue;
+            };
+            self.non_blank(&path, value);
+            self.no_nul(&path, value);
+            if value.contains(['\r', '\n']) {
+                self.issue(path, "must fit on a single line");
+            }
+        }
     }
 
     fn header(&mut self, header: &HeaderConfig) {
