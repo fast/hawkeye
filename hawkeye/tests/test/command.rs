@@ -111,7 +111,7 @@ fn template_errors_identify_the_undefined_expression() {
     project.write(
         "licenserc.toml",
         r#"[header]
-text = "Copyright {{ props.inception_year }} {{ props.copyright_owner }}"
+builtin = "Apache-2.0"
 
 [files]
 includes = ["**/*.rs"]

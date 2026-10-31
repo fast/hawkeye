@@ -77,12 +77,7 @@ impl Engine {
                     .styles
                     .values()
                     .any(|style| style.parse(input, end).is_some());
-            let safe = if let Some(builtin) = self.builtin_header {
-                builtin.can_replace(&candidate.body, header)
-            } else {
-                safe_to_replace(&candidate.body, header, &self.keywords)
-            };
-            if !safe || split_header {
+            if !safe_to_replace(&candidate.body, header, &self.keywords) || split_header {
                 return FileAnalysis::Conflict;
             }
             let range = offset..end;

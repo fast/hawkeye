@@ -132,8 +132,8 @@ builtin = "Apache-2.0"
 # text = "Copyright {{ props.inception_year }} {{ props.copyright_owner }}"
 
 # Every keyword must occur, case-insensitively, before an existing comment can
-# be replaced or removed. Defaults are provided by the selected builtin;
-# other sources default to ["copyright"].
+# be replaced or removed. The default is ["SPDX-"] for the SPDX builtin,
+# and ["copyright"] otherwise.
 keywords = ["copyright"]
 
 [files]
@@ -207,19 +207,6 @@ For configs that also run on Windows, use `join_path` when composing paths, for 
 
 `header.builtin` accepts `Apache-2.0`, `Apache-2.0-ASF`, `Elastic-2.0`, or `SPDX`. `header.path` loads a UTF-8 template, while `header.text` stores the same template inline. A template file is never selected as a source file.
 
-Each builtin supplies default recognition keywords and validates its required and optional properties before processing files:
-
-| Builtin          | Required properties                 | Optional properties        |
-| ---------------- | ----------------------------------- | -------------------------- |
-| `Apache-2.0`     | `inception_year`, `copyright_owner` | None                       |
-| `Apache-2.0-ASF` | None                                | None                       |
-| `Elastic-2.0`    | `inception_year`, `copyright_owner` | None                       |
-| `SPDX`           | `spdx_license_expression`           | `spdx_file_copyright_text` |
-
-These properties are entries in `[props]`. Values must be nonblank, single-line strings; `inception_year` also accepts an integer. Unrelated properties are allowed. Custom templates validate their inputs when rendered.
-
-Builtins can update declared values, such as copyright years, and normalize the formatting of known template text. Additional notices, modified license text, and adjacent ordinary comments cause a conflict rather than being discarded. Custom templates use the configured recognition keywords and conservative line comparisons instead.
-
 Templates use MiniJinja with strict undefined values, auto-escaping disabled, and its standard built-in filters, tests, and functions. HawkEye does not enable template includes or external loaders. The template context contains:
 
 | Value                           | Meaning                                                                        |
@@ -236,7 +223,7 @@ HawkEye never substitutes the current year for an unavailable value. Templates t
 
 #### SPDX headers
 
-The `SPDX` builtin writes an [SPDX license identifier](https://spdx.github.io/spdx-spec/v2.3.1/using-SPDX-short-identifiers-in-source-files/) with optional copyright information. No `header.keywords` configuration is needed:
+The `SPDX` builtin emits an [SPDX license identifier](https://spdx.github.io/spdx-spec/v2.3.1/using-SPDX-short-identifiers-in-source-files/) with optional copyright text. No `header.keywords` configuration is needed:
 
 ```toml
 [header]
@@ -244,7 +231,7 @@ builtin = "SPDX"
 
 [props]
 spdx_license_expression = "Apache-2.0 OR MIT"
-# Optional copyright notice, including any years and contact information.
+# Optional; omit this property to emit only the license identifier.
 spdx_file_copyright_text = "2020-2026 Acme Developers"
 ```
 
@@ -256,11 +243,9 @@ For Rust, this produces:
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 ```
 
-Omit `props.spdx_file_copyright_text` to emit only `SPDX-License-Identifier`. Both properties must be nonblank, single-line strings when present. `spdx_license_expression` is required and accepts license expressions such as `MIT`, `Apache-2.0 OR MIT`, or `GPL-3.0-only WITH Classpath-exception-2.0`; HawkEye does not validate the expression against the SPDX license list or grammar. Copyright text uses the official [`SPDX-FileCopyrightText` tag](https://spdx.github.io/spdx-spec/v2.3.1/file-tags/); provide the complete notice rather than separate year and owner properties. Include the corresponding license texts in your project as described by the SPDX guidance.
+`spdx_license_expression` is required. Copyright text uses the official [`SPDX-FileCopyrightText` tag](https://spdx.github.io/spdx-spec/v2.3.1/file-tags/). Supply the property values as single-line text; HawkEye renders them as provided without SPDX-specific validation. Include the corresponding license texts in your project as described by the SPDX guidance.
 
-The builtin supplies `SPDX-License-Identifier` as its recognition keyword and recognizes the two standard tags when updating license and copyright values. Explicit `header.keywords` still overrides the default. Other builtins and custom templates retain the default `["copyright"]`.
-
-HawkEye reports a conflict instead of replacing or removing an SPDX comment block containing ordinary comments, additional tags, multiple license declarations, or more copyright notices than the configured template emits. In particular, omitting `props.spdx_file_copyright_text` does not authorize deleting an existing copyright notice. Adding SPDX headers does not migrate arbitrary legacy headers: separately delimited copyright comments remain intact, and mixed legacy/SPDX blocks require manual review.
+The default keyword `SPDX-` covers both tags so license and copyright values can be updated using the usual header replacement rules. Explicit `header.keywords` overrides this default. This template does not provide structured validation or automatic migration of arbitrary existing SPDX declarations; review changes when applying it to existing headers.
 
 ### Files, rules, and styles
 

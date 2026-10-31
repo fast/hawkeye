@@ -27,7 +27,6 @@ use serde::Deserialize;
 
 use crate::Error;
 use crate::ErrorKind;
-use crate::builtin;
 use crate::template::PathTemplates;
 
 /// Configuration for a HawkEye engine.
@@ -105,21 +104,6 @@ impl Config {
     pub fn validate(&self) -> Result<(), Error> {
         let mut validator = Validator::default();
         validator.header(&self.header);
-        if let Some(key) = &self.header.builtin {
-            if let Some(header) = builtin::HEADERS.get(key.as_str()) {
-                validator.builtin_props(key, header, &self.props);
-            } else {
-                let available = builtin::HEADERS
-                    .keys()
-                    .copied()
-                    .collect::<Vec<_>>()
-                    .join(", ");
-                validator.issue(
-                    "header.builtin",
-                    format!("unknown builtin {key:?}; available values are {available}"),
-                );
-            }
-        }
         validator.files(&self.files);
         validator.styles(&self.styles);
         validator.rules(&self.rules);
@@ -153,8 +137,8 @@ pub struct HeaderConfig {
     pub text: Option<String>,
     /// Case-insensitive words required in a recognized header.
     ///
-    /// `None` uses the selected builtin's defaults, or `"copyright"` for custom templates,
-    /// when the engine is built. An explicit list must not be empty.
+    /// `None` defaults to `["SPDX-"]` for the SPDX builtin and `["copyright"]` otherwise.
+    /// An explicit list must not be empty.
     pub keywords: Option<Vec<String>>,
 }
 
@@ -286,42 +270,6 @@ impl Validator {
     fn issue(&mut self, path: impl Into<String>, message: impl Into<String>) {
         self.issues
             .push(format!("{}: {}", path.into(), message.into()));
-    }
-
-    fn builtin_props(
-        &mut self,
-        key: &str,
-        header: &builtin::Header,
-        props: &BTreeMap<String, toml::Value>,
-    ) {
-        for prop in header.props {
-            let path = format!("props.{}", prop.name);
-            let Some(value) = props.get(prop.name) else {
-                if prop.required {
-                    self.issue(path, format!("is required by the {key} builtin"));
-                }
-                continue;
-            };
-            if prop.allow_integer && value.is_integer() {
-                continue;
-            }
-            let Some(value) = value.as_str() else {
-                self.issue(
-                    path,
-                    if prop.allow_integer {
-                        "must be a string or integer"
-                    } else {
-                        "must be a string"
-                    },
-                );
-                continue;
-            };
-            self.non_blank(&path, value);
-            self.no_nul(&path, value);
-            if value.contains(['\r', '\n']) {
-                self.issue(path, "must fit on a single line");
-            }
-        }
     }
 
     fn header(&mut self, header: &HeaderConfig) {

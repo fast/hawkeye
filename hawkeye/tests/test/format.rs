@@ -17,6 +17,80 @@ use std::fs;
 use super::support::Project;
 use super::support::assert_exit;
 use super::support::assert_report;
+use super::support::stderr;
+
+#[test]
+fn spdx_headers_support_optional_copyright_and_updates_without_keywords() {
+    let project = Project::empty();
+    let source = "fn main() {}\n";
+    project.write("source.rs", source);
+
+    for (expression, copyright) in [
+        ("Apache-2.0 OR MIT", None),
+        ("MIT", None),
+        ("MIT", Some("2025 Acme Developers")),
+        ("Apache-2.0 OR MIT", Some("2025-2026 Acme Developers")),
+    ] {
+        let mut config = format!(
+            "[header]\nbuiltin = \"SPDX\"\n[files]\nincludes = [\"*.rs\"]\n[props]\nspdx_license_expression = {expression:?}\n"
+        );
+        let mut expected = String::new();
+        if let Some(copyright) = copyright {
+            config.push_str(&format!("spdx_file_copyright_text = {copyright:?}\n"));
+            expected.push_str(&format!("// SPDX-FileCopyrightText: {copyright}\n//\n"));
+        }
+        expected.push_str(&format!(
+            "// SPDX-License-Identifier: {expression}\n\n{source}"
+        ));
+        project.write("licenserc.toml", config);
+
+        assert_exit(&project.run(["format"]), 0);
+        assert_eq!(project.read("source.rs"), expected);
+        assert_exit(&project.run(["check"]), 0);
+        let repeated = project.run(["format", "--output-format=json"]);
+        assert_exit(&repeated, 0);
+        assert_report(&repeated, &[("source.rs", "clean")]);
+        assert_eq!(project.read("source.rs"), expected);
+    }
+
+    assert_exit(&project.run(["remove"]), 0);
+    assert_eq!(project.read("source.rs"), source);
+}
+
+#[test]
+fn spdx_conflicts_leave_existing_comments_untouched() {
+    let project = Project::empty();
+    for (copyright, source) in [
+        (
+            "spdx_file_copyright_text = \"2026 Acme\"",
+            "// SPDX-FileCopyrightText: 2025 Acme\n// SPDX-License-Identifier: MIT\n// SAFETY: this comment belongs to the function.\n\nfn main() {}\n",
+        ),
+        (
+            "",
+            "// SPDX-FileCopyrightText: 2025 Acme\n//\n// SPDX-License-Identifier: MIT\n\nfn main() {}\n",
+        ),
+    ] {
+        project.write("licenserc.toml", format!("[header]\nbuiltin = \"SPDX\"\n[files]\nincludes = [\"*.rs\"]\n[props]\nspdx_license_expression = \"Apache-2.0\"\n{copyright}\n"));
+        project.write("source.rs", source);
+        for command in ["format", "remove"] {
+            let result = project.run([command, "--output-format=json"]);
+            assert_exit(&result, 1);
+            assert_report(&result, &[("source.rs", "conflict")]);
+            assert_eq!(project.read("source.rs"), source);
+        }
+    }
+}
+
+#[test]
+fn spdx_requires_a_license_expression_before_writing() {
+    let project = Project::empty();
+    project.write("licenserc.toml", "[header]\nbuiltin = \"SPDX\"\n");
+    project.write("source.rs", "fn main() {}\n");
+    let result = project.run(["format"]);
+    assert_exit(&result, 2);
+    assert!(stderr(&result).contains("props.spdx_license_expression"));
+    assert_eq!(project.read("source.rs"), "fn main() {}\n");
+}
 
 #[test]
 fn mixed_repository_formats_checks_and_removes_headers() {
@@ -299,46 +373,6 @@ under the License.
         &[("Example.java", "replace"), ("pom.xml", "clean")],
     );
     assert_exit(&project.run(["check"]), 0);
-}
-
-#[test]
-fn builtin_headers_update_variable_lines_and_protect_other_text() {
-    for builtin in ["Apache-2.0", "Elastic-2.0", "Apache-2.0-ASF"] {
-        let project = Project::empty();
-        let config = format!(
-            "[header]\nbuiltin = {builtin:?}\n[files]\nincludes = [\"*.rs\"]\n[props]\ninception_year = 2025\ncopyright_owner = \"Acme\"\n"
-        );
-        project.write("licenserc.toml", &config);
-        project.write("main.rs", "fn main() {}\n");
-        assert_exit(&project.run(["format"]), 0);
-        let original = project.read("main.rs");
-        project.write("licenserc.toml", config.replace("2025", "2026"));
-        assert_exit(&project.run(["format"]), 0);
-        assert_eq!(project.read("main.rs"), original.replace("2025", "2026"));
-        assert_exit(&project.run(["check"]), 0);
-        let canonical = project.read("main.rs");
-
-        let extra_comment = canonical.replace(
-            "\n\nfn main",
-            "\n// Copyright rules do not apply to this function.\n\nfn main",
-        );
-        let changed_license = canonical.replace(
-            "Unless required by applicable law",
-            "Unless required by different terms",
-        );
-        for source in [extra_comment, changed_license] {
-            for command in ["format", "remove"] {
-                project.write("main.rs", &source);
-                let result = project.run([command, "--output-format=json"]);
-                assert_exit(&result, 1);
-                assert_report(&result, &[("main.rs", "conflict")]);
-                assert_eq!(project.read("main.rs"), source);
-            }
-        }
-        project.write("main.rs", canonical);
-        assert_exit(&project.run(["remove"]), 0);
-        assert_eq!(project.read("main.rs"), "fn main() {}\n");
-    }
 }
 
 #[test]
