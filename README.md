@@ -245,7 +245,7 @@ For Rust, this produces:
 
 `spdx_license_expression` is required. Copyright text uses the official [`SPDX-FileCopyrightText` tag](https://spdx.github.io/spdx-spec/v2.3.1/file-tags/). Supply the property values as single-line text; HawkEye renders them as provided without SPDX-specific validation. Include the corresponding license texts in your project as described by the SPDX guidance.
 
-The default keyword `SPDX-` covers both tags so license and copyright values can be updated using the usual header replacement rules. Explicit `header.keywords` overrides this default. This template does not provide structured validation or automatic migration of arbitrary existing SPDX declarations; review changes when applying it to existing headers.
+The default keyword `SPDX-` covers both tags so license and copyright values can be updated using the usual header replacement rules. Explicit `header.keywords` overrides this default; an empty list is rejected when parsing the configuration. This template does not provide structured validation or automatic migration of arbitrary existing SPDX declarations; review changes when applying it to existing headers.
 
 ### Files, rules, and styles
 

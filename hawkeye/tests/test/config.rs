@@ -22,6 +22,31 @@ use super::support::assert_exit;
 use super::support::stderr;
 
 #[test]
+fn deserialized_keywords_are_resolved_and_nonempty() {
+    for (source, expected) in [
+        ("builtin = \"SPDX\"", vec!["SPDX-"]),
+        ("builtin = \"Apache-2.0\"", vec!["copyright"]),
+        ("text = \"Copyright Acme\"", vec!["copyright"]),
+        (
+            "builtin = \"SPDX\"\nkeywords = [\"SPDX-License-Identifier\", \"MIT\"]",
+            vec!["SPDX-License-Identifier", "MIT"],
+        ),
+    ] {
+        let config: Config = toml::from_str(&format!("[header]\n{source}\n"))
+            .expect("deserialize and resolve keywords");
+        assert_eq!(config.header.keywords, expected);
+    }
+
+    let error = toml::from_str::<Config>("[header]\nbuiltin = \"SPDX\"\nkeywords = []\n")
+        .expect_err("an explicit empty list must fail during deserialization");
+    assert!(
+        error
+            .to_string()
+            .contains("header.keywords: at least one keyword")
+    );
+}
+
+#[test]
 fn operation_scope_distinguishes_all_files_from_no_files() {
     let project = Project::empty();
     project.write("main.rs", "fn main() {}\n");
@@ -70,6 +95,7 @@ text = "Copyright 2026 Acme"
     let mut config =
         Config::load(project.path().join("licenserc.toml")).expect("load valid config");
     config.header.text = None;
+    config.header.keywords.clear();
 
     let validation = config
         .validate()
@@ -84,6 +110,11 @@ text = "Copyright 2026 Acme"
         validation
             .to_string()
             .contains("exactly one of `builtin`, `path`, or `text` must be set")
+    );
+    assert!(
+        validation
+            .to_string()
+            .contains("header.keywords: at least one keyword")
     );
 
     for (name, source) in [

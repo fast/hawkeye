@@ -123,8 +123,7 @@ impl Config {
 /// Header template and recognition settings.
 ///
 /// Exactly one of `builtin`, `path`, or `text` must be set.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HeaderConfig {
     /// The built-in template key, when using a bundled header.
     pub builtin: Option<String>,
@@ -137,9 +136,41 @@ pub struct HeaderConfig {
     pub text: Option<String>,
     /// Case-insensitive words required in a recognized header.
     ///
-    /// `None` defaults to `["SPDX-"]` for the SPDX builtin and `["copyright"]` otherwise.
-    /// An explicit list must not be empty.
-    pub keywords: Option<Vec<String>>,
+    /// When omitted during deserialization, defaults to `["SPDX-"]` for the SPDX builtin
+    /// and `["copyright"]` otherwise. An explicit empty list is rejected.
+    pub keywords: Vec<String>,
+}
+
+impl<'de> Deserialize<'de> for HeaderConfig {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        #[serde(deny_unknown_fields)]
+        struct RawHeaderConfig {
+            builtin: Option<String>,
+            path: Option<PathBuf>,
+            text: Option<String>,
+            keywords: Option<Vec<String>>,
+        }
+
+        let raw = RawHeaderConfig::deserialize(deserializer)?;
+        let keywords = raw
+            .keywords
+            .unwrap_or_else(|| match raw.builtin.as_deref() {
+                Some("SPDX") => vec!["SPDX-".to_owned()],
+                _ => vec!["copyright".to_owned()],
+            });
+        if keywords.is_empty() {
+            return Err(serde::de::Error::custom(
+                "header.keywords: at least one keyword is required to distinguish a header from an ordinary comment",
+            ));
+        }
+        Ok(Self {
+            builtin: raw.builtin,
+            path: raw.path,
+            text: raw.text,
+            keywords,
+        })
+    }
 }
 
 /// File discovery settings.
@@ -297,17 +328,14 @@ impl Validator {
             self.no_nul("header.text", value);
         }
 
-        let Some(keywords) = &header.keywords else {
-            return;
-        };
-        if keywords.is_empty() {
+        if header.keywords.is_empty() {
             self.issue(
                 "header.keywords",
                 "at least one keyword is required to distinguish a header from an ordinary comment",
             );
         }
         let mut seen = HashMap::<String, usize>::new();
-        for (index, keyword) in keywords.iter().enumerate() {
+        for (index, keyword) in header.keywords.iter().enumerate() {
             let path = format!("header.keywords[{index}]");
             self.non_blank(&path, keyword);
             let folded = keyword.to_lowercase();

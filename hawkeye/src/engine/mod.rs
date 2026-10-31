@@ -169,16 +169,6 @@ impl Engine {
         let (file_filter, walk_filter) =
             discovery::compile_file_filters(&root, &files.includes, &files.excludes)?;
 
-        let keywords = header
-            .keywords
-            .unwrap_or_else(|| match header.builtin.as_deref() {
-                Some("SPDX") => vec!["SPDX-".to_owned()],
-                _ => vec!["copyright".to_owned()],
-            })
-            .into_iter()
-            .map(|keyword| keyword.to_lowercase())
-            .collect();
-
         let (template, header_path) = if let Some(content) = header.text {
             (HeaderTemplate::new(content)?, None)
         } else if let Some(path) = header.path {
@@ -255,6 +245,12 @@ impl Engine {
             })
             .collect::<Result<Vec<_>, Error>>()?;
         log::debug!("resolved {} styles and {} rules", styles.len(), rules.len());
+
+        let keywords = header
+            .keywords
+            .into_iter()
+            .map(|keyword| keyword.to_lowercase())
+            .collect();
 
         Ok(Self {
             root,
