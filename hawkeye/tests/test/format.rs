@@ -302,6 +302,46 @@ under the License.
 }
 
 #[test]
+fn builtin_headers_update_variable_lines_and_protect_other_text() {
+    for builtin in ["Apache-2.0", "Elastic-2.0", "Apache-2.0-ASF"] {
+        let project = Project::empty();
+        let config = format!(
+            "[header]\nbuiltin = {builtin:?}\n[files]\nincludes = [\"*.rs\"]\n[props]\ninception_year = 2025\ncopyright_owner = \"Acme\"\n"
+        );
+        project.write("licenserc.toml", &config);
+        project.write("main.rs", "fn main() {}\n");
+        assert_exit(&project.run(["format"]), 0);
+        let original = project.read("main.rs");
+        project.write("licenserc.toml", config.replace("2025", "2026"));
+        assert_exit(&project.run(["format"]), 0);
+        assert_eq!(project.read("main.rs"), original.replace("2025", "2026"));
+        assert_exit(&project.run(["check"]), 0);
+        let canonical = project.read("main.rs");
+
+        let extra_comment = canonical.replace(
+            "\n\nfn main",
+            "\n// Copyright rules do not apply to this function.\n\nfn main",
+        );
+        let changed_license = canonical.replace(
+            "Unless required by applicable law",
+            "Unless required by different terms",
+        );
+        for source in [extra_comment, changed_license] {
+            for command in ["format", "remove"] {
+                project.write("main.rs", &source);
+                let result = project.run([command, "--output-format=json"]);
+                assert_exit(&result, 1);
+                assert_report(&result, &[("main.rs", "conflict")]);
+                assert_eq!(project.read("main.rs"), source);
+            }
+        }
+        project.write("main.rs", canonical);
+        assert_exit(&project.run(["remove"]), 0);
+        assert_eq!(project.read("main.rs"), "fn main() {}\n");
+    }
+}
+
+#[test]
 fn custom_line_and_block_styles_round_trip() {
     let project = Project::from_case("styles");
 

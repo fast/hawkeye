@@ -113,7 +113,7 @@ pub struct Engine {
     props: BTreeMap<String, toml::Value>,
     git: GitConfig,
     keywords: Vec<String>,
-    spdx_header: bool,
+    builtin_header: Option<&'static builtin::Header>,
     template: HeaderTemplate,
     styles: BTreeMap<String, StyleConfig>,
     rules: Vec<Rule>,
@@ -170,7 +170,7 @@ impl Engine {
         let (file_filter, walk_filter) =
             discovery::compile_file_filters(&root, &files.includes, &files.excludes)?;
 
-        let spdx_header = header.builtin.as_deref() == Some("SPDX");
+        let builtin_header = header.builtin.as_deref().map(|key| &builtin::HEADERS[key]);
         let (template, header_path) = if let Some(content) = header.text {
             (HeaderTemplate::new(content)?, None)
         } else if let Some(path) = header.path {
@@ -189,19 +189,8 @@ impl Engine {
                 .with_source(err)
             })?;
             (HeaderTemplate::new(content)?, Some(path))
-        } else if let Some(key) = header.builtin {
-            let content = builtin::HEADERS.get(key.as_str()).copied().ok_or_else(|| {
-                let available = builtin::HEADERS
-                    .keys()
-                    .copied()
-                    .collect::<Vec<_>>()
-                    .join(", ");
-                Error::new(
-                    ErrorKind::ConfigInvalid,
-                    format!("unknown header.builtin {key:?}; available values are {available}"),
-                )
-            })?;
-            (HeaderTemplate::new(content)?, None)
+        } else if let Some(builtin) = builtin_header {
+            (HeaderTemplate::new(builtin.text)?, None)
         } else {
             return Err(Error::new(
                 ErrorKind::ConfigInvalid,
@@ -250,6 +239,13 @@ impl Engine {
 
         let keywords = header
             .keywords
+            .unwrap_or_else(|| {
+                builtin_header
+                    .map_or(&["copyright"][..], |builtin| builtin.keywords)
+                    .iter()
+                    .map(|keyword| (*keyword).to_owned())
+                    .collect()
+            })
             .into_iter()
             .map(|keyword| keyword.to_lowercase())
             .collect();
@@ -262,7 +258,7 @@ impl Engine {
             props,
             git,
             keywords,
-            spdx_header,
+            builtin_header,
             template,
             styles,
             rules,

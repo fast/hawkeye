@@ -105,8 +105,20 @@ impl Config {
     pub fn validate(&self) -> Result<(), Error> {
         let mut validator = Validator::default();
         validator.header(&self.header);
-        if self.header.builtin.as_deref() == Some("SPDX") {
-            validator.spdx_props(&self.props);
+        if let Some(key) = &self.header.builtin {
+            if let Some(header) = builtin::HEADERS.get(key.as_str()) {
+                validator.builtin_props(key, header, &self.props);
+            } else {
+                let available = builtin::HEADERS
+                    .keys()
+                    .copied()
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                validator.issue(
+                    "header.builtin",
+                    format!("unknown builtin {key:?}; available values are {available}"),
+                );
+            }
         }
         validator.files(&self.files);
         validator.styles(&self.styles);
@@ -128,7 +140,7 @@ impl Config {
 ///
 /// Exactly one of `builtin`, `path`, or `text` must be set.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
-#[serde(from = "HeaderConfigInput")]
+#[serde(deny_unknown_fields)]
 pub struct HeaderConfig {
     /// The built-in template key, when using a bundled header.
     pub builtin: Option<String>,
@@ -141,32 +153,9 @@ pub struct HeaderConfig {
     pub text: Option<String>,
     /// Case-insensitive words required in a recognized header.
     ///
-    /// When omitted in TOML, defaults to `"SPDX-License-Identifier"` for the SPDX builtin
-    /// and `"copyright"` for other sources.
-    pub keywords: Vec<String>,
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct HeaderConfigInput {
-    builtin: Option<String>,
-    path: Option<PathBuf>,
-    text: Option<String>,
-    keywords: Option<Vec<String>>,
-}
-
-impl From<HeaderConfigInput> for HeaderConfig {
-    fn from(input: HeaderConfigInput) -> Self {
-        let keywords = input
-            .keywords
-            .unwrap_or_else(|| builtin::header_keywords(input.builtin.as_deref()));
-        Self {
-            builtin: input.builtin,
-            path: input.path,
-            text: input.text,
-            keywords,
-        }
-    }
+    /// `None` uses the selected builtin's defaults, or `"copyright"` for custom templates,
+    /// when the engine is built. An explicit list must not be empty.
+    pub keywords: Option<Vec<String>>,
 }
 
 /// File discovery settings.
@@ -299,17 +288,32 @@ impl Validator {
             .push(format!("{}: {}", path.into(), message.into()));
     }
 
-    fn spdx_props(&mut self, props: &BTreeMap<String, toml::Value>) {
-        for (name, required) in [("spdx_license_expression", true), ("copyright", false)] {
-            let path = format!("props.{name}");
-            let Some(value) = props.get(name) else {
-                if required {
-                    self.issue(path, "is required by the SPDX builtin");
+    fn builtin_props(
+        &mut self,
+        key: &str,
+        header: &builtin::Header,
+        props: &BTreeMap<String, toml::Value>,
+    ) {
+        for prop in header.props {
+            let path = format!("props.{}", prop.name);
+            let Some(value) = props.get(prop.name) else {
+                if prop.required {
+                    self.issue(path, format!("is required by the {key} builtin"));
                 }
                 continue;
             };
+            if prop.allow_integer && value.is_integer() {
+                continue;
+            }
             let Some(value) = value.as_str() else {
-                self.issue(path, "must be a string");
+                self.issue(
+                    path,
+                    if prop.allow_integer {
+                        "must be a string or integer"
+                    } else {
+                        "must be a string"
+                    },
+                );
                 continue;
             };
             self.non_blank(&path, value);
@@ -345,14 +349,17 @@ impl Validator {
             self.no_nul("header.text", value);
         }
 
-        if header.keywords.is_empty() {
+        let Some(keywords) = &header.keywords else {
+            return;
+        };
+        if keywords.is_empty() {
             self.issue(
                 "header.keywords",
                 "at least one keyword is required to distinguish a header from an ordinary comment",
             );
         }
         let mut seen = HashMap::<String, usize>::new();
-        for (index, keyword) in header.keywords.iter().enumerate() {
+        for (index, keyword) in keywords.iter().enumerate() {
             let path = format!("header.keywords[{index}]");
             self.non_blank(&path, keyword);
             let folded = keyword.to_lowercase();

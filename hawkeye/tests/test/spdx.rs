@@ -32,7 +32,7 @@ fn spdx_headers_round_trip_without_keywords() {
             "// SPDX-License-Identifier: Apache-2.0 OR MIT\n\n",
         ),
         (
-            "spdx_license_expression = \"GPL-3.0-only WITH Classpath-exception-2.0\"\ncopyright = \"2020-2026 Acme Developers <dev@example.com>\"",
+            "spdx_license_expression = \"GPL-3.0-only WITH Classpath-exception-2.0\"\nspdx_file_copyright_text = \"2020-2026 Acme Developers <dev@example.com>\"",
             "// SPDX-FileCopyrightText: 2020-2026 Acme Developers <dev@example.com>\n//\n// SPDX-License-Identifier: GPL-3.0-only WITH Classpath-exception-2.0\n\n",
         ),
     ] {
@@ -74,7 +74,7 @@ fn spdx_license_and_copyright_can_be_updated() {
         let mut props = format!("spdx_license_expression = {expression:?}");
         let mut expected = String::new();
         if let Some(copyright) = copyright {
-            props.push_str(&format!("\ncopyright = {copyright:?}"));
+            props.push_str(&format!("\nspdx_file_copyright_text = {copyright:?}"));
             expected.push_str(&format!("// SPDX-FileCopyrightText: {copyright}\n//\n"));
         }
         expected.push_str(&format!(
@@ -96,7 +96,7 @@ fn spdx_style_migration_preserves_line_endings() {
     let project = Project::empty();
     configure(
         &project,
-        "spdx_license_expression = \"MIT\"\ncopyright = \"2026 Acme\"",
+        "spdx_license_expression = \"MIT\"\nspdx_file_copyright_text = \"2026 Acme\"",
     );
     project.write(
         "licenserc.toml",
@@ -119,7 +119,7 @@ fn spdx_does_not_discard_unmanaged_text_or_copyrights() {
     let project = Project::empty();
     for props in [
         "spdx_license_expression = \"MIT\"",
-        "spdx_license_expression = \"MIT\"\ncopyright = \"2026 Acme\"",
+        "spdx_license_expression = \"MIT\"\nspdx_file_copyright_text = \"2026 Acme\"",
     ] {
         configure(&project, props);
         for source in [
@@ -176,16 +176,16 @@ fn spdx_invalid_props_fail_before_writing_files() {
             "props.spdx_license_expression",
         ),
         (
-            "spdx_license_expression = \"MIT\"\ncopyright = []",
-            "props.copyright",
+            "spdx_license_expression = \"MIT\"\nspdx_file_copyright_text = []",
+            "props.spdx_file_copyright_text",
         ),
         (
-            "spdx_license_expression = \"MIT\"\ncopyright = \"\"",
-            "props.copyright",
+            "spdx_license_expression = \"MIT\"\nspdx_file_copyright_text = \"\"",
+            "props.spdx_file_copyright_text",
         ),
         (
-            "spdx_license_expression = \"MIT\"\ncopyright = \"2026 Acme\\rOther\"",
-            "props.copyright",
+            "spdx_license_expression = \"MIT\"\nspdx_file_copyright_text = \"2026 Acme\\rOther\"",
+            "props.spdx_file_copyright_text",
         ),
     ] {
         configure(&project, props);
