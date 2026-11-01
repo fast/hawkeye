@@ -69,12 +69,14 @@ ignore = "disable"
         "unsupported  notes.txt\n2 files, 0 changes, 0 conflicts, 1 unsupported\n"
     );
 
-    let strict = project.run(["check", "--fail-on-unknown"]);
-    assert_exit(&strict, 1);
+    for command in ["check", "format", "remove"] {
+        assert_exit(&project.run([command, "notes.txt", "--fail-on-unknown"]), 1);
+    }
 
-    let removed = project.run(["remove"]);
-    assert_exit(&removed, 0);
+    let removed = project.run(["remove", "--fail-on-change"]);
+    assert_exit(&removed, 1);
     assert_eq!(project.read("main.rs"), "fn main() {}\n");
+    assert_exit(&project.run(["remove", "--fail-on-change"]), 0);
 }
 
 #[test]
@@ -92,17 +94,26 @@ includes = ["**/*.rs"]
 ignore = "disable"
 "#,
     );
-    project.write("main.rs", "fn main() {}\n");
-
-    let formatted = project.run([
-        "format",
-        "--dry-run",
-        "--fail-on-change",
-        "--output-format=json",
-    ]);
-    assert_exit(&formatted, 1);
-    assert_report(&formatted, &[("main.rs", "add")]);
-    assert_eq!(project.read("main.rs"), "fn main() {}\n");
+    for (command, source, outcome) in [
+        ("format", "fn main() {}\n", "add"),
+        (
+            "remove",
+            "// Copyright 2026 Acme\n\nfn main() {}\n",
+            "remove",
+        ),
+    ] {
+        project.write("main.rs", source);
+        for fail_on_change in [false, true] {
+            let mut arguments = vec![command, "--dry-run", "--output-format=json"];
+            if fail_on_change {
+                arguments.push("--fail-on-change");
+            }
+            let result = project.run(arguments);
+            assert_exit(&result, i32::from(fail_on_change));
+            assert_report(&result, &[("main.rs", outcome)]);
+            assert_eq!(project.read("main.rs"), source);
+        }
+    }
 }
 
 #[test]
@@ -446,13 +457,43 @@ text = "Copyright 2026 Acme"
 excludes = ["licenserc.toml"]
 "#,
     );
-    project.write(
-        OsString::from_vec(b"source-\xff.rs".to_vec()),
-        "fn main() {}\n",
-    );
+    let path = OsString::from_vec(b"source-\xff.rs".to_vec());
+    for (command, source) in [
+        ("check", "fn main() {}\n"),
+        ("format", "fn main() {}\n"),
+        ("remove", "// Copyright 2026 Acme\n\nfn main() {}\n"),
+    ] {
+        project.write(&path, source);
+        let result = project.run([command, "--output-format=json"]);
+        assert_exit(&result, 2);
+        assert!(stdout(&result).is_empty());
+        assert!(stderr(&result).contains("cannot serialize JSON report"));
+        assert_eq!(project.read(&path), source);
+    }
+}
 
-    let checked = project.run(["check", "--output-format=json"]);
-    assert_exit(&checked, 2);
-    assert!(stdout(&checked).is_empty());
-    assert!(stderr(&checked).contains("cannot serialize JSON report"));
+#[test]
+fn directory_exclusions_apply_to_every_selection_method() {
+    for mode in ["disable", "enable"] {
+        let project = Project::empty();
+        project.write("licenserc.toml", format!("[header]\ntext = 'Copyright Acme'\n[files]\nincludes = ['*.rs']\nexcludes = ['generated/']\n[git]\nignore = '{mode}'\n"));
+        project.write("source.rs", "fn main() {}\n");
+        project.write("generated/source.rs", "fn generated() {}\n");
+        project.write("generated/nested/source.rs", "fn nested() {}\n");
+        project.git(["init", "-b", "main"]);
+        project.git(["add", "."]);
+        for paths in [
+            vec![],
+            vec!["."],
+            vec!["source.rs", "generated"],
+            vec!["source.rs", "generated/nested"],
+            vec!["source.rs", "generated/source.rs"],
+        ] {
+            let mut command = vec!["check", "--output-format=json"];
+            command.extend(paths);
+            let checked = project.run(command);
+            assert_exit(&checked, 1);
+            assert_report(&checked, &[("source.rs", "add")]);
+        }
+    }
 }

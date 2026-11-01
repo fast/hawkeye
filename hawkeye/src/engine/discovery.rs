@@ -37,7 +37,7 @@ impl Engine {
         scope: Scope<'_>,
     ) -> Result<Vec<PathBuf>, Error> {
         let started = Instant::now();
-        let (files, source) = match scope {
+        let (mut files, source) = match scope {
             Scope::All => (self.discover_directory(&self.root, repo)?, "files.root"),
             Scope::Paths(paths) => {
                 let (directories, direct_files) = self.resolve_requested_paths(paths)?;
@@ -48,6 +48,7 @@ impl Engine {
                 (files, "the requested paths")
             }
         };
+        files.retain(|path| self.matches_file_filter(path));
 
         let files = if let Some(header_path) = &self.header_path {
             let mut selected = Vec::with_capacity(files.len());
@@ -93,12 +94,11 @@ impl Engine {
             let prefix = scan_root
                 .strip_prefix(&self.root)
                 .expect("requested directories are inside files.root");
-            let mut files = repo
+            let files = repo
                 .list_files(scan_root)?
                 .into_iter()
                 .map(|path| prefix.join(path))
                 .collect::<BTreeSet<_>>();
-            files.retain(|path| self.file_filter.matched(path, false).is_whitelist());
             (files, "Git worktree")
         } else {
             (self.walk_directory(scan_root)?, "filesystem walk")
@@ -184,9 +184,7 @@ impl Engine {
             } else if metadata.is_file()
                 || (metadata.file_type().is_symlink() && resolved.is_file())
             {
-                if self.matches_file_filter(&relative) {
-                    files.insert(relative);
-                }
+                files.insert(relative);
             } else {
                 log::warn!(
                     "skipping path that is not a regular file or directory: {}",
@@ -199,7 +197,8 @@ impl Engine {
     }
 
     fn matches_file_filter(&self, path: &Path) -> bool {
-        // An explicitly named file is not walked, so apply exclusions inherited from its parents.
+        // Git discovery and explicit files bypass the walker, including its directory pruning.
+        // Apply inherited exclusions here so every selection method uses the same filters.
         for parent in path.ancestors().skip(1) {
             if !parent.as_os_str().is_empty() && self.file_filter.matched(parent, true).is_ignore()
             {
@@ -234,9 +233,7 @@ impl Engine {
                 )
             })?;
 
-            if self.file_filter.matched(relative, false).is_whitelist() {
-                files.insert(relative.to_path_buf());
-            }
+            files.insert(relative.to_path_buf());
         }
         Ok(files)
     }

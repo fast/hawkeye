@@ -45,6 +45,10 @@ name = "test"
 path = "tests/test.rs"
 required-features = ["application"]
 
+[[test]]
+name = "library"
+path = "tests/library.rs"
+
 [dependencies]
 gix = { workspace = true }
 ignore = { workspace = true }
