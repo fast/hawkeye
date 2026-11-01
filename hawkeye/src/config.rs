@@ -123,8 +123,7 @@ impl Config {
 /// Header template and recognition settings.
 ///
 /// Exactly one of `builtin`, `path`, or `text` must be set.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HeaderConfig {
     /// The built-in template key, when using a bundled header.
     pub builtin: Option<String>,
@@ -135,13 +134,43 @@ pub struct HeaderConfig {
     pub path: Option<PathBuf>,
     /// The inline template, when the header is stored in the config file.
     pub text: Option<String>,
-    /// Case-insensitive words required in a recognized header; defaults to `"copyright"`.
-    #[serde(default = "default_keywords")]
+    /// Case-insensitive words required in a recognized header.
+    ///
+    /// When omitted during deserialization, defaults to `["SPDX-"]` for the SPDX builtin
+    /// and `["copyright"]` otherwise. An explicit empty list is rejected.
     pub keywords: Vec<String>,
 }
 
-fn default_keywords() -> Vec<String> {
-    vec!["copyright".to_owned()]
+impl<'de> Deserialize<'de> for HeaderConfig {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        #[serde(deny_unknown_fields)]
+        struct RawHeaderConfig {
+            builtin: Option<String>,
+            path: Option<PathBuf>,
+            text: Option<String>,
+            keywords: Option<Vec<String>>,
+        }
+
+        let raw = RawHeaderConfig::deserialize(deserializer)?;
+        let keywords = raw
+            .keywords
+            .unwrap_or_else(|| match raw.builtin.as_deref() {
+                Some("SPDX") => vec!["SPDX-".to_owned()],
+                _ => vec!["copyright".to_owned()],
+            });
+        if keywords.is_empty() {
+            return Err(serde::de::Error::custom(
+                "header.keywords: at least one keyword is required to distinguish a header from an ordinary comment",
+            ));
+        }
+        Ok(Self {
+            builtin: raw.builtin,
+            path: raw.path,
+            text: raw.text,
+            keywords,
+        })
+    }
 }
 
 /// File discovery settings.

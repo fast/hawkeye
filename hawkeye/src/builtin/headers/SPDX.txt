@@ -1,0 +1,3 @@
+{% if props.spdx_file_copyright_text is defined %}SPDX-FileCopyrightText: {{ props.spdx_file_copyright_text }}
+
+{% endif %}SPDX-License-Identifier: {{ props.spdx_license_expression }}
