@@ -33,46 +33,27 @@ impl Edits {
 
     /// Applies the pending edits and returns their report.
     ///
-    /// Each file is read once before writing. Contents that already match the intended result
-    /// are skipped; otherwise they must still match the original contents. Writes preserve file
-    /// symlinks and hard links, so identical edits through multiple aliases do not accumulate.
+    /// Callers must ensure that selected files remain unchanged from preparation until application
+    /// completes, and select each underlying file through only one path. Edits do not detect
+    /// concurrent changes or duplicate files reached through symlinks or hard links.
     ///
-    /// Application stops at the first error without rolling back earlier writes. Callers must
-    /// prevent concurrent writes while applying edits.
+    /// Files are read and written one at a time. Application stops at the first error without
+    /// rolling back earlier writes.
     ///
     /// # Errors
     ///
-    /// Returns an error if a source matches neither the original nor the intended contents, or
-    /// cannot be read or written.
+    /// Returns an error if a source file cannot be read as UTF-8 text or written.
     pub fn apply(self) -> Result<Report, Error> {
-        for FileEdit {
-            path,
-            original,
-            replacement,
-        } in self.files
-        {
-            let mut output = original.clone();
-            output.replace_range(replacement.range, &replacement.text);
-            let current = fs::read(&path).map_err(|err| {
+        for FileEdit { path, replacement } in self.files {
+            let mut input = fs::read_to_string(&path).map_err(|err| {
                 Error::new(
                     ErrorKind::Unexpected,
                     format!("cannot read {}", path.display()),
                 )
                 .with_source(err)
             })?;
-            if current == output.as_bytes() {
-                continue;
-            }
-            if current != original.as_bytes() {
-                return Err(Error::new(
-                    ErrorKind::Unsupported,
-                    format!(
-                        "{} changed since edits were prepared; prepare edits again",
-                        path.display()
-                    ),
-                ));
-            }
-            fs::write(&path, output).map_err(|err| {
+            input.replace_range(replacement.range, &replacement.text);
+            fs::write(&path, input).map_err(|err| {
                 Error::new(
                     ErrorKind::Unexpected,
                     format!("cannot write {}", path.display()),

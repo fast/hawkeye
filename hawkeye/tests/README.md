@@ -2,7 +2,7 @@
 
 Tests exercise the public Rust API and the Cargo-built `hawkeye` command against temporary projects. Assertions cover observable reports, errors, exit codes, and file contents rather than private helpers or implementation branches.
 
-[library.rs](library.rs) covers configuration validation, scope selection, and the prepare/inspect/discard/apply lifecycle, including preserving changed sources, stopping at the first error without rolling back earlier writes, and applying identical edits through file aliases. It runs both with default features disabled and with all features enabled.
+[library.rs](library.rs) covers configuration validation, scope selection, and the prepare/inspect/discard/apply lifecycle, including stopping at the first error without rolling back earlier writes and preserving hard links when editing a single selected path. It runs both with default features disabled and with all features enabled.
 
 [test.rs](test.rs) runs the CLI scenarios with the shared temporary-project driver in [support.rs](test/support.rs):
 
