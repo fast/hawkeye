@@ -29,6 +29,7 @@ use crate::Error;
 use crate::ErrorKind;
 use crate::Scope;
 use crate::config::FeatureMode;
+use crate::engine::file_id;
 use crate::engine::git::Repository;
 
 impl Engine {

@@ -31,7 +31,6 @@ hawkeye = { version = "7.2.0", path = "hawkeye" }
 # crates.io dependencies
 clap = { version = "4.6.6", features = ["derive"] }
 exn = { version = "0.3.1" }
-file-id = { version = "0.2.3" }
 gix = { version = "0.87.1", default-features = false, features = [
   "max-performance-safe",
   "revision",
@@ -50,6 +49,10 @@ serde_json = { version = "1.0.151" }
 tempfile = { version = "3.27.0" }
 toml = { version = "1.1.4" }
 which = { version = "8.0.6" }
+windows-sys = { version = "0.61.2", features = [
+  "Win32_Foundation",
+  "Win32_Storage_FileSystem",
+] }
 
 [workspace.lints.rust]
 unknown_lints = "deny"

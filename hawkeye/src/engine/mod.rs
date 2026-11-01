@@ -15,6 +15,7 @@
 mod analyze;
 mod discovery;
 mod edits;
+mod file_id;
 mod git;
 
 use std::collections::BTreeMap;

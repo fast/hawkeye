@@ -50,7 +50,6 @@ name = "library"
 path = "tests/library.rs"
 
 [dependencies]
-file-id = { workspace = true }
 gix = { workspace = true }
 ignore = { workspace = true }
 jiff = { workspace = true }
@@ -64,6 +63,9 @@ clap = { workspace = true, optional = true }
 exn = { workspace = true, optional = true }
 logforth = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
