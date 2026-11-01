@@ -251,6 +251,8 @@ The default keyword `SPDX-` covers both tags so license and copyright values can
 
 `files.includes` and `files.excludes` use Git-ignore-style patterns relative to `files.root`; negated patterns are not accepted because inclusion and exclusion are separate lists. An empty `includes` list means all discovered files. `.git` is always excluded. File symlinks are followed, while directory symlinks are not traversed.
 
+After filtering, paths that refer to the same file through hard links or symlinks are processed only once. The first selected path in lexical order determines the reported path, rule, template attributes, and Git history. Files with identical contents but different file identities are processed separately. The header template and all links to it are excluded.
+
 Rules match complete filenames or case-insensitive filename suffixes. Extensions omit the leading dot and may contain multiple segments, such as `d.ts`. The first matching user rule wins; built-in rules are lower-priority fallbacks. Duplicate selectors are allowed and logged at debug level when shadowed.
 
 `style_out` is the canonical format written by HawkEye. `styles_in` lists formats that may be recognized and safely replaced or removed. When `styles_in` is empty, it defaults to `[style_out]`; a non-empty list must include `style_out`. Style names are case-sensitive. A custom style may override a built-in style and produces a warning. The bundled mappings are defined in [rules.toml](hawkeye/src/builtin/rules.toml) and [styles.toml](hawkeye/src/builtin/styles.toml).
@@ -282,7 +284,7 @@ let report = engine.check(Scope::All)?;
 
 Each operation accepts a `Scope`. `Scope::All` processes the configured file set, while `Scope::Paths(&paths)` processes only the requested files and directories; an empty path slice processes nothing. `Engine::check` never writes files. `Engine::format` and `Engine::remove` return pending `Edits`; use `Edits::report` to inspect the planned outcomes, `Edits::apply` to write them, or `Edits::into_report` to discard the edits and keep the report.
 
-Pending edits store paths and header replacements, without retaining source contents. `Edits::apply` reads and writes one file at a time, stopping at the first error without rolling back earlier writes. Callers must ensure that selected files remain unchanged from preparation until application completes, and select each underlying file through only one path. Hawkeye does not detect concurrent changes or duplicate files reached through symlinks or hard links.
+Pending edits store paths and header replacements, without retaining source contents. `Edits::apply` reads and writes one file at a time, stopping at the first error without rolling back earlier writes. Callers must ensure that selected files remain unchanged from preparation until application completes. Hawkeye does not detect concurrent changes.
 
 `Config::load` resolves path templates once. `Engine::new` uses the resulting paths without rendering them again; paths in a programmatically constructed `Config` are used as supplied.
 

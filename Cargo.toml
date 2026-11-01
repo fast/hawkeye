@@ -31,6 +31,7 @@ hawkeye = { version = "7.2.0", path = "hawkeye" }
 # crates.io dependencies
 clap = { version = "4.6.6", features = ["derive"] }
 exn = { version = "0.3.1" }
+file-id = { version = "0.2.3" }
 gix = { version = "0.87.1", default-features = false, features = [
   "max-performance-safe",
   "revision",
@@ -44,7 +45,6 @@ log = { version = "0.4.34", features = ["kv_serde", "serde"] }
 logforth = { version = "0.30.1", features = ["starter-log"] }
 markdown = { version = "1.0.0" }
 minijinja = { version = "2.24.0" }
-same-file = { version = "1.0.6" }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = { version = "1.0.151" }
 tempfile = { version = "3.27.0" }
