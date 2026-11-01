@@ -14,6 +14,7 @@
 
 mod analyze;
 mod discovery;
+mod edits;
 mod git;
 
 use std::collections::BTreeMap;
@@ -29,6 +30,8 @@ use jiff::Timestamp;
 use jiff::tz::TimeZone;
 use serde::Serialize;
 
+pub use self::edits::Edits;
+use self::edits::FileEdit;
 use crate::Error;
 use crate::ErrorKind;
 use crate::builtin;
@@ -371,7 +374,7 @@ impl Engine {
                 )
                 .with_source(err)
             })?;
-            let Ok(input) = std::str::from_utf8(&original) else {
+            let Ok(input) = String::from_utf8(original) else {
                 log::debug!(
                     "{} is not UTF-8 text; reporting it as unsupported",
                     relative_path.display()
@@ -389,18 +392,30 @@ impl Engine {
                     .and_then(|history| history.get(&relative_path)),
             )?;
             let header = self.render_header(&file_attrs)?;
-            let outcome = match self.analyze(&relative_path, rule, input, &header, target) {
+            let outcome = match self.analyze(&relative_path, rule, &input, &header, target) {
                 FileAnalysis::Clean => FileOutcome::Clean,
                 FileAnalysis::Add(replacement) => {
-                    file_edits.push(FileEdit { path, replacement });
+                    file_edits.push(FileEdit {
+                        path,
+                        original: input,
+                        replacement,
+                    });
                     FileOutcome::Add
                 }
                 FileAnalysis::Replace(replacement) => {
-                    file_edits.push(FileEdit { path, replacement });
+                    file_edits.push(FileEdit {
+                        path,
+                        original: input,
+                        replacement,
+                    });
                     FileOutcome::Replace
                 }
                 FileAnalysis::Remove(replacement) => {
-                    file_edits.push(FileEdit { path, replacement });
+                    file_edits.push(FileEdit {
+                        path,
+                        original: input,
+                        replacement,
+                    });
                     FileOutcome::Remove
                 }
                 FileAnalysis::Conflict => FileOutcome::Conflict,
@@ -435,54 +450,6 @@ impl Engine {
         }
         Ok(header)
     }
-}
-
-/// Pending file edits prepared by an [`Engine`].
-#[must_use = "edits have no effect until they are applied"]
-pub struct Edits {
-    report: Report,
-    files: Vec<FileEdit>,
-}
-
-impl Edits {
-    /// Discards the pending edits and returns their report.
-    pub fn into_report(self) -> Report {
-        self.report
-    }
-
-    /// Applies the pending edits and returns their report.
-    ///
-    /// Callers must ensure that selected files are not modified between preparing and applying the
-    /// edits.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if a source file cannot be read or written.
-    pub fn apply(self) -> Result<Report, Error> {
-        for FileEdit { path, replacement } in self.files {
-            let mut input = fs::read_to_string(&path).map_err(|err| {
-                Error::new(
-                    ErrorKind::Unexpected,
-                    format!("cannot read {}", path.display()),
-                )
-                .with_source(err)
-            })?;
-            input.replace_range(replacement.range, &replacement.text);
-            fs::write(&path, input).map_err(|err| {
-                Error::new(
-                    ErrorKind::Unexpected,
-                    format!("cannot write {}", path.display()),
-                )
-                .with_source(err)
-            })?;
-        }
-        Ok(self.report)
-    }
-}
-
-struct FileEdit {
-    path: PathBuf,
-    replacement: Replacement,
 }
 
 impl Rule {

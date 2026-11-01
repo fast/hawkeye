@@ -101,20 +101,24 @@ fn make_test_cmd(no_capture: bool) -> StdCommand {
     let mut cmd = find_command("cargo");
     cmd.args(["test", "--workspace", "--all-features"]);
     if no_capture {
-        cmd.args(["--", "--nocapture"]);
+        cmd.args(["--", "--nocapture", "--test-threads=1"]);
     }
     cmd
 }
 
-fn make_library_check_cmd() -> StdCommand {
+fn make_library_test_cmd(no_capture: bool) -> StdCommand {
     let mut cmd = find_command("cargo");
     cmd.args([
-        "check",
+        "test",
         "--package",
         "hawkeye",
-        "--lib",
+        "--test",
+        "library",
         "--no-default-features",
     ]);
+    if no_capture {
+        cmd.args(["--", "--nocapture", "--test-threads=1"]);
+    }
     cmd
 }
 
@@ -197,7 +201,7 @@ fn main() {
     match Command::parse().sub {
         SubCommand::Build(cmd) => run_command(make_build_cmd(cmd.locked)),
         SubCommand::Test(cmd) => {
-            run_command(make_library_check_cmd());
+            run_command(make_library_test_cmd(cmd.no_capture));
             run_command(make_test_cmd(cmd.no_capture));
         }
         SubCommand::Lint(cmd) => {

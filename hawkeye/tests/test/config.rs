@@ -12,152 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use hawkeye::Config;
-use hawkeye::Engine;
-use hawkeye::ErrorKind;
-use hawkeye::Scope;
-
 use super::support::Project;
 use super::support::assert_exit;
 use super::support::stderr;
-
-#[test]
-fn deserialized_keywords_are_resolved_and_nonempty() {
-    for (source, expected) in [
-        ("builtin = \"SPDX\"", vec!["SPDX-"]),
-        ("builtin = \"Apache-2.0\"", vec!["copyright"]),
-        ("text = \"Copyright Acme\"", vec!["copyright"]),
-        (
-            "builtin = \"SPDX\"\nkeywords = [\"SPDX-License-Identifier\", \"MIT\"]",
-            vec!["SPDX-License-Identifier", "MIT"],
-        ),
-    ] {
-        let config: Config = toml::from_str(&format!("[header]\n{source}\n"))
-            .expect("deserialize and resolve keywords");
-        assert_eq!(config.header.keywords, expected);
-    }
-
-    let error = toml::from_str::<Config>("[header]\nbuiltin = \"SPDX\"\nkeywords = []\n")
-        .expect_err("an explicit empty list must fail during deserialization");
-    assert!(
-        error
-            .to_string()
-            .contains("header.keywords: at least one keyword")
-    );
-}
-
-#[test]
-fn operation_scope_distinguishes_all_files_from_no_files() {
-    let project = Project::empty();
-    project.write("main.rs", "fn main() {}\n");
-    project.write(
-        "licenserc.toml",
-        r#"[header]
-text = "Copyright 2026 Acme"
-
-[files]
-includes = ["**/*.rs"]
-
-[git]
-ignore = "disable"
-"#,
-    );
-
-    let config = Config::load(project.path().join("licenserc.toml")).expect("load valid config");
-    let engine = Engine::new(config).expect("build engine");
-    assert_eq!(
-        engine
-            .check(Scope::All)
-            .expect("check all files")
-            .files
-            .len(),
-        1
-    );
-    assert!(
-        engine
-            .check(Scope::Paths(&[]))
-            .expect("check no files")
-            .files
-            .is_empty()
-    );
-}
-
-#[test]
-fn public_validation_matches_engine_initialization() {
-    let project = Project::empty();
-    project.write(
-        "licenserc.toml",
-        r#"[header]
-text = "Copyright 2026 Acme"
-"#,
-    );
-
-    let mut config =
-        Config::load(project.path().join("licenserc.toml")).expect("load valid config");
-    config.header.text = None;
-    config.header.keywords.clear();
-
-    let validation = config
-        .validate()
-        .expect_err("mutated config must fail public validation");
-    let initialization = match Engine::new(config) {
-        Ok(_) => panic!("engine must validate a mutated config"),
-        Err(err) => err,
-    };
-    assert_eq!(validation.kind(), ErrorKind::ConfigInvalid);
-    assert_eq!(validation.to_string(), initialization.to_string());
-    assert!(
-        validation
-            .to_string()
-            .contains("exactly one of `builtin`, `path`, or `text` must be set")
-    );
-    assert!(
-        validation
-            .to_string()
-            .contains("header.keywords: at least one keyword")
-    );
-
-    for (name, source) in [
-        ("missing.toml", "[header]\n"),
-        (
-            "multiple.toml",
-            "[header]\nbuiltin = \"Apache-2.0\"\ntext = \"Copyright 2026 Acme\"\n",
-        ),
-    ] {
-        project.write(name, source);
-        let config = Config::load(project.path().join(name)).expect("deserialize header fields");
-        let err = config
-            .validate()
-            .expect_err("header source must be exactly one value");
-        assert_eq!(err.kind(), ErrorKind::ConfigInvalid);
-    }
-}
-
-#[test]
-fn discovery_patterns_are_checked_when_the_engine_is_built() {
-    let project = Project::empty();
-    project.write(
-        "licenserc.toml",
-        r#"[header]
-text = "Copyright 2026 Acme"
-
-[files]
-includes = ["["]
-"#,
-    );
-
-    let config = Config::load(project.path().join("licenserc.toml"))
-        .expect("deserialize config before resolving patterns");
-    let err = match Engine::new(config) {
-        Ok(_) => panic!("invalid pattern must fail engine initialization"),
-        Err(err) => err,
-    };
-    assert_eq!(err.kind(), ErrorKind::ConfigInvalid);
-    assert!(
-        err.to_string()
-            .contains("invalid files.includes or files.excludes pattern")
-    );
-}
 
 #[test]
 fn rules_use_first_match_and_user_rules_override_builtins() {
@@ -234,15 +91,9 @@ style_out = "doubleslash"
 styles_in = ["slashstar"]
 "#,
     );
-    let config =
-        Config::load(project.path().join("incomplete.toml")).expect("deserialize incomplete rule");
-    let err = config
-        .validate()
-        .expect_err("explicit input styles must include the output style");
-    assert!(
-        err.to_string()
-            .contains("rules[0].styles_in: must include `style_out`")
-    );
+    let invalid = project.run(["--config", "incomplete.toml", "check"]);
+    assert_exit(&invalid, 2);
+    assert!(stderr(&invalid).contains("rules[0].styles_in: must include `style_out`"));
 
     project.write(
         "licenserc.toml",

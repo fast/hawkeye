@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+mod output;
+
 use std::env;
 use std::fmt;
 use std::io;
@@ -143,31 +145,35 @@ fn do_main() -> Result<ExitCode, Error> {
             Scope::Paths(paths)
         }
     };
-    let (report, fail_on_change, fail_on_unknown) = match &subcommand {
+    let (report, edits, fail_on_change, fail_on_unknown) = match &subcommand {
         SubcommandOptions::Check(options) => {
             let make_error = || Error::new("failed to execute check command");
             let report = engine.check(scope).or_raise(make_error)?;
-            (report, true, options.fail_on_unknown)
+            (report, None, true, options.fail_on_unknown)
         }
         SubcommandOptions::Format(options) => {
             let make_error = || Error::new("failed to execute format command");
             let edits = engine.format(scope).or_raise(make_error)?;
-            let report = if options.dry_run {
-                edits.into_report()
-            } else {
-                edits.apply().or_raise(make_error)?
-            };
-            (report, options.fail_on_change, options.fail_on_unknown)
+            let report = edits.report().clone();
+            let edits = (!options.dry_run).then_some(edits);
+            (
+                report,
+                edits,
+                options.fail_on_change,
+                options.fail_on_unknown,
+            )
         }
         SubcommandOptions::Remove(options) => {
             let make_error = || Error::new("failed to execute remove command");
             let edits = engine.remove(scope).or_raise(make_error)?;
-            let report = if options.dry_run {
-                edits.into_report()
-            } else {
-                edits.apply().or_raise(make_error)?
-            };
-            (report, options.fail_on_change, options.fail_on_unknown)
+            let report = edits.report().clone();
+            let edits = (!options.dry_run).then_some(edits);
+            (
+                report,
+                edits,
+                options.fail_on_change,
+                options.fail_on_unknown,
+            )
         }
     };
 
@@ -178,58 +184,16 @@ fn do_main() -> Result<ExitCode, Error> {
         FileOutcome::Unsupported => fail_on_unknown,
     });
 
-    match output_format {
-        OutputFormat::Json => {
-            let mut output = serde_json::to_vec_pretty(&report)
-                .or_raise(|| Error::new("cannot serialize JSON report"))?;
-            output.push(b'\n');
-
-            let make_error = || Error::new("cannot output JSON report");
-            let mut stdout = io::stdout().lock();
-            stdout.write_all(&output).or_raise(make_error)?;
-        }
-        OutputFormat::Human => {
-            let make_error = || Error::new("cannot output human-readable report");
-
-            let mut stdout = io::stdout().lock();
-            for file in &report.files {
-                let label = match file.outcome {
-                    FileOutcome::Clean => continue,
-                    FileOutcome::Add => "add",
-                    FileOutcome::Replace => "replace",
-                    FileOutcome::Remove => "remove",
-                    FileOutcome::Conflict => "conflict",
-                    FileOutcome::Unsupported => "unsupported",
-                };
-                writeln!(stdout, "{label:>11}  {}", file.path.display()).or_raise(make_error)?;
-            }
-
-            let files = report.files.len();
-            let mut changes = 0;
-            let mut conflicts = 0;
-            let mut unsupported = 0;
-            for file in &report.files {
-                match file.outcome {
-                    FileOutcome::Clean => continue,
-                    FileOutcome::Add | FileOutcome::Replace | FileOutcome::Remove => changes += 1,
-                    FileOutcome::Conflict => conflicts += 1,
-                    FileOutcome::Unsupported => unsupported += 1,
-                }
-            }
-            let file_label = if files == 1 { "file" } else { "files" };
-            let change_label = if changes == 1 { "change" } else { "changes" };
-            let conflict_label = if conflicts == 1 {
-                "conflict"
-            } else {
-                "conflicts"
-            };
-            writeln!(
-                stdout,
-                "{files} {file_label}, {changes} {change_label}, {conflicts} {conflict_label}, {unsupported} unsupported"
-            )
-            .or_raise(make_error)?;
-        }
+    let output = output_format.render(&report)?;
+    if let Some(edits) = edits {
+        edits
+            .apply()
+            .or_raise(|| Error::new("cannot apply header edits"))?;
     }
+    io::stdout()
+        .lock()
+        .write_all(&output)
+        .or_raise(|| Error::new("cannot output report"))?;
 
     Ok(if failed {
         ExitCode::FAILURE
