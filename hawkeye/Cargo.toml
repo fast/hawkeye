@@ -15,7 +15,7 @@
 [package]
 description = "A license header checker and formatter."
 name = "hawkeye"
-version = "7.2.0"
+version = "7.3.0"
 
 edition.workspace = true
 homepage.workspace = true
