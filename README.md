@@ -282,7 +282,7 @@ let report = engine.check(Scope::All)?;
 
 Each operation accepts a `Scope`. `Scope::All` processes the configured file set, while `Scope::Paths(&paths)` processes only the requested files and directories; an empty path slice processes nothing. `Engine::check` never writes files. `Engine::format` and `Engine::remove` return pending `Edits`; use `Edits::report` to inspect the planned outcomes, `Edits::apply` to write them, or `Edits::into_report` to discard the edits and keep the report.
 
-Before writing, `Edits::apply` checks that every file to be edited still matches its original contents. Changed or missing sources cause an error before any writes. Identical edits through file symlinks or hard links do not accumulate. Applying edits is not a filesystem transaction: later I/O failures or incompatible edits through aliases can leave earlier writes applied. Callers must prevent concurrent writes while applying a plan.
+`Edits::apply` reads each file once before writing: it skips contents that already match the intended result and otherwise requires the original contents. Identical edits through file symlinks or hard links do not accumulate. Application stops at the first error without rolling back earlier writes. Callers must prevent concurrent writes while applying edits.
 
 `Config::load` resolves path templates once. `Engine::new` uses the resulting paths without rendering them again; paths in a programmatically constructed `Config` are used as supplied.
 

@@ -23,7 +23,7 @@ use super::Error;
 use super::OutputFormat;
 
 impl OutputFormat {
-    pub(super) fn render(self, report: &Report) -> Result<Vec<u8>, Error> {
+    pub fn render(self, report: &Report) -> Result<Vec<u8>, Error> {
         let mut output = Vec::new();
         match self {
             Self::Json => {

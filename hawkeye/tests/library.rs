@@ -187,39 +187,51 @@ fn a_later_template_error_does_not_modify_earlier_sources() {
 }
 
 #[test]
-fn changed_sources_reject_the_entire_plan_before_writing() {
+fn changed_sources_are_preserved_and_stop_further_edits() {
     let (directory, config) = project();
     let first = directory.path().join("a.rs");
     let second = directory.path().join("b.rs");
+    let third = directory.path().join("c.rs");
     let source = "// Copyright Old\n\nfn main() {}\n";
     let engine = Engine::new(config).unwrap();
     for changed in [b"".as_slice(), "\u{1f600}".as_bytes(), b"\xff"] {
         fs::write(&first, source).unwrap();
         fs::write(&second, source).unwrap();
+        fs::write(&third, source).unwrap();
         let edits = engine.format(Scope::All).unwrap();
         fs::write(&second, changed).unwrap();
         let error = edits.apply().expect_err("reject a changed source");
         assert_eq!(error.kind(), ErrorKind::Unsupported);
         assert!(error.to_string().contains("b.rs"));
-        assert_eq!(fs::read_to_string(&first).unwrap(), source);
+        assert_eq!(
+            fs::read_to_string(&first).unwrap(),
+            "// Copyright Acme\n\nfn main() {}\n"
+        );
         assert_eq!(fs::read(&second).unwrap(), changed);
+        assert_eq!(fs::read_to_string(&third).unwrap(), source);
     }
 }
 
 #[test]
-fn missing_sources_reject_the_entire_plan_before_writing() {
+fn missing_sources_stop_further_edits_without_rolling_back() {
     let (directory, config) = project();
     let first = directory.path().join("a.rs");
     let second = directory.path().join("b.rs");
+    let third = directory.path().join("c.rs");
     let source = "fn main() {}\n";
     fs::write(&first, source).unwrap();
     fs::write(&second, source).unwrap();
+    fs::write(&third, source).unwrap();
     let edits = Engine::new(config).unwrap().format(Scope::All).unwrap();
     fs::remove_file(&second).unwrap();
     let error = edits.apply().expect_err("reject a missing source");
     assert!(error.to_string().contains("b.rs"));
-    assert_eq!(fs::read_to_string(&first).unwrap(), source);
+    assert_eq!(
+        fs::read_to_string(&first).unwrap(),
+        "// Copyright Acme\n\nfn main() {}\n"
+    );
     assert!(!second.exists());
+    assert_eq!(fs::read_to_string(&third).unwrap(), source);
 }
 
 #[test]

@@ -30,8 +30,6 @@ use jiff::Timestamp;
 use jiff::tz::TimeZone;
 use serde::Serialize;
 
-pub use self::edits::Edits;
-use self::edits::FileEdit;
 use crate::Error;
 use crate::ErrorKind;
 use crate::builtin;
@@ -119,6 +117,19 @@ pub struct Engine {
     template: HeaderTemplate,
     styles: BTreeMap<String, StyleConfig>,
     rules: Vec<Rule>,
+}
+
+/// Pending file edits prepared by an [`Engine`].
+#[must_use = "edits have no effect until they are applied"]
+pub struct Edits {
+    report: Report,
+    files: Vec<FileEdit>,
+}
+
+struct FileEdit {
+    path: PathBuf,
+    original: String,
+    replacement: Replacement,
 }
 
 #[derive(Debug, Clone)]
