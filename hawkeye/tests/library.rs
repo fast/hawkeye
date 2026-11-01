@@ -187,32 +187,6 @@ fn a_later_template_error_does_not_modify_earlier_sources() {
 }
 
 #[test]
-fn changed_sources_are_preserved_and_stop_further_edits() {
-    let (directory, config) = project();
-    let first = directory.path().join("a.rs");
-    let second = directory.path().join("b.rs");
-    let third = directory.path().join("c.rs");
-    let source = "// Copyright Old\n\nfn main() {}\n";
-    let engine = Engine::new(config).unwrap();
-    for changed in [b"".as_slice(), "\u{1f600}".as_bytes(), b"\xff"] {
-        fs::write(&first, source).unwrap();
-        fs::write(&second, source).unwrap();
-        fs::write(&third, source).unwrap();
-        let edits = engine.format(Scope::All).unwrap();
-        fs::write(&second, changed).unwrap();
-        let error = edits.apply().expect_err("reject a changed source");
-        assert_eq!(error.kind(), ErrorKind::Unsupported);
-        assert!(error.to_string().contains("b.rs"));
-        assert_eq!(
-            fs::read_to_string(&first).unwrap(),
-            "// Copyright Acme\n\nfn main() {}\n"
-        );
-        assert_eq!(fs::read(&second).unwrap(), changed);
-        assert_eq!(fs::read_to_string(&third).unwrap(), source);
-    }
-}
-
-#[test]
 fn missing_sources_stop_further_edits_without_rolling_back() {
     let (directory, config) = project();
     let first = directory.path().join("a.rs");
@@ -235,17 +209,19 @@ fn missing_sources_stop_further_edits_without_rolling_back() {
 }
 
 #[test]
-fn selected_hard_links_share_one_header_lifecycle() {
+fn edits_preserve_hard_links() {
     let (directory, config) = project();
     let first = directory.path().join("a.rs");
     let second = directory.path().join("b.rs");
     let source = "fn main() {}\n";
     fs::write(&first, source).unwrap();
     fs::hard_link(&first, &second).unwrap();
-    #[cfg(unix)]
-    std::os::unix::fs::symlink("a.rs", directory.path().join("c.rs")).unwrap();
     let engine = Engine::new(config).unwrap();
-    engine.format(Scope::All).unwrap().apply().unwrap();
+    engine
+        .format(Scope::Paths(&["a.rs".into()]))
+        .unwrap()
+        .apply()
+        .unwrap();
     assert_eq!(
         fs::read_to_string(&first).unwrap(),
         "// Copyright Acme\n\nfn main() {}\n"
@@ -253,39 +229,20 @@ fn selected_hard_links_share_one_header_lifecycle() {
     assert_eq!(fs::read(&first).unwrap(), fs::read(&second).unwrap());
     assert!(
         engine
-            .format(Scope::All)
+            .format(Scope::Paths(&["a.rs".into()]))
             .unwrap()
             .into_report()
             .files
             .iter()
             .all(|file| file.outcome == FileOutcome::Clean)
     );
-    engine.remove(Scope::All).unwrap().apply().unwrap();
-    assert_eq!(fs::read_to_string(&first).unwrap(), source);
-    assert_eq!(fs::read_to_string(&second).unwrap(), source);
-}
-
-#[test]
-fn incompatible_alias_edits_return_an_error_without_stacking_headers() {
-    let (directory, mut config) = project();
-    config.header.text = Some("Copyright {{ attrs.filename }}".into());
-    let first = directory.path().join("a.rs");
-    let second = directory.path().join("b.rs");
-    fs::write(&first, "fn main() {}\n").unwrap();
-    fs::hard_link(&first, &second).unwrap();
-    let engine = Engine::new(config).unwrap();
-    let error = engine
-        .format(Scope::All)
+    engine
+        .remove(Scope::Paths(&["a.rs".into()]))
         .unwrap()
         .apply()
-        .expect_err("aliases require different headers");
-    assert_eq!(error.kind(), ErrorKind::Unsupported);
-    assert!(error.to_string().contains("b.rs"));
-    assert_eq!(
-        fs::read_to_string(&first).unwrap(),
-        "// Copyright a.rs\n\nfn main() {}\n"
-    );
-    assert_eq!(fs::read(&first).unwrap(), fs::read(&second).unwrap());
+        .unwrap();
+    assert_eq!(fs::read_to_string(&first).unwrap(), source);
+    assert_eq!(fs::read_to_string(&second).unwrap(), source);
 }
 
 #[test]

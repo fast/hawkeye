@@ -282,7 +282,7 @@ let report = engine.check(Scope::All)?;
 
 Each operation accepts a `Scope`. `Scope::All` processes the configured file set, while `Scope::Paths(&paths)` processes only the requested files and directories; an empty path slice processes nothing. `Engine::check` never writes files. `Engine::format` and `Engine::remove` return pending `Edits`; use `Edits::report` to inspect the planned outcomes, `Edits::apply` to write them, or `Edits::into_report` to discard the edits and keep the report.
 
-`Edits::apply` reads each file once before writing: it skips contents that already match the intended result and otherwise requires the original contents. Identical edits through file symlinks or hard links do not accumulate. Application stops at the first error without rolling back earlier writes. Callers must prevent concurrent writes while applying edits.
+Pending edits store paths and header replacements, without retaining source contents. `Edits::apply` reads and writes one file at a time, stopping at the first error without rolling back earlier writes. Callers must ensure that selected files remain unchanged from preparation until application completes, and select each underlying file through only one path. Hawkeye does not detect concurrent changes or duplicate files reached through symlinks or hard links.
 
 `Config::load` resolves path templates once. `Engine::new` uses the resulting paths without rendering them again; paths in a programmatically constructed `Config` are used as supplied.
 

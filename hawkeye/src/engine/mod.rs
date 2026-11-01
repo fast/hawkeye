@@ -128,7 +128,6 @@ pub struct Edits {
 
 struct FileEdit {
     path: PathBuf,
-    original: String,
     replacement: Replacement,
 }
 
@@ -385,7 +384,7 @@ impl Engine {
                 )
                 .with_source(err)
             })?;
-            let Ok(input) = String::from_utf8(original) else {
+            let Ok(input) = std::str::from_utf8(&original) else {
                 log::debug!(
                     "{} is not UTF-8 text; reporting it as unsupported",
                     relative_path.display()
@@ -403,30 +402,18 @@ impl Engine {
                     .and_then(|history| history.get(&relative_path)),
             )?;
             let header = self.render_header(&file_attrs)?;
-            let outcome = match self.analyze(&relative_path, rule, &input, &header, target) {
+            let outcome = match self.analyze(&relative_path, rule, input, &header, target) {
                 FileAnalysis::Clean => FileOutcome::Clean,
                 FileAnalysis::Add(replacement) => {
-                    file_edits.push(FileEdit {
-                        path,
-                        original: input,
-                        replacement,
-                    });
+                    file_edits.push(FileEdit { path, replacement });
                     FileOutcome::Add
                 }
                 FileAnalysis::Replace(replacement) => {
-                    file_edits.push(FileEdit {
-                        path,
-                        original: input,
-                        replacement,
-                    });
+                    file_edits.push(FileEdit { path, replacement });
                     FileOutcome::Replace
                 }
                 FileAnalysis::Remove(replacement) => {
-                    file_edits.push(FileEdit {
-                        path,
-                        original: input,
-                        replacement,
-                    });
+                    file_edits.push(FileEdit { path, replacement });
                     FileOutcome::Remove
                 }
                 FileAnalysis::Conflict => FileOutcome::Conflict,
