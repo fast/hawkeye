@@ -34,8 +34,7 @@ impl Edits {
     /// Applies the pending edits and returns their report.
     ///
     /// Callers must ensure that selected files remain unchanged from preparation until application
-    /// completes, and select each underlying file through only one path. Edits do not detect
-    /// concurrent changes or duplicate files reached through symlinks or hard links.
+    /// completes. Edits do not detect concurrent changes.
     ///
     /// Files are read and written one at a time. Application stops at the first error without
     /// rolling back earlier writes.

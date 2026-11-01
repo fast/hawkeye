@@ -501,6 +501,35 @@ ignore = "disable"
     assert_eq!(project.read("source.rs"), project.read("target.txt"));
 }
 
+#[test]
+fn file_aliases_are_deduplicated_across_discovery_modes() {
+    for git_ignore in ["disable", "auto"] {
+        for paths in [vec![], vec!["b.rs", "a.rs"]] {
+            let project = Project::empty();
+            if git_ignore == "auto" {
+                project.git(["init", "-b", "main"]);
+            }
+            project.write(
+                "licenserc.toml",
+                format!("[header]\ntext = 'Copyright Acme'\n[files]\nincludes = ['*.rs']\n[git]\nignore = '{git_ignore}'\n"),
+            );
+            project.write("a.rs", "fn main() {}\n");
+            fs::hard_link(project.path().join("a.rs"), project.path().join("b.rs"))
+                .expect("create source hard link");
+            #[cfg(unix)]
+            std::os::unix::fs::symlink("a.rs", project.path().join("c.rs"))
+                .expect("create source symlink");
+            let mut arguments = vec!["format", "--output-format=json"];
+            arguments.extend(paths);
+            let result = project.run(arguments);
+            assert_exit(&result, 0);
+            assert_report(&result, &[("a.rs", "add")]);
+            assert_eq!(project.read("a.rs"), "// Copyright Acme\n\nfn main() {}\n");
+            assert_eq!(project.read("b.rs"), project.read("a.rs"));
+        }
+    }
+}
+
 #[cfg(unix)]
 #[test]
 fn format_writes_through_file_symlinks() {

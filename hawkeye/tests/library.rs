@@ -209,19 +209,19 @@ fn missing_sources_stop_further_edits_without_rolling_back() {
 }
 
 #[test]
-fn edits_preserve_hard_links() {
+fn file_aliases_share_one_header_lifecycle() {
     let (directory, config) = project();
     let first = directory.path().join("a.rs");
     let second = directory.path().join("b.rs");
     let source = "fn main() {}\n";
     fs::write(&first, source).unwrap();
     fs::hard_link(&first, &second).unwrap();
+    #[cfg(unix)]
+    std::os::unix::fs::symlink("a.rs", directory.path().join("c.rs")).unwrap();
     let engine = Engine::new(config).unwrap();
-    engine
-        .format(Scope::Paths(&["a.rs".into()]))
-        .unwrap()
-        .apply()
-        .unwrap();
+    let report = engine.format(Scope::All).unwrap().apply().unwrap();
+    assert_eq!(report.files.len(), 1);
+    assert_eq!(report.files[0].path, std::path::Path::new("a.rs"));
     assert_eq!(
         fs::read_to_string(&first).unwrap(),
         "// Copyright Acme\n\nfn main() {}\n"
@@ -229,20 +229,64 @@ fn edits_preserve_hard_links() {
     assert_eq!(fs::read(&first).unwrap(), fs::read(&second).unwrap());
     assert!(
         engine
-            .format(Scope::Paths(&["a.rs".into()]))
+            .format(Scope::All)
             .unwrap()
             .into_report()
             .files
             .iter()
             .all(|file| file.outcome == FileOutcome::Clean)
     );
-    engine
-        .remove(Scope::Paths(&["a.rs".into()]))
-        .unwrap()
-        .apply()
-        .unwrap();
+    fs::write(
+        &first,
+        "// Copyright A Much Longer Previous Owner\n\nfn main() {}\n",
+    )
+    .unwrap();
+    let report = engine.format(Scope::All).unwrap().apply().unwrap();
+    assert_eq!(report.files.len(), 1);
+    assert_eq!(report.files[0].outcome, FileOutcome::Replace);
+    assert_eq!(
+        fs::read_to_string(&second).unwrap(),
+        "// Copyright Acme\n\nfn main() {}\n"
+    );
+    engine.remove(Scope::All).unwrap().apply().unwrap();
     assert_eq!(fs::read_to_string(&first).unwrap(), source);
     assert_eq!(fs::read_to_string(&second).unwrap(), source);
+}
+
+#[test]
+fn aliases_use_the_first_selected_path_for_templates() {
+    let (directory, mut config) = project();
+    config.header.text = Some("Copyright {{ attrs.filename }}".into());
+    config.files.excludes = vec!["a.rs".into()];
+    let source = "fn main() {}\n";
+    fs::write(directory.path().join("a.rs"), source).unwrap();
+    for name in ["b.rs", "c.rs"] {
+        fs::hard_link(directory.path().join("a.rs"), directory.path().join(name)).unwrap();
+    }
+    // Equal contents in a separate file must not be deduplicated.
+    fs::write(directory.path().join("d.rs"), source).unwrap();
+    let engine = Engine::new(config).unwrap();
+    let paths = ["c.rs".into(), "d.rs".into(), "b.rs".into(), "a.rs".into()];
+    let edits = engine.format(Scope::Paths(&paths)).unwrap();
+    let selected: Vec<_> = edits
+        .report()
+        .files
+        .iter()
+        .map(|file| file.path.clone())
+        .collect();
+    assert_eq!(
+        selected,
+        [std::path::Path::new("b.rs"), std::path::Path::new("d.rs")]
+    );
+    edits.apply().unwrap();
+    assert_eq!(
+        fs::read_to_string(directory.path().join("a.rs")).unwrap(),
+        "// Copyright b.rs\n\nfn main() {}\n"
+    );
+    assert_eq!(
+        fs::read_to_string(directory.path().join("d.rs")).unwrap(),
+        "// Copyright d.rs\n\nfn main() {}\n"
+    );
 }
 
 #[test]

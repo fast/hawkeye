@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use std::collections::BTreeSet;
+use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
 use std::path::PathBuf;
@@ -28,6 +29,7 @@ use crate::Error;
 use crate::ErrorKind;
 use crate::Scope;
 use crate::config::FeatureMode;
+use crate::engine::file_id;
 use crate::engine::git::Repository;
 
 impl Engine {
@@ -50,36 +52,32 @@ impl Engine {
         };
         files.retain(|path| self.matches_file_filter(path));
 
-        let files = if let Some(header_path) = &self.header_path {
-            let mut selected = Vec::with_capacity(files.len());
-            for path in files {
-                let absolute_path = self.root.join(&path);
-                let is_header =
-                    same_file::is_same_file(&absolute_path, header_path).map_err(|err| {
-                        Error::new(
-                            ErrorKind::Unexpected,
-                            format!(
-                                "cannot compare {} with header template {}",
-                                absolute_path.display(),
-                                header_path.display()
-                            ),
-                        )
-                        .with_source(err)
-                    })?;
-                if !is_header {
-                    selected.push(path);
-                }
-            }
-            selected
-        } else {
-            files.into_iter().collect()
+        let identify = |path: &Path| {
+            file_id::get_file_id(path).map_err(|err| {
+                Error::new(
+                    ErrorKind::Unexpected,
+                    format!("cannot identify file {}", path.display()),
+                )
+                .with_source(err)
+            })
         };
+        let mut seen = HashSet::new();
+        if let Some(header_path) = &self.header_path {
+            seen.insert(identify(header_path)?);
+        }
+        let mut selected = Vec::with_capacity(files.len());
+        // Candidates are sorted and filtered first, so aliases use a stable, selected path.
+        for path in files {
+            if seen.insert(identify(&self.root.join(&path))?) {
+                selected.push(path);
+            }
+        }
         log::debug!(
             "discovered {} candidate files from {source} in {:?}",
-            files.len(),
+            selected.len(),
             started.elapsed()
         );
-        Ok(files)
+        Ok(selected)
     }
 
     fn discover_directory(

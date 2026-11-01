@@ -1352,11 +1352,11 @@ dependencies = [
  "logforth",
  "markdown",
  "minijinja",
- "same-file",
  "serde",
  "serde_json",
  "tempfile",
  "toml",
+ "windows-sys",
 ]
 
 [[package]]

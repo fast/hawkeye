@@ -15,6 +15,7 @@
 mod analyze;
 mod discovery;
 mod edits;
+mod file_id;
 mod git;
 
 use std::collections::BTreeMap;
@@ -93,6 +94,9 @@ enum HeaderTarget {
 }
 
 /// The files and directories processed by an [`Engine`] operation.
+///
+/// After filtering, aliases of the same file are processed once, using the first selected path
+/// in lexical order for the report, rule, template attributes, and Git history.
 #[derive(Debug, Clone, Copy)]
 pub enum Scope<'a> {
     /// Process every file selected by the configuration.
