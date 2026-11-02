@@ -113,7 +113,7 @@ The default hook installs the matching HawkEye source revision in pre-commit's i
 ```yaml
 repos:
   - repo: https://github.com/fast/hawkeye
-    rev: v7.2.0
+    rev: v7.3.0
     hooks:
       - id: hawkeye-format
 ```

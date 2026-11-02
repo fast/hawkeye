@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+## v7.3.0 (2026-11-02)
+
+### New features
+
+* Add the `SPDX` header template with `SPDX-License-Identifier`, optional `SPDX-FileCopyrightText`, and automatic header recognition without configuring keywords.
+* Add `Edits::report()` to inspect planned changes without applying or discarding them.
+
+### Bug fixes
+
+* Apply directory exclusions consistently to Git-discovered files and explicitly requested subdirectories.
+* Process hard links and file symlinks to the same source only once, preventing duplicate headers and stale replacement ranges. The first selected path in lexical order determines the report, rule, template attributes, and Git history.
+* Serialize CLI reports before applying edits so JSON serialization failures leave source files unchanged.
+* Run tests serially when `cargo x test --no-capture` is requested, as documented.
+
 ## v7.2.0 (2026-09-12)
 
 ### Improvements
