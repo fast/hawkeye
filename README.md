@@ -300,6 +300,8 @@ HawkEye v7 uses a new snake-case configuration format and does not accept v6 fie
 
 Release summaries are recorded in [CHANGELOG.md](CHANGELOG.md).
 
+Maintainers can follow [RELEASE.md](RELEASE.md) to prepare, publish, and verify a release.
+
 The minimum supported Rust version is 1.89.0. It may be raised in a minor release; patch releases preserve the minimum version of their corresponding minor release.
 
 ## License
